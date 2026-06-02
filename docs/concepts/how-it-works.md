@@ -33,7 +33,7 @@ lazyagent classifies each session into a state (`idle`, `thinking`, `writing`, `
 
 ## What lazyagent never does
 
-- It doesn't talk to any LLM. The only outbound network calls lazyagent makes are explicit `lazyagent limits` checks for Claude, Grok, and Kimi billing/rate-limit data. Everything else (monitoring, prune, compact, search, and Codex limits) is purely local.
+- It doesn't talk to any LLM. The only outbound network calls lazyagent makes are explicit `lazyagent limits` checks for Claude, Codex, Grok, and Kimi billing/rate-limit data. Everything else (monitoring, prune, compact, and search) is purely local.
 - It doesn't interrupt or control agents. You can't kill a session from lazyagent; it only watches.
 - It doesn't move or copy session files — except when you explicitly run `prune` or `compact`, which operate on the same files the agents read.
 - It doesn't send telemetry. No analytics, no crash reporter, no phone-home.

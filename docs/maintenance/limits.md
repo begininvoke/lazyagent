@@ -1,18 +1,20 @@
 ---
 title: "Show rate-limit usage"
-description: "On-demand snapshot of Claude Code, Codex, Grok, and Kimi rate-limit or billing windows, with a pace indicator vs. linear consumption."
+description: "On-demand summary of Claude Code, Codex, Grok, and Kimi rate-limit or billing windows, with a detailed pace view available on demand."
 sidebar:
   order: 3
 ---
 
-`lazyagent limits` prints a one-shot snapshot of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, and Kimi, with a *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll. Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single **monthly** credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint.
+`lazyagent limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, and Kimi. The default output is optimized for a quick scan: one row per agent, with a **5-hour** column and a **weekly/global** column. Each populated cell labels both **used** and **expected**, where expected is the linear usage pace for elapsed window time. `--detailed` prints the full per-window report with reset times, source notes, and the *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
+
+Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single **monthly** credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint.
 
 Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall, or *"how much of my Grok monthly credit have I burned this month?"* before kicking off a long Grok run.
 
 ## Synopsis
 
 ```
-lazyagent limits [--agent claude|codex|grok|kimi|all]
+lazyagent limits [--agent claude|codex|grok|kimi|all] [--detailed]
 ```
 
 ## Flags
@@ -20,6 +22,7 @@ lazyagent limits [--agent claude|codex|grok|kimi|all]
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
 | `--agent NAME` | string | `all` | Which agent to query: `claude`, `codex`, `grok`, `kimi`, or `all` |
+| `--detailed` | bool | `false` | Print the detailed per-window report with bars, reset times, sources, notes, and pace |
 | `--help` | bool | `false` | Print usage and exit |
 
 Only `claude`, `codex`, `grok`, and `kimi` are supported — they're the agents in lazyagent's set that expose rate-limit or billing windows in a stable-enough, observable form.
@@ -27,7 +30,8 @@ Only `claude`, `codex`, `grok`, and `kimi` are supported — they're the agents 
 ## Quick reference
 
 ```bash
-lazyagent limits                   # all supported limits providers (default)
+lazyagent limits                   # summary table for all supported limits providers (default)
+lazyagent limits --detailed        # detailed report with bars, reset times, and pace
 lazyagent limits --agent claude    # only Claude Code
 lazyagent limits --agent codex     # only Codex
 lazyagent limits --agent grok      # only Grok
@@ -37,7 +41,22 @@ lazyagent limits --help            # full usage + disclaimers
 
 ## Output
 
-For each window the command prints four lines:
+By default the command prints a compact terminal table:
+
+```
+╭────────┬───────────────┬──────────────────╮
+│ Agente │ 5h            │ Week (or Global) │
+├────────┼───────────────┼──────────────────┤
+│ Claude │ 21.0% used / 40.0% exp │ 23.0% used / 57.1% exp │
+│ Codex  │ 4.0% used / 90.0% exp  │ 11.0% used / 42.9% exp │
+│ Grok   │ --                     │ 13.9% used / 51.6% exp │
+│ Kimi   │ 10.0% used / 33.3% exp │ 20.0% used / 14.3% exp │
+╰────────┴───────────────┴──────────────────╯
+```
+
+Cells label `used` and `exp` explicitly. `exp` is how much of the quota you would have consumed at a perfectly linear pace through the current window. In an interactive terminal cells are colored by severity, blending absolute usage with pace: red when used ≥ 90% or consumption is over pace, orange when used ≥ 75%, green when comfortably under pace, and the default text color when on track. `--` means that agent does not expose that window. For the `Week (or Global)` column, Claude, Codex, and Kimi use their weekly window when present; Grok uses its monthly billing window.
+
+With `--detailed`, each window prints four lines:
 
 | Field | Meaning |
 |-------|---------|
@@ -89,8 +108,8 @@ Codex
     Resets:   in 4d 14h (Tue 5 May 07:56 CEST)
     Pace:     underutilizing (0.32× of expected 34.1%)
 
-  Source: /Users/me/.codex/sessions/2026/04/24/rollout-…jsonl
-  Note: limits are read from the latest Codex session rollout, not fetched live. They reflect the server's last response.
+  Source: Codex (ChatGPT pro) /backend-api/wham/usage
+  Note: reads /backend-api/wham/usage, the endpoint Codex CLI polls for its rate-limit display. May break or be revoked by OpenAI without notice.
 ```
 
 In an interactive terminal the bars and pace label are colored. When piped or redirected, lazyagent strips ANSI escapes automatically.
@@ -115,11 +134,16 @@ The User-Agent identifies lazyagent honestly (`lazyagent/<version> (+https://git
 
 ### Codex
 
-No network call. lazyagent walks `~/.codex/sessions/`, picks the most recent rollout JSONL by mtime, and extracts the last `rate_limits` block from it. Codex itself persists the server's rate-limit response after every turn inside `event_msg` payloads of type `token_count`, so the last entry is always representative of where the user stood at the end of their last Codex interaction.
+A single HTTPS GET to `https://chatgpt.com/backend-api/wham/usage` with the ChatGPT OAuth bearer token and a `chatgpt-account-id` header. This is the **same** endpoint the Codex CLI's TUI polls (roughly every 60 seconds) to render its own rate-limit display, so the figures match what the CLI shows — live, not lagging behind a session rollout.
 
-If the most recent rollout has no `rate_limits` event yet (a brand-new session that hasn't completed its first turn), lazyagent falls back to the next-most-recent rollout that does.
+The OAuth token (and account id) are read in this priority order:
 
-The `Source:` line in the output points to the rollout actually read — useful when you notice the data is stale and want to confirm whether you've simply not used Codex recently.
+1. **`CODEX_OAUTH_TOKEN`** environment variable (with optional `CODEX_ACCOUNT_ID`) — useful for CI or overrides
+2. **`~/.codex/auth.json`** — where the Codex CLI persists its ChatGPT login under `tokens.access_token` / `tokens.account_id`
+
+If neither is present, the command tells you to run `codex` to log in. If the token has expired the endpoint returns 401 and lazyagent surfaces a message telling you to open the Codex CLI again to refresh it.
+
+> Earlier versions read the limits locally from the latest session rollout under `~/.codex/sessions/`. That never made a network call, but it only reflected the server's response as of your last completed turn, so it could lag noticeably behind the live CLI figures. The live endpoint replaces it.
 
 ### Grok
 
@@ -151,7 +175,7 @@ The response carries a top-level `usage` quota plus zero or more rolling `limits
 
 ## When an agent isn't installed
 
-All providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's at least one rollout file under `~/.codex/sessions/`, for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`), and for Kimi it's an OAuth token in `~/.kimi/credentials/kimi-code.json` (or `KIMI_CODE_OAUTH_TOKEN`).
+All providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's a ChatGPT OAuth token in `~/.codex/auth.json` (or `CODEX_OAUTH_TOKEN`), for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`), and for Kimi it's an OAuth token in `~/.kimi/credentials/kimi-code.json` (or `KIMI_CODE_OAUTH_TOKEN`).
 
 | State | Default (`--agent all`) | `--agent claude` | `--agent codex` | `--agent grok` | `--agent kimi` |
 |-------|-------------------------|------------------|-----------------|----------------|----------------|

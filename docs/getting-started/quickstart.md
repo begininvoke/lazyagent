@@ -58,7 +58,7 @@ The maintenance subcommands keep chat transcripts and usage windows under contro
 lazyagent prune --days 30        # delete sessions idle for >30 days
 lazyagent compact                # shrink session files in place
 lazyagent search "query"         # search local transcripts
-lazyagent limits                 # show rate-limit / billing usage
+lazyagent limits                 # show rate-limit / billing usage summary
 ```
 
 `prune` and `compact` support `--dry-run` and an interactive agent picker. Full reference:

@@ -146,4 +146,4 @@ lazyagent search --reindex "anything"
 
 - [`lazyagent prune`](prune.md) — delete entire chat files (destructive, complementary)
 - [`lazyagent compact`](compact.md) — shrink chat files in place (destructive, complementary)
-- [`lazyagent limits`](limits.md) — show 5-hour, weekly, and monthly usage
+- [`lazyagent limits`](limits.md) — show 5-hour, weekly, and monthly usage summary

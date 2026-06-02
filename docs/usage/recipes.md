@@ -54,15 +54,16 @@ The mobile app fetches the public salt from `/api/auth`, then derives the bearer
 Before starting an agent task that might burn through quota, snapshot where you stand across the supported providers (Claude/Codex on 5h + 7d windows, Grok on the monthly billing window, Kimi on the windows returned by Kimi Code):
 
 ```bash
-lazyagent limits                 # all supported limits providers
+lazyagent limits                 # summary table for all supported limits providers
+lazyagent limits --detailed      # detailed report with reset times and pace
 lazyagent limits --agent claude  # just Claude
 lazyagent limits --agent grok    # just Grok (monthly billing)
 lazyagent limits --agent kimi    # just Kimi Code
 ```
 
-The `Pace` line tells you whether you're consuming faster than linear (`overutilizing`), in line, or slower (`underutilizing`). If Claude reports `overutilizing` on the 5-hour window with hours still to go, that's a strong hint to defer the run or fan it out across days.
+In the `--detailed` output, the `Pace` line tells you whether you're consuming faster than linear (`overutilizing`), in line, or slower (`underutilizing`). If Claude reports `overutilizing` on the 5-hour window with hours still to go, that's a strong hint to defer the run or fan it out across days.
 
-Claude, Grok, and Kimi data come from endpoints used by their respective official CLIs — the command is on-demand only and never polled. Codex data is read locally from the latest session rollout, no network call. See [`limits`](../maintenance/limits.md) for the full disclaimer.
+Claude, Codex, Grok, and Kimi data all come from endpoints used by their respective official CLIs — the command is on-demand only and never polled. See [`limits`](../maintenance/limits.md) for the full disclaimer.
 
 ## Quick status check from the shell
 

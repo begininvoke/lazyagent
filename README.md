@@ -26,7 +26,7 @@ Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](
 - **[`lazyagent prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
 - **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, Codex, Grok, and Kimi.
 - **[`lazyagent search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp, Grok, Kimi) with highlighted snippets and an incremental local index.
-- **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand rate-limit / billing snapshot for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), and Kimi Code, with a pace indicator that flags whether you're under-, on-, or over-utilizing the window.
+- **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand rate-limit / billing summary for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), and Kimi Code, with a detailed pace view available via `--detailed`.
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across a few commands, with every rewrite validated and backed up by default.
 
@@ -85,7 +85,7 @@ lazyagent --tui --gui --api      Run everything together
 lazyagent prune --days N         Delete chat sessions older than N days
 lazyagent compact                Shrink chat files by truncating bulky payloads
 lazyagent search "query"         Search chat transcripts with snippets
-lazyagent limits                 Show 5h / weekly / monthly usage and pace
+lazyagent limits                 Show 5h / weekly / monthly usage summary
 lazyagent passphrase             Set or rotate the HTTP API passphrase
 lazyagent --help                 Show full help
 ```
