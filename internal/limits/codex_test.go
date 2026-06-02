@@ -1,137 +1,155 @@
 package limits
 
 import (
-	"os"
-	"path/filepath"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
-func TestScanRolloutForLimitsReadsLatestUsableBlock(t *testing.T) {
-	path := writeCodexRollout(t, `
-{"timestamp":"2026-05-25T10:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"primary":{"used_percent":1.0,"window_minutes":300,"resets_at":1779700000},"secondary":{"used_percent":2.0,"window_minutes":10080,"resets_at":1780100000}}}}
-{"timestamp":"2026-05-25T10:01:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1200}},"rate_limits":{"primary":{"used_percent":17.0,"window_minutes":300,"resets_at":1779710000},"secondary":{"used_percent":9.0,"window_minutes":10080,"resets_at":1780110000}}}}
-`)
+// codexUsageSample mirrors the real GET /backend-api/wham/usage payload.
+const codexUsageSample = `{
+  "plan_type": "pro",
+  "rate_limit": {
+    "allowed": true,
+    "primary_window":   {"used_percent": 24, "limit_window_seconds": 18000,  "reset_after_seconds": 2383,   "reset_at": 1780055984},
+    "secondary_window": {"used_percent": 93, "limit_window_seconds": 604800, "reset_after_seconds": 119311, "reset_at": 1780172911}
+  },
+  "additional_rate_limits": [
+    {"limit_name": "GPT-5.3-Codex-Spark", "metered_feature": "codex_bengalfox",
+     "rate_limit": {"primary_window": {"used_percent": 0, "limit_window_seconds": 18000, "reset_at": 1780071601}}}
+  ]
+}`
 
-	got, err := scanRolloutForLimits(path)
+func TestReadCodexAuthFromBytes(t *testing.T) {
+	token, acct, err := readCodexAuthFromBytes([]byte(`{"auth_mode":"chatgpt","tokens":{"access_token":"abc123","account_id":"acc-1"}}`))
 	if err != nil {
-		t.Fatalf("scanRolloutForLimits() error = %v", err)
+		t.Fatalf("readCodexAuthFromBytes() error = %v", err)
 	}
-	if got == nil {
-		t.Fatal("scanRolloutForLimits() returned nil")
+	if token != "abc123" || acct != "acc-1" {
+		t.Fatalf("got (%q, %q), want (abc123, acc-1)", token, acct)
 	}
-	if got.Primary == nil || got.Primary.UsedPercent != 17 || got.Primary.WindowMinutes != 300 || got.Primary.ResetsAt != 1779710000 {
-		t.Fatalf("primary = %#v, want latest usable primary window", got.Primary)
+
+	if _, _, err := readCodexAuthFromBytes([]byte(`{"tokens":{"access_token":""}}`)); err != errAgentNotInstalled {
+		t.Fatalf("empty token: err = %v, want errAgentNotInstalled", err)
 	}
-	if got.Secondary == nil || got.Secondary.UsedPercent != 9 || got.Secondary.WindowMinutes != 10080 || got.Secondary.ResetsAt != 1780110000 {
-		t.Fatalf("secondary = %#v, want latest usable secondary window", got.Secondary)
+
+	if _, _, err := readCodexAuthFromBytes([]byte(`not json`)); err == nil {
+		t.Fatal("malformed json should error")
 	}
 }
 
-func TestScanRolloutForLimitsIgnoresMalformedZeroWindow(t *testing.T) {
-	path := writeCodexRollout(t, `
-{"timestamp":"2026-05-25T10:00:00.000Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":11.0,"window_minutes":300,"resets_at":1779710000},"secondary":{"used_percent":7.0,"window_minutes":10080,"resets_at":1780110000}}}}
-{"timestamp":"2026-05-25T10:01:00.000Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{},"secondary":{}}}}
-`)
-
-	got, err := scanRolloutForLimits(path)
+func TestCodexUsageToReport(t *testing.T) {
+	usage, err := parseCodexUsage([]byte(codexUsageSample))
 	if err != nil {
-		t.Fatalf("scanRolloutForLimits() error = %v", err)
+		t.Fatalf("parseCodexUsage() error = %v", err)
 	}
-	if got == nil {
-		t.Fatal("scanRolloutForLimits() returned nil")
-	}
-	if got.Primary == nil || got.Primary.UsedPercent != 11 {
-		t.Fatalf("primary = %#v, want previous usable primary window", got.Primary)
-	}
-	if got.Secondary == nil || got.Secondary.UsedPercent != 7 {
-		t.Fatalf("secondary = %#v, want previous usable secondary window", got.Secondary)
-	}
-}
+	report := codexUsageToReport(usage)
 
-func TestScanRolloutForLimitsSkipsZeroModelSpecificLimit(t *testing.T) {
-	path := writeCodexRollout(t, `
-{"timestamp":"2026-05-25T10:00:00.000Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex","primary":{"used_percent":13.0,"window_minutes":300,"resets_at":1779710000},"secondary":{"used_percent":8.0,"window_minutes":10080,"resets_at":1780110000}}}}
-{"timestamp":"2026-05-25T10:01:00.000Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":300,"resets_at":1779720000},"secondary":{"used_percent":0.0,"window_minutes":10080,"resets_at":1780120000}}}}
-`)
-
-	got, err := scanRolloutForLimits(path)
-	if err != nil {
-		t.Fatalf("scanRolloutForLimits() error = %v", err)
+	if report.Provider != "Codex" {
+		t.Fatalf("provider = %q, want Codex", report.Provider)
 	}
-	if got != nil {
-		t.Fatalf("scanRolloutForLimits() = %#v, want nil so fetch can fall back to the next rollout", got)
-	}
-}
-
-func TestCodexRateLimitsUsableAllowsZeroUsage(t *testing.T) {
-	limits := &codexRateLimits{
-		LimitID: "codex",
-		Primary: &codexLimitWindow{
-			UsedPercent:   0,
-			WindowMinutes: 300,
-			ResetsAt:      1779710000,
-		},
-	}
-	if !codexRateLimitsUsable(limits) {
-		t.Fatal("zero usage with a real window should be usable")
-	}
-}
-
-func TestFetchCodexReportFallsBackPastZeroModelSpecificRollout(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	newest := filepath.Join(home, ".codex", "sessions", "2026", "05", "22", "rollout-newest.jsonl")
-	writeFile(t, newest, `
-{"timestamp":"2026-05-22T16:39:14.300Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex","primary":{"used_percent":16.0,"window_minutes":300,"resets_at":1779469440},"secondary":{"used_percent":22.0,"window_minutes":10080,"resets_at":1779820803}}}}
-{"timestamp":"2026-05-25T13:42:41.225Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex_bengalfox","limit_name":"GPT-5.3-Codex-Spark","primary":{"used_percent":0.0,"window_minutes":300,"resets_at":1779734549},"secondary":{"used_percent":0.0,"window_minutes":10080,"resets_at":1780321349}}}}
-`)
-
-	fallback := filepath.Join(home, ".codex", "sessions", "2026", "05", "25", "rollout-fallback.jsonl")
-	writeFile(t, fallback, `
-{"timestamp":"2026-05-25T13:35:48.478Z","type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex","primary":{"used_percent":2.0,"window_minutes":300,"resets_at":1779731904},"secondary":{"used_percent":13.0,"window_minutes":10080,"resets_at":1780172911}}}}
-`)
-
-	base := time.Unix(1779710000, 0)
-	if err := os.Chtimes(fallback, base, base); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chtimes(newest, base.Add(time.Minute), base.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-
-	report, err := fetchCodexReport()
-	if err != nil {
-		t.Fatalf("fetchCodexReport() error = %v", err)
-	}
-	if !strings.Contains(report.Source, fallback) {
-		t.Fatalf("Source = %q, want fallback rollout %q", report.Source, fallback)
+	if !strings.Contains(report.Source, "pro") {
+		t.Fatalf("source = %q, want it to mention the plan", report.Source)
 	}
 	if len(report.Windows) != 2 {
 		t.Fatalf("got %d windows, want 2", len(report.Windows))
 	}
-	if report.Windows[0].UsedPercent != 2 || report.Windows[1].UsedPercent != 13 {
-		t.Fatalf("used percents = (%.1f, %.1f), want (2.0, 13.0)", report.Windows[0].UsedPercent, report.Windows[1].UsedPercent)
+
+	p := report.Windows[0]
+	if p.Label != "5-hour" || p.WindowMinutes != 300 || p.UsedPercent != 24 || p.ResetsAt.Unix() != 1780055984 {
+		t.Fatalf("primary = %+v, want 5-hour/300m/24%%/reset 1780055984", p)
+	}
+	s := report.Windows[1]
+	if s.Label != "7-day" || s.WindowMinutes != 10080 || s.UsedPercent != 93 || s.ResetsAt.Unix() != 1780172911 {
+		t.Fatalf("secondary = %+v, want 7-day/10080m/93%%/reset 1780172911", s)
 	}
 }
 
-func writeCodexRollout(t *testing.T, content string) string {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "rollout.jsonl")
-	writeFile(t, path, content)
-	return path
-}
-
-func writeFile(t *testing.T, path string, content string) {
-	t.Helper()
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+func TestCodexUsageToReportSkipsWindowsWithoutLength(t *testing.T) {
+	// A window with no limit_window_seconds is unusable and must be dropped.
+	usage, err := parseCodexUsage([]byte(`{"rate_limit":{"primary_window":{"used_percent":5,"limit_window_seconds":18000,"reset_at":1780055984},"secondary_window":{"used_percent":0}}}`))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
+	report := codexUsageToReport(usage)
+	if len(report.Windows) != 1 || report.Windows[0].Label != "5-hour" {
+		t.Fatalf("windows = %+v, want only the 5-hour window", report.Windows)
+	}
+}
+
+func TestCodexWindowLabel(t *testing.T) {
+	cases := map[int]string{
+		300:         "5-hour",
+		7 * 24 * 60: "7-day",
+		3 * 24 * 60: "3-day",
+		2 * 60:      "2-hour",
+		45:          "45-minute",
+		0:           "window",
+	}
+	for minutes, want := range cases {
+		if got := codexWindowLabel(minutes); got != want {
+			t.Errorf("codexWindowLabel(%d) = %q, want %q", minutes, got, want)
+		}
+	}
+}
+
+func TestFetchCodexReportLive(t *testing.T) {
+	var gotAuth, gotAccount string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotAccount = r.Header.Get("chatgpt-account-id")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(codexUsageSample))
+	}))
+	defer srv.Close()
+
+	t.Setenv("CODEX_USAGE_URL", srv.URL)
+	t.Setenv("CODEX_OAUTH_TOKEN", "tok-xyz")
+	t.Setenv("CODEX_ACCOUNT_ID", "acc-9")
+
+	report, err := fetchCodexReport(context.Background())
+	if err != nil {
+		t.Fatalf("fetchCodexReport() error = %v", err)
+	}
+	if gotAuth != "Bearer tok-xyz" {
+		t.Fatalf("Authorization header = %q, want Bearer tok-xyz", gotAuth)
+	}
+	if gotAccount != "acc-9" {
+		t.Fatalf("chatgpt-account-id header = %q, want acc-9", gotAccount)
+	}
+	if len(report.Windows) != 2 || report.Windows[0].UsedPercent != 24 || report.Windows[1].UsedPercent != 93 {
+		t.Fatalf("windows = %+v, want live 24%%/93%%", report.Windows)
+	}
+}
+
+func TestFetchCodexReportUnauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"expired"}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("CODEX_USAGE_URL", srv.URL)
+	t.Setenv("CODEX_OAUTH_TOKEN", "tok-expired")
+
+	_, err := fetchCodexReport(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "401") {
+		t.Fatalf("err = %v, want a 401 error mentioning expiry", err)
+	}
+}
+
+func TestFetchCodexReportNotInstalled(t *testing.T) {
+	// No env token and a HOME without ~/.codex/auth.json => errAgentNotInstalled.
+	t.Setenv("CODEX_OAUTH_TOKEN", "")
+	t.Setenv("HOME", t.TempDir())
+
+	_, err := fetchCodexReport(context.Background())
+	if err == nil {
+		t.Fatal("expected an error when no auth is present")
+	}
+	if err.Error() != errAgentNotInstalled.Error() {
+		t.Fatalf("err = %v, want errAgentNotInstalled", err)
 	}
 }

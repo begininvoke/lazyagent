@@ -9,9 +9,12 @@
 // queries it on explicit user invocation only (no polling). Behavior may
 // change without notice; failures degrade gracefully.
 //
-// Codex limits are read from the latest session rollout under
-// ~/.codex/sessions, where Codex itself persists the server's rate_limits
-// response after each turn. No network call is made for Codex.
+// IMPORTANT (Codex): the source for Codex is /backend-api/wham/usage on
+// chatgpt.com — the same endpoint the Codex CLI's TUI polls (~every 60s) to
+// render its rate-limit display. It is read live with the ChatGPT OAuth token
+// from ~/.codex/auth.json. Same caveats as Claude: on-demand only, undocumented,
+// fail gracefully. This replaces the older approach of reading session rollouts,
+// which lagged behind the live figures the CLI shows.
 //
 // IMPORTANT (Grok): the source for Grok is /v1/billing on
 // cli-chat-proxy.grok.com — the same endpoint the Grok CLI's `/usage show`
@@ -76,7 +79,10 @@ Authentication:
             2. macOS Keychain (service "Claude Code-credentials")
             3. ~/.claude/.credentials.json
           If none is found, run `+"`claude`"+` to log in.
-  Codex   reads ~/.codex/sessions/<date>/rollout-*.jsonl (no network call).
+  Codex   reads its ChatGPT OAuth token from, in order:
+            1. CODEX_OAUTH_TOKEN env var
+            2. ~/.codex/auth.json
+          If none is found, run `+"`codex`"+` to log in.
   Grok    reads its OAuth token from, in order:
             1. GROK_OAUTH_TOKEN env var
             2. ~/.grok/auth.json
@@ -86,7 +92,7 @@ Authentication:
             2. ~/.kimi/credentials/kimi-code.json
           If none is found, run `+"`kimi login`"+`.
 
-Disclaimer (Claude, Grok, Kimi):
+Disclaimer (Claude, Codex, Grok, Kimi):
   These providers expose their usage through undocumented endpoints used by
   their respective official CLIs. lazyagent calls them only on explicit user
   invocation. They may break or be revoked by their vendors without notice.
@@ -162,7 +168,7 @@ func notInstalledMessage(agent string) string {
 	case "claude":
 		return "Claude Code is not installed or not logged in. Run `claude` to log in, or set CLAUDE_CODE_OAUTH_TOKEN."
 	case "codex":
-		return "Codex is not installed (no sessions under ~/.codex/sessions). Run a Codex CLI session first."
+		return "Codex is not installed or not logged in (no ~/.codex/auth.json). Run `codex` to log in, or set CODEX_OAUTH_TOKEN."
 	case "grok":
 		return "Grok CLI is not installed or not logged in (no ~/.grok/auth.json). Run `grok login`, or set GROK_OAUTH_TOKEN."
 	case "kimi":
@@ -177,7 +183,7 @@ func fetchReport(ctx context.Context, agent string) (Report, error) {
 	case "claude":
 		return fetchClaudeReport(ctx)
 	case "codex":
-		return fetchCodexReport()
+		return fetchCodexReport(ctx)
 	case "grok":
 		return fetchGrokReport(ctx)
 	case "kimi":
