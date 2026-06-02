@@ -10,7 +10,7 @@ This page documents the root `lazyagent` command — the one you run to monitor 
 - [`lazyagent prune`](../maintenance/prune.md) — delete old or orphaned chat files
 - [`lazyagent compact`](../maintenance/compact.md) — truncate bulky payloads in place
 - [`lazyagent search`](../maintenance/search.md) — search transcript-file agents with highlighted snippets
-- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage with a pace indicator
+- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage summary; add `--detailed` for pace
 
 ## Synopsis
 
@@ -173,17 +173,18 @@ Full reference, including the index location, ranking, resume commands, and Grok
 
 ### `limits`
 
-`limits` prints a one-shot snapshot of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, and Kimi, with a pace indicator that compares actual consumption to a perfectly linear pace (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint.
+`limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, and Kimi. The default table labels each 5-hour and weekly/global cell as `used` and `exp`, where `exp` is the linear pace for elapsed window time; `--detailed` prints the full per-window report with reset times and the pace indicator (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint.
 
 ```bash
-lazyagent limits                 # all supported limits providers
+lazyagent limits                 # summary table for all supported limits providers
+lazyagent limits --detailed      # detailed report with bars, reset times, and pace
 lazyagent limits --agent claude  # only Claude Code
 lazyagent limits --agent codex   # only Codex
 lazyagent limits --agent grok    # only Grok
 lazyagent limits --agent kimi    # only Kimi Code
 ```
 
-Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data is read from the latest rollout JSONL under `~/.codex/sessions/` (no network call). Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on `api.kimi.com`, the endpoint Kimi Code CLI's `/status` slash command calls.
+Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data comes from `/backend-api/wham/usage` on `chatgpt.com` — the same endpoint the Codex CLI's TUI polls for its rate-limit display. Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on `api.kimi.com`, the endpoint Kimi Code CLI's `/status` slash command calls.
 
 Full reference, including disclaimers and token-resolution order: [`limits`](../maintenance/limits.md).
 

@@ -85,8 +85,8 @@ Subcommands:
   lazyagent compact             Shrink sessions by truncating bulky tool outputs
   lazyagent compact --help      Show compact options (--threshold-kb, --dry-run, ...)
   lazyagent search "query"      Search chat transcripts with highlighted snippets
-  lazyagent limits              Show rate-limit / billing usage and pace
-  lazyagent limits --help       Show limits options (--agent claude|codex|grok|kimi|all)
+  lazyagent limits              Show rate-limit / billing usage summary
+  lazyagent limits --help       Show limits options (--agent claude|codex|grok|kimi|all, --detailed)
   lazyagent passphrase          Set or rotate the HTTP API passphrase
   lazyagent passphrase --show   Print the current bearer token without prompting
 
