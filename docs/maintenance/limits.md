@@ -214,7 +214,7 @@ The "don't poll" guidance applies equally to Grok and Kimi: run `lazyagent limit
 | Code | Meaning |
 |------|---------|
 | `0` | All requested agents succeeded |
-| `1` | At least one agent failed (token missing, endpoint error, no Codex sessions, …) — details on stderr |
+| `1` | At least one agent failed (token missing, endpoint error, Codex login missing, …) — details on stderr |
 | `2` | Invalid flags (e.g. unknown `--agent` value) |
 
 Even on partial failure (`1`), the successful agents' output is printed to stdout. Errors go to stderr with a `Error (claude): …` / `Error (codex): …` / `Error (grok): …` / `Error (kimi): …` prefix, so you can pipe stdout to a parser without losing the error context.

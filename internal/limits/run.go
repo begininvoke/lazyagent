@@ -157,7 +157,7 @@ Flags:
 	// rather than letting them stare at an empty stdout and wonder what happened.
 	if len(reports) == 0 && !explicit && missing == len(agents) {
 		fmt.Fprintln(os.Stderr, "No supported agents are installed (none of Claude Code, Codex, Grok, or Kimi was detected).")
-		fmt.Fprintln(os.Stderr, "Run `claude` / `grok login` / `kimi login` to authenticate, or run a Codex CLI session first.")
+		fmt.Fprintln(os.Stderr, "Run `claude` / `codex` / `grok login` / `kimi login` to authenticate.")
 		exitCode = 1
 	}
 
