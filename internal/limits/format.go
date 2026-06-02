@@ -89,6 +89,22 @@ func elapsedPercent(windowMinutes int, resetsAt, now time.Time) float64 {
 	return elapsed / total * 100
 }
 
+type windowPace struct {
+	elapsedPercent float64
+	ratio          float64
+	pace           pace
+}
+
+func paceForWindow(w Window, now time.Time) windowPace {
+	elapsed := elapsedPercent(w.WindowMinutes, w.ResetsAt, now)
+	ratio, p := classifyPace(w.UsedPercent, elapsed)
+	return windowPace{
+		elapsedPercent: elapsed,
+		ratio:          ratio,
+		pace:           p,
+	}
+}
+
 // bar returns a width-wide progress bar for percent (0-100). It always uses
 // the same characters; styling is applied in the caller, so the same
 // function can produce a colored or plain bar.
@@ -205,8 +221,7 @@ var styleNote = chatops.StyleFooter
 func renderReport(b *strings.Builder, r Report, now time.Time) {
 	fmt.Fprintf(b, "%s\n", styled(r.Provider, styleProvider))
 	for _, w := range r.Windows {
-		ep := elapsedPercent(w.WindowMinutes, w.ResetsAt, now)
-		ratio, p := classifyPace(w.UsedPercent, ep)
+		wp := paceForWindow(w, now)
 
 		fmt.Fprintf(b, "\n  %s\n", styled(w.Label+" window", styleWindowLabel))
 		fmt.Fprintf(b, "    Used:     %5.1f%%  %s\n",
@@ -214,19 +229,19 @@ func renderReport(b *strings.Builder, r Report, now time.Time) {
 			renderBar(w.UsedPercent, barWidth, barStyleForUsed(w.UsedPercent)),
 		)
 		fmt.Fprintf(b, "    Elapsed:  %5.1f%%  %s\n",
-			ep,
-			renderBar(ep, barWidth, lipgloss.NewStyle().Foreground(chatops.ColTextSubtle)),
+			wp.elapsedPercent,
+			renderBar(wp.elapsedPercent, barWidth, lipgloss.NewStyle().Foreground(chatops.ColTextSubtle)),
 		)
 		fmt.Fprintf(b, "    Resets:   %s\n", resetsLine(w.ResetsAt, now))
 
-		if p == paceUnknown {
+		if wp.pace == paceUnknown {
 			fmt.Fprintf(b, "    Pace:     %s\n",
 				styled("— (window just reset)", chatops.StyleMuted),
 			)
 		} else {
 			fmt.Fprintf(b, "    Pace:     %s %s\n",
-				styled(paceLabel(p), styleForPace(p)),
-				styled(fmt.Sprintf("(%.2f× of expected %.1f%%)", ratio, ep), chatops.StyleMuted),
+				styled(paceLabel(wp.pace), styleForPace(wp.pace)),
+				styled(fmt.Sprintf("(%.2f× of expected %.1f%%)", wp.ratio, wp.elapsedPercent), chatops.StyleMuted),
 			)
 		}
 	}
@@ -239,4 +254,154 @@ func renderReport(b *strings.Builder, r Report, now time.Time) {
 	if r.Note != "" {
 		fmt.Fprintf(b, "  %s\n", styled(r.Note, styleNote))
 	}
+}
+
+type summaryWindowKind int
+
+const (
+	summaryFiveHour summaryWindowKind = iota
+	summaryWeekGlobal
+)
+
+// summarySeverity drives the color of a summary cell. It blends two signals:
+// pace (am I consuming faster than linear?) and absolute usage (how close am I
+// to the cap, regardless of pace?). Absolute usage takes precedence so a nearly
+// exhausted window is always flagged, even when it's technically "on track".
+type summarySeverity int
+
+const (
+	sevDefault summarySeverity = iota // neutral: low usage, on-track pace
+	sevUnder                          // green: comfortably under pace
+	sevWarn                           // orange: high absolute usage (≥75%)
+	sevDanger                         // red: near-exhausted (≥90%) or over pace
+)
+
+var (
+	styleSummaryUnder  = lipgloss.NewStyle().Foreground(chatops.ColZen)
+	styleSummaryWarn   = lipgloss.NewStyle().Foreground(chatops.ColWarn).Bold(true)
+	styleSummaryDanger = lipgloss.NewStyle().Foreground(chatops.ColDanger).Bold(true)
+)
+
+// summaryCellSeverity mirrors the detailed view's bar thresholds (≥75% warn,
+// ≥90% danger) and overlays the pace classification, so the compact table flags
+// the same trouble the detailed report would.
+func summaryCellSeverity(usedPercent float64, p pace) summarySeverity {
+	switch {
+	case usedPercent >= 90:
+		return sevDanger
+	case usedPercent >= 75:
+		return sevWarn
+	}
+	switch p {
+	case paceUnder:
+		return sevUnder
+	case paceOver:
+		return sevDanger
+	default:
+		return sevDefault
+	}
+}
+
+// renderSummaryTable writes the default quick-scan view of all fetched reports.
+func renderSummaryTable(b *strings.Builder, reports []Report, now time.Time) {
+	t := chatops.NewTable().Headers("Agente", "5h", "Week (or Global)")
+	for _, report := range reports {
+		t.Row(
+			summaryProviderName(report.Provider),
+			summaryCell(report, summaryFiveHour, now),
+			summaryCell(report, summaryWeekGlobal, now),
+		)
+	}
+	b.WriteString(t.String())
+	b.WriteString("\n")
+}
+
+func summaryCell(report Report, kind summaryWindowKind, now time.Time) string {
+	cell, used, p, ok := summaryCellContent(report, kind, now)
+	if !ok {
+		return cell // "--": no window of this kind, nothing to color.
+	}
+	switch summaryCellSeverity(used, p) {
+	case sevUnder:
+		return styled(cell, styleSummaryUnder)
+	case sevWarn:
+		return styled(cell, styleSummaryWarn)
+	case sevDanger:
+		return styled(cell, styleSummaryDanger)
+	default:
+		return cell
+	}
+}
+
+func summaryCellContent(report Report, kind summaryWindowKind, now time.Time) (text string, usedPercent float64, p pace, ok bool) {
+	w, found := summaryWindow(report.Windows, kind)
+	if !found {
+		return "--", 0, paceUnknown, false
+	}
+	wp := paceForWindow(w, now)
+	return fmt.Sprintf("%.1f%% used / %.1f%% exp", w.UsedPercent, wp.elapsedPercent), w.UsedPercent, wp.pace, true
+}
+
+func summaryWindow(windows []Window, kind summaryWindowKind) (Window, bool) {
+	switch kind {
+	case summaryFiveHour:
+		for _, w := range windows {
+			if isFiveHourWindow(w) {
+				return w, true
+			}
+		}
+	case summaryWeekGlobal:
+		for _, w := range windows {
+			if isWeeklyWindow(w) {
+				return w, true
+			}
+		}
+		for _, w := range windows {
+			if isGlobalWindow(w) {
+				return w, true
+			}
+		}
+	}
+	return Window{}, false
+}
+
+func summaryProviderName(provider string) string {
+	switch provider {
+	case "Claude Code":
+		return "Claude"
+	case "Kimi Code":
+		return "Kimi"
+	default:
+		return provider
+	}
+}
+
+func isFiveHourWindow(w Window) bool {
+	label := normalizedWindowLabel(w)
+	return w.WindowMinutes == 5*60 ||
+		label == "5h" ||
+		strings.Contains(label, "5-hour") ||
+		strings.Contains(label, "5 hour")
+}
+
+func isWeeklyWindow(w Window) bool {
+	label := normalizedWindowLabel(w)
+	return w.WindowMinutes == 7*24*60 ||
+		label == "week" ||
+		strings.Contains(label, "weekly") ||
+		strings.Contains(label, "7-day") ||
+		strings.Contains(label, "7 day")
+}
+
+func isGlobalWindow(w Window) bool {
+	label := normalizedWindowLabel(w)
+	return strings.Contains(label, "global") ||
+		strings.Contains(label, "monthly") ||
+		strings.Contains(label, "month") ||
+		strings.Contains(label, "total") ||
+		w.WindowMinutes >= 28*24*60
+}
+
+func normalizedWindowLabel(w Window) string {
+	return strings.ToLower(strings.TrimSpace(w.Label))
 }

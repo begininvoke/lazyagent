@@ -1,7 +1,7 @@
 // Package limits implements the `lazyagent limits` subcommand: a one-shot
-// snapshot of the user's Claude Code, Codex, Grok, and Kimi rate-limit / billing
-// windows, plus a "pace" indicator that compares actual consumption to
-// a perfectly linear consumption rate.
+// summary of the user's Claude Code, Codex, Grok, and Kimi rate-limit / billing
+// windows. The --detailed view also includes a "pace" indicator that compares
+// actual consumption to a perfectly linear consumption rate.
 //
 // IMPORTANT (Claude): the source for Claude is /api/oauth/usage on
 // api.anthropic.com — the same endpoint Claude Code's own `/status` calls.
@@ -44,7 +44,8 @@ import (
 var errAgentNotInstalled = errors.New("agent not installed")
 
 type options struct {
-	agent string
+	agent    string
+	detailed bool
 }
 
 // Run is the entry point invoked by main.go for `lazyagent limits ...`.
@@ -54,18 +55,25 @@ func Run(args []string) int {
 
 	var opts options
 	fs.StringVar(&opts.agent, "agent", "all", "Which agent to query: claude, codex, grok, kimi, all")
+	fs.BoolVar(&opts.detailed, "detailed", false, "Show the detailed per-window report with bars, reset times, sources, and notes")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `lazyagent limits — show rate-limit usage
 
 Usage:
-  lazyagent limits                  Show limits for Claude Code, Codex, Grok, and Kimi
+  lazyagent limits                  Show a summary table for Claude Code, Codex, Grok, and Kimi
+  lazyagent limits --detailed       Show detailed per-window reports with pace and reset times
   lazyagent limits --agent claude   Show only Claude Code limits
   lazyagent limits --agent codex    Show only Codex limits
   lazyagent limits --agent grok     Show only Grok limits
   lazyagent limits --agent kimi     Show only Kimi Code limits
 
-Output explains:
+Summary output:
+  The default table shows used % and expected % for the 5-hour window and the
+  weekly/global window. Expected % is the linear pace for elapsed window time.
+  Missing windows are shown as --.
+
+Detailed output explains:
   - Used %:    how much of the window has been consumed
   - Elapsed %: how far we are into the window's time
   - Pace:      consumption vs. a perfectly linear pace
@@ -122,7 +130,7 @@ Flags:
 	now := time.Now()
 	var out strings.Builder
 	exitCode := 0
-	printed := 0
+	var reports []Report
 	missing := 0
 	explicit := len(agents) == 1
 	for _, a := range agents {
@@ -142,19 +150,28 @@ Flags:
 			exitCode = 1
 			continue
 		}
-		if printed > 0 {
-			out.WriteString("\n")
-		}
-		renderReport(&out, report, now)
-		printed++
+		reports = append(reports, report)
 	}
 
 	// All agents were missing AND no real errors fired: tell the user once,
 	// rather than letting them stare at an empty stdout and wonder what happened.
-	if printed == 0 && !explicit && missing == len(agents) {
+	if len(reports) == 0 && !explicit && missing == len(agents) {
 		fmt.Fprintln(os.Stderr, "No supported agents are installed (none of Claude Code, Codex, Grok, or Kimi was detected).")
 		fmt.Fprintln(os.Stderr, "Run `claude` / `grok login` / `kimi login` to authenticate, or run a Codex CLI session first.")
 		exitCode = 1
+	}
+
+	if len(reports) > 0 {
+		if opts.detailed {
+			for i, report := range reports {
+				if i > 0 {
+					out.WriteString("\n")
+				}
+				renderReport(&out, report, now)
+			}
+		} else {
+			renderSummaryTable(&out, reports, now)
+		}
 	}
 
 	fmt.Print(out.String())
