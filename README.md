@@ -3,6 +3,7 @@
 ![GitHub Downloads](https://img.shields.io/github/downloads/illegalstudio/lazyagent/total?v=1)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
+[![Download on the App Store](https://img.shields.io/badge/App%20Store-Download-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/us/app/lazyagent/id6773359156)
 [![Follow @nahime0 on X](https://img.shields.io/badge/Follow%20%40nahime0-000000?logo=x&logoColor=white)](https://x.com/nahime0)
 
 > 🐦 **[Follow me on X (@nahime0)](https://x.com/nahime0) for updates, new features, and behind-the-scenes development.**
@@ -15,9 +16,19 @@ Watch sessions from [Claude Code](https://claude.ai/code), [Cursor](https://curs
 
 Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
-> ⭐ If lazyagent is useful to you, consider [starring the repo](https://github.com/illegalstudio/lazyagent) — it helps others discover it!
->
-> 💛 Loving it? Consider [becoming a sponsor](https://github.com/sponsors/nahime0) to keep the project alive and growing.
+## Support the project
+
+⭐ If lazyagent is useful to you, consider [starring the repo](https://github.com/illegalstudio/lazyagent) — it helps others discover it!
+
+💛 Loving it? Consider [becoming a sponsor](https://github.com/sponsors/nahime0) to keep the project alive and growing.
+
+## lazyagent for iOS
+
+Want to keep an eye on your agents from your pocket? **[lazyagent is available on the App Store](https://apps.apple.com/us/app/lazyagent/id6773359156)** for iPhone and iPad.
+
+The iOS app is a **paid** app — and that's on purpose. Buying it is one of the easiest ways to support the project and keep development going. Thank you! 💛
+
+That said, lazyagent and its API are **fully open source**. If you'd rather not pay for the app, you're more than welcome to build your own client on top of the API — that's exactly what it's there for. No hard feelings, the choice is yours. 🙂
 
 ## News
 
