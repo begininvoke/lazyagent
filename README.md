@@ -59,8 +59,7 @@ Unlike other tools, lazyagent doesn't replace your workflow — it watches it. L
 ### Homebrew
 
 ```bash
-brew tap illegalstudio/tap
-brew install lazyagent
+brew install illegalstudio/tap/lazyagent
 ```
 
 ### Go (TUI only)
