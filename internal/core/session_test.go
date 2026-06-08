@@ -102,14 +102,18 @@ func TestFilterSessionsLocked_ExcludesCWDSubstrings(t *testing.T) {
 	}
 }
 
-func TestFilterSessionsLocked_HidesEmptyGrokSessions(t *testing.T) {
+func TestFilterSessionsLocked_HidesEmptyGrokAndKimiSessions(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	now := time.Now()
+	// Grok and Kimi both create a session directory the moment the CLI is
+	// launched, before any prompt. Such never-used sessions must be hidden.
 	provider := fakeProvider{
 		sessions: []*model.Session{
 			{SessionID: "grok-active", Agent: "grok", CWD: "/p", LastActivity: now, UserMessages: 3},
 			{SessionID: "grok-empty", Agent: "grok", CWD: "/p", LastActivity: now, UserMessages: 0},
+			{SessionID: "kimi-active", Agent: "kimi", CWD: "/p", LastActivity: now, UserMessages: 2},
+			{SessionID: "kimi-empty", Agent: "kimi", CWD: "/p", LastActivity: now, UserMessages: 0},
 			{SessionID: "claude-zero", Agent: "claude", CWD: "/p", LastActivity: now, UserMessages: 0},
 		},
 	}
@@ -120,21 +124,21 @@ func TestFilterSessionsLocked_HidesEmptyGrokSessions(t *testing.T) {
 	}
 
 	// Discovery keeps every session so prune can reach old never-used ones.
-	if len(mgr.Sessions()) != 3 {
-		t.Errorf("Sessions() = %d, want 3 (raw discovery keeps empty Grok sessions)", len(mgr.Sessions()))
+	if len(mgr.Sessions()) != 5 {
+		t.Errorf("Sessions() = %d, want 5 (raw discovery keeps empty sessions)", len(mgr.Sessions()))
 	}
 
-	// The rendering filter (backing TUI, GUI and API) hides the empty Grok
-	// session — and only Grok: a non-Grok session with no user messages is
-	// left untouched.
+	// The rendering filter (backing TUI, GUI and API) hides the never-used
+	// Grok and Kimi sessions — and only those: a non-Grok/Kimi session with no
+	// user messages is left untouched.
 	check := func(name string, got []*model.Session) {
 		for _, s := range got {
-			if s.SessionID == "grok-empty" {
-				t.Errorf("%s must not contain the never-used Grok session", name)
+			if s.SessionID == "grok-empty" || s.SessionID == "kimi-empty" {
+				t.Errorf("%s must not contain the never-used %s session", name, s.Agent)
 			}
 		}
-		if len(got) != 2 {
-			t.Errorf("%s = %d sessions, want 2 (grok-active + claude-zero)", name, len(got))
+		if len(got) != 3 {
+			t.Errorf("%s = %d sessions, want 3 (grok-active + kimi-active + claude-zero)", name, len(got))
 		}
 	}
 	check("VisibleSessions", mgr.VisibleSessions()) // TUI + GUI/tray

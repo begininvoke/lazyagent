@@ -248,11 +248,11 @@ func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind
 		if s.IsSidechain || !s.LastActivity.After(cutoff) {
 			continue
 		}
-		// Grok creates a session directory the moment `grok` is launched,
-		// before any message is sent. Hide such never-used sessions from the
-		// list. They are still returned by the provider, so `prune` and
-		// `compact` can reach very old empty sessions.
-		if s.Agent == "grok" && s.UserMessages == 0 {
+		// Grok and Kimi both create a session directory the moment the CLI is
+		// launched, before any message is sent. Hide such never-used sessions
+		// from the list. They are still returned by the provider, so `prune`
+		// and `compact` can reach very old empty sessions.
+		if (s.Agent == "grok" || s.Agent == "kimi") && s.UserMessages == 0 {
 			continue
 		}
 		if filter != "" && m.tracker.Get(s.SessionID) != filter {
