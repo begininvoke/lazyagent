@@ -159,7 +159,7 @@ sidebar:
 
 ## v0.9.x — Kimi support
 
-- ✅ Kimi Code CLI session discovery from `~/.kimi/sessions/`
+- ✅ Kimi Code CLI session discovery from `~/.kimi-code/sessions/`
 - ✅ `--agent kimi` flag and `K` prefix in session lists
 - ✅ Search, prune, and compact support for Kimi session directories
 - ✅ Kimi usage snapshot in `lazyagent limits`

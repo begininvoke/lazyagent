@@ -140,7 +140,7 @@ func deleteGrokSession(s *model.Session, root string) error {
 }
 
 // deleteKimiSession removes an entire Kimi session directory. A Kimi session is
-// a directory tree (wire.jsonl, context.jsonl, state.json, subagents/, uploads/).
+// a directory tree (state.json plus agents/<id>/wire.jsonl event streams).
 func deleteKimiSession(s *model.Session, root string) error {
 	if root == "" {
 		return fmt.Errorf("kimi sessions directory not found")

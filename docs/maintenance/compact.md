@@ -120,10 +120,9 @@ Truncating `rewind_points.jsonl` disables Grok's rewind feature for that session
 
 ### Kimi Code
 
-- `wire.jsonl` — oversized user input blocks, thinking/text parts, tool-call arguments, and tool-result payloads
-- `context.jsonl` — oversized transcript content and tool-call arguments
-- `subagents/*/wire.jsonl` and `subagents/*/context.jsonl` — the same fields for Kimi subagents embedded in a parent session
-- `subagents/*/output` — raw subagent output files
+- `agents/main/wire.jsonl` — oversized user input blocks, thinking/text parts, tool-call arguments, and tool-result payloads
+- `agents/*/wire.jsonl` — the same fields for Kimi subagents embedded in a parent session
+- `agents/*/output` — raw subagent output files
 
 `state.json`, `prompt.txt`, and subagent metadata are left untouched.
 

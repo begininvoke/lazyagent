@@ -533,16 +533,12 @@ func extractGrok(src sourceState) ([]chunk, error) {
 	return chunks, err
 }
 
-// listKimiSources returns one source per Kimi session. context.jsonl is the
-// preferred transcript source; wire.jsonl is the fallback when context is absent.
+// listKimiSources returns one source per Kimi session, keyed on the session's
+// main agent wire stream.
 func listKimiSources() []sourceState {
 	var out []sourceState
 	for _, dir := range kimi.SessionDirs() {
-		path := filepath.Join(dir, "context.jsonl")
-		if _, err := os.Stat(path); err != nil {
-			path = filepath.Join(dir, "wire.jsonl")
-		}
-		if src, ok := fileSource("kimi", filepath.Base(dir), path); ok {
+		if src, ok := fileSource("kimi", filepath.Base(dir), kimi.WireFile(dir)); ok {
 			out = append(out, src)
 		}
 	}
@@ -550,9 +546,8 @@ func listKimiSources() []sourceState {
 }
 
 func extractKimi(src sourceState) ([]chunk, error) {
-	sessionDir := filepath.Dir(src.Path)
-	workDirs := kimi.WorkDirs()
-	workDir := workDirs[filepath.Base(filepath.Dir(sessionDir))]
+	sessionDir := kimi.SessionDirForWire(src.Path)
+	workDir := kimi.WorkDirs()[sessionDir]
 	kimiChunks, err := kimi.ExtractContextChunks(sessionDir, workDir)
 	if err != nil {
 		return nil, err

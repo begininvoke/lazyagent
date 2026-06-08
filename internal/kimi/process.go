@@ -1,17 +1,17 @@
-// Package kimi discovers Kimi Code CLI sessions from ~/.kimi/sessions.
+// Package kimi discovers Kimi Code CLI sessions from ~/.kimi-code/sessions.
 //
-// Kimi stores sessions two levels deep:
+// kimi-code stores sessions two levels deep:
 //
-//	~/.kimi/sessions/<md5-workdir>/<session-uuid>/
+//	~/.kimi-code/sessions/wd_<name>_<hash>/<session-id>/
 //
-// Each session directory carries a wire.jsonl event stream, context.jsonl
-// transcript, and state.json metadata. The workdir hash is resolved through
-// ~/.kimi/kimi.json when available.
+// Each session directory carries its main agent's event stream at
+// agents/main/wire.jsonl plus state.json metadata. Working directories are
+// resolved through ~/.kimi-code/session_index.jsonl, which maps every session
+// directory to its absolute workdir.
 package kimi
 
 import (
-	"crypto/md5"
-	"encoding/hex"
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -33,7 +33,7 @@ func ShareDir() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".kimi")
+	return filepath.Join(home, ".kimi-code")
 }
 
 // SessionsDir returns the path to Kimi Code CLI session directories.
@@ -45,13 +45,14 @@ func SessionsDir() string {
 	return filepath.Join(root, "sessions")
 }
 
-// MetadataPath returns the path to Kimi's workdir metadata file.
-func MetadataPath() string {
+// SessionIndexPath returns the path to Kimi's session index, mapping every
+// session directory to its absolute working directory.
+func SessionIndexPath() string {
 	root := ShareDir()
 	if root == "" {
 		return ""
 	}
-	return filepath.Join(root, "kimi.json")
+	return filepath.Join(root, "session_index.jsonl")
 }
 
 // CredentialsPath returns the Kimi Code OAuth credential file path.
@@ -63,14 +64,36 @@ func CredentialsPath() string {
 	return filepath.Join(root, "credentials", "kimi-code.json")
 }
 
-// WorkDirs returns Kimi's local workdir hash map (md5(path) -> path).
-func WorkDirs() map[string]string {
-	return loadWorkDirs(MetadataPath())
+// WireFile returns the main agent's event stream path for a session directory.
+func WireFile(sessionDir string) string {
+	return filepath.Join(sessionDir, "agents", "main", "wire.jsonl")
 }
 
-// DiscoverSessions scans ~/.kimi/sessions for Kimi Code CLI session directories.
+// wireFile returns the main agent's event stream path for a session directory.
+func wireFile(sessionDir string) string {
+	return WireFile(sessionDir)
+}
+
+// SessionDirForWire returns the session directory containing a wire stream path,
+// inverting WireFile (<sessionDir>/agents/main/wire.jsonl).
+func SessionDirForWire(wirePath string) string {
+	return filepath.Dir(filepath.Dir(filepath.Dir(wirePath)))
+}
+
+// stateFile returns the metadata file path for a session directory.
+func stateFile(sessionDir string) string {
+	return filepath.Join(sessionDir, "state.json")
+}
+
+// WorkDirs returns a map from absolute session directory to its working
+// directory, as recorded in session_index.jsonl.
+func WorkDirs() map[string]string {
+	return loadWorkDirIndex(SessionIndexPath())
+}
+
+// DiscoverSessions scans ~/.kimi-code/sessions for Kimi Code CLI sessions.
 func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
-	return discoverSessionsFromDir(SessionsDir(), MetadataPath(), cache)
+	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache)
 }
 
 // SessionDirs returns every Kimi session directory on disk. Used by search and
@@ -116,7 +139,7 @@ type parseResult struct {
 	newOffset int64
 }
 
-func discoverSessionsFromDir(sessionsDir, metadataPath string, cache *model.SessionCache) ([]*model.Session, error) {
+func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.SessionCache) ([]*model.Session, error) {
 	if sessionsDir == "" {
 		return nil, nil
 	}
@@ -127,24 +150,23 @@ func discoverSessionsFromDir(sessionsDir, metadataPath string, cache *model.Sess
 		return nil, fmt.Errorf("could not read kimi sessions dir: %w", err)
 	}
 
-	workDirs := loadWorkDirs(metadataPath)
+	workDirs := loadWorkDirIndex(indexPath)
 	seen := make(map[string]struct{})
 	var sessions []*model.Session
 	var jobs []parseJob
 
 	for _, sessionDir := range walkSessionDirs(sessionsDir) {
-		cacheKey := filepath.Join(sessionDir, "wire.jsonl")
+		cacheKey := wireFile(sessionDir)
 		seen[cacheKey] = struct{}{}
 		cached, offset, mtime := cache.GetIncremental(cacheKey)
 		if cached != nil && offset == 0 {
 			sessions = append(sessions, cached)
 			continue
 		}
-		workHash := filepath.Base(filepath.Dir(sessionDir))
 		jobs = append(jobs, parseJob{
 			sessionDir: sessionDir,
 			cacheKey:   cacheKey,
-			workDir:    workDirs[workHash],
+			workDir:    workDirs[sessionDir],
 			cached:     cached,
 			offset:     offset,
 			mtime:      mtime,
@@ -208,7 +230,8 @@ func discoverSessionsFromDir(sessionsDir, metadataPath string, cache *model.Sess
 	return sessions, nil
 }
 
-// walkSessionDirs returns every depth-2 session directory containing wire.jsonl.
+// walkSessionDirs returns every depth-2 session directory whose main agent has
+// a wire.jsonl stream.
 func walkSessionDirs(sessionsDir string) []string {
 	if sessionsDir == "" {
 		return nil
@@ -232,7 +255,7 @@ func walkSessionDirs(sessionsDir string) []string {
 				continue
 			}
 			sessionDir := filepath.Join(workPath, sessionEntry.Name())
-			if _, err := os.Stat(filepath.Join(sessionDir, "wire.jsonl")); err != nil {
+			if _, err := os.Stat(wireFile(sessionDir)); err != nil {
 				continue
 			}
 			dirs = append(dirs, sessionDir)
@@ -241,35 +264,32 @@ func walkSessionDirs(sessionsDir string) []string {
 	return dirs
 }
 
-type metadataFile struct {
-	WorkDirs []workDirMeta `json:"work_dirs"`
+type sessionIndexEntry struct {
+	SessionDir string `json:"sessionDir"`
+	WorkDir    string `json:"workDir"`
 }
 
-type workDirMeta struct {
-	Path string `json:"path"`
-	Kaos string `json:"kaos"`
-}
-
-func loadWorkDirs(path string) map[string]string {
+// loadWorkDirIndex reads session_index.jsonl into a map keyed by absolute
+// session directory.
+func loadWorkDirIndex(path string) map[string]string {
 	out := make(map[string]string)
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return out
 	}
-	var meta metadataFile
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return out
-	}
-	for _, wd := range meta.WorkDirs {
-		if wd.Path == "" || wd.Kaos != "local" {
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	for scanner.Scan() {
+		var entry sessionIndexEntry
+		if json.Unmarshal(scanner.Bytes(), &entry) != nil {
 			continue
 		}
-		out[md5Hex(wd.Path)] = wd.Path
+		if entry.SessionDir == "" || entry.WorkDir == "" {
+			continue
+		}
+		out[filepath.Clean(entry.SessionDir)] = entry.WorkDir
 	}
 	return out
-}
-
-func md5Hex(s string) string {
-	sum := md5.Sum([]byte(s))
-	return hex.EncodeToString(sum[:])
 }

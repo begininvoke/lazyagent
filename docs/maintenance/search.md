@@ -109,7 +109,7 @@ The next `lazyagent search` invocation will rebuild it.
 - **pi** — pi coding agent (`~/.pi/agent/sessions/`)
 - **amp** — Amp CLI (`~/.local/share/amp/threads/`)
 - **grok** — Grok CLI (`~/.grok/sessions/`)
-- **kimi** — Kimi Code CLI (`~/.kimi/sessions/`)
+- **kimi** — Kimi Code CLI (`~/.kimi-code/sessions/`)
 
 Not supported:
 

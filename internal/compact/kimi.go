@@ -7,244 +7,82 @@ import (
 	"strings"
 )
 
-// Kimi sessions are directories. The bulky, resume-relevant files are the
-// main wire/context streams plus the same files inside subagent directories.
-var kimiBulkJSONL = []string{"wire.jsonl", "context.jsonl"}
+// bulkyKimiKeys are string fields whose value is conversation or payload
+// content safe to truncate. Identifiers, types, names, roles and timestamps are
+// intentionally excluded so event and tool-call linkage survives compaction.
+var bulkyKimiKeys = map[string]bool{
+	"text": true, "think": true, "thinking": true,
+	"content": true, "arguments": true, "output": true,
+	"input_text": true, "output_text": true, "data": true,
+	"command": true, "stdout": true, "stderr": true, "error": true,
+}
 
-// compactKimiLine rewrites one Kimi JSONL entry, preserving event/tool-call
-// structure while truncating large content, thinking, arguments, and tool
-// result payloads.
+// deepKimiKeys mark subtrees carrying arbitrary tool input/output. Every string
+// beneath them is truncatable regardless of its own key name.
+var deepKimiKeys = map[string]bool{
+	"args": true, "result": true, "return_value": true,
+}
+
+// compactKimiLine truncates the bulky content of one kimi-code wire entry while
+// preserving its event structure, tool-call IDs and timestamps. It handles both
+// context.append_message (message.content/toolCalls) and context.append_loop_event
+// (event.part/args/result) shapes by walking the decoded entry recursively.
 func compactKimiLine(entry map[string]any, threshold int64) int64 {
-	var saved int64
-	if msg, ok := entry["message"].(map[string]any); ok {
-		saved += compactKimiWireMessage(msg, threshold)
-	}
-	saved += compactKimiContextEntry(entry, threshold)
-	return saved
+	return compactKimiNode(entry, threshold, false)
 }
 
-func compactKimiWireMessage(msg map[string]any, threshold int64) int64 {
-	msgType, _ := msg["type"].(string)
-	payload, ok := msg["payload"].(map[string]any)
-	if !ok {
-		return 0
-	}
-	return compactKimiPayload(msgType, payload, threshold)
-}
-
-func compactKimiPayload(msgType string, payload map[string]any, threshold int64) int64 {
-	var saved int64
-	switch msgType {
-	case "TurnBegin":
-		saved += compactKimiValueField(payload, "user_input", threshold)
-	case "ContentPart":
-		saved += compactKimiTextFields(payload, threshold)
-	case "ToolCall":
-		saved += compactKimiFunction(payload, threshold)
-		saved += truncateKimiStringField(payload, "arguments", threshold)
-	case "ToolCallPart":
-		saved += truncateKimiStringField(payload, "arguments_part", threshold)
-	case "ToolResult":
-		saved += truncateKimiDeepField(payload, "return_value", threshold)
-		saved += truncateKimiDeepField(payload, "result", threshold)
-		saved += truncateKimiDeepField(payload, "content", threshold)
-		saved += truncateKimiDeepField(payload, "output", threshold)
-	case "SubagentEvent":
-		if event, ok := payload["event"].(map[string]any); ok {
-			saved += compactKimiNestedEvent(event, threshold)
-		}
-	}
-
-	// Be tolerant of small schema drift in Kimi wire payloads without touching
-	// IDs or timestamps.
-	saved += compactKimiFunction(payload, threshold)
-	saved += compactKimiValueField(payload, "content", threshold)
-	saved += compactKimiValueField(payload, "user_input", threshold)
-	saved += compactKimiTextFields(payload, threshold)
-	return saved
-}
-
-func compactKimiNestedEvent(event map[string]any, threshold int64) int64 {
-	msgType, _ := event["type"].(string)
-	payload, ok := event["payload"].(map[string]any)
-	if !ok {
-		return 0
-	}
-	return compactKimiPayload(msgType, payload, threshold)
-}
-
-func compactKimiContextEntry(entry map[string]any, threshold int64) int64 {
-	var saved int64
-	saved += compactKimiValueField(entry, "content", threshold)
-	saved += compactKimiToolCalls(entry, threshold)
-	saved += compactKimiFunction(entry, threshold)
-	return saved
-}
-
-func compactKimiValueField(m map[string]any, key string, threshold int64) int64 {
-	v, ok := m[key]
-	if !ok {
-		return 0
-	}
-	return compactKimiValue(v, func(new any) { m[key] = new }, threshold)
-}
-
-func compactKimiValue(v any, set func(any), threshold int64) int64 {
-	switch t := v.(type) {
-	case string:
-		if newVal, delta := truncateString(t, threshold); delta > 0 {
-			set(newVal)
-			return delta
-		}
-	case []any:
-		return compactKimiArray(t, threshold)
-	case map[string]any:
-		return compactKimiObject(t, threshold)
-	}
-	return 0
-}
-
-func compactKimiArray(arr []any, threshold int64) int64 {
-	var saved int64
-	for i, item := range arr {
-		idx := i
-		saved += compactKimiValue(item, func(new any) { arr[idx] = new }, threshold)
-	}
-	return saved
-}
-
-func compactKimiObject(m map[string]any, threshold int64) int64 {
-	var saved int64
-	saved += compactKimiTextFields(m, threshold)
-	saved += compactKimiFunction(m, threshold)
-	saved += compactKimiToolCalls(m, threshold)
-	for _, key := range []string{"content", "children"} {
-		v, ok := m[key]
-		if !ok {
-			continue
-		}
-		switch v.(type) {
-		case []any, map[string]any:
-			saved += compactKimiValue(v, func(new any) { m[key] = new }, threshold)
-		}
-	}
-	if src, ok := m["source"].(map[string]any); ok {
-		saved += truncateKimiStringField(src, "data", threshold)
-	}
-	return saved
-}
-
-func compactKimiTextFields(m map[string]any, threshold int64) int64 {
-	var saved int64
-	for _, key := range []string{"text", "content", "output", "input_text", "output_text"} {
-		saved += truncateKimiStringField(m, key, threshold)
-	}
-	for _, key := range []string{"think", "thinking"} {
-		saved += truncateKimiStringField(m, key, threshold*2)
-	}
-	return saved
-}
-
-func compactKimiFunction(m map[string]any, threshold int64) int64 {
-	fn, ok := m["function"].(map[string]any)
-	if !ok {
-		return 0
-	}
-	return truncateKimiStringField(fn, "arguments", threshold)
-}
-
-func compactKimiToolCalls(m map[string]any, threshold int64) int64 {
-	arr, ok := m["tool_calls"].([]any)
-	if !ok {
-		return 0
-	}
-	var saved int64
-	for _, item := range arr {
-		call, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		saved += compactKimiFunction(call, threshold)
-		saved += truncateKimiStringField(call, "arguments", threshold)
-	}
-	return saved
-}
-
-func truncateKimiStringField(m map[string]any, key string, threshold int64) int64 {
-	s, ok := m[key].(string)
-	if !ok {
-		return 0
-	}
-	if newVal, delta := truncateString(s, threshold); delta > 0 {
-		m[key] = newVal
-		return delta
-	}
-	return 0
-}
-
-func truncateKimiDeepField(m map[string]any, key string, threshold int64) int64 {
-	v, ok := m[key]
-	if !ok {
-		return 0
-	}
-	switch t := v.(type) {
-	case string:
-		if newVal, delta := truncateString(t, threshold); delta > 0 {
-			m[key] = newVal
-			return delta
-		}
-	case map[string]any, []any:
-		return truncateKimiDeep(t, threshold)
-	}
-	return 0
-}
-
-func truncateKimiDeep(v any, threshold int64) int64 {
-	var saved int64
+func compactKimiNode(v any, threshold int64, deep bool) int64 {
 	switch t := v.(type) {
 	case map[string]any:
+		var saved int64
 		for k, child := range t {
+			childDeep := deep || deepKimiKeys[k]
 			if s, ok := child.(string); ok {
-				if newVal, delta := truncateString(s, threshold); delta > 0 {
-					t[k] = newVal
-					saved += delta
+				if deep || bulkyKimiKeys[k] {
+					th := threshold
+					if k == "think" || k == "thinking" {
+						th *= 2
+					}
+					if newVal, delta := truncateString(s, th); delta > 0 {
+						t[k] = newVal
+						saved += delta
+					}
 				}
 				continue
 			}
-			saved += truncateKimiDeep(child, threshold)
+			saved += compactKimiNode(child, threshold, childDeep)
 		}
+		return saved
 	case []any:
+		var saved int64
 		for i, child := range t {
 			if s, ok := child.(string); ok {
-				if newVal, delta := truncateString(s, threshold); delta > 0 {
-					t[i] = newVal
-					saved += delta
+				if deep {
+					if newVal, delta := truncateString(s, threshold); delta > 0 {
+						t[i] = newVal
+						saved += delta
+					}
 				}
 				continue
 			}
-			saved += truncateKimiDeep(child, threshold)
+			saved += compactKimiNode(child, threshold, deep)
 		}
+		return saved
 	}
-	return saved
+	return 0
 }
 
+// kimiJSONLFiles returns every agent wire stream in a kimi-code session
+// directory: the main agent plus any subagents under agents/<id>/wire.jsonl.
 func kimiJSONLFiles(dir string) []string {
-	var files []string
-	for _, name := range kimiBulkJSONL {
-		path := filepath.Join(dir, name)
-		if info, err := os.Stat(path); err == nil && !info.IsDir() {
-			files = append(files, path)
-		}
-	}
-	for _, name := range kimiBulkJSONL {
-		matches, _ := filepath.Glob(filepath.Join(dir, "subagents", "*", name))
-		files = append(files, matches...)
-	}
-	return files
+	matches, _ := filepath.Glob(filepath.Join(dir, "agents", "*", "wire.jsonl"))
+	return matches
 }
 
+// kimiRawOutputs returns raw subagent output sidecars, truncated wholesale
+// rather than line-by-line.
 func kimiRawOutputs(dir string) []string {
-	matches, _ := filepath.Glob(filepath.Join(dir, "subagents", "*", "output"))
+	matches, _ := filepath.Glob(filepath.Join(dir, "agents", "*", "output"))
 	return matches
 }
 

@@ -167,7 +167,7 @@ A single HTTPS GET to `https://api.kimi.com/coding/v1/usages` with the user's OA
 The OAuth token is read in this priority order:
 
 1. **`KIMI_CODE_OAUTH_TOKEN`** environment variable — useful for CI or for overriding the on-disk credential file
-2. **`~/.kimi/credentials/kimi-code.json`** — the file Kimi Code CLI writes after login
+2. **`~/.kimi-code/credentials/kimi-code.json`** — the file Kimi Code CLI writes after login
 
 lazyagent does **not** refresh Kimi OAuth tokens. If the access token has expired or been rejected, the command surfaces the server's `401` and tells you to run `kimi login` or open Kimi Code CLI again.
 
@@ -175,7 +175,7 @@ The response carries a top-level `usage` quota plus zero or more rolling `limits
 
 ## When an agent isn't installed
 
-All providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's a ChatGPT OAuth token in `~/.codex/auth.json` (or `CODEX_OAUTH_TOKEN`), for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`), and for Kimi it's an OAuth token in `~/.kimi/credentials/kimi-code.json` (or `KIMI_CODE_OAUTH_TOKEN`).
+All providers are optional. The command's behavior depends on which agents have a detectable footprint on this machine — for Claude that's an OAuth token in any of the supported sources, for Codex it's a ChatGPT OAuth token in `~/.codex/auth.json` (or `CODEX_OAUTH_TOKEN`), for Grok it's an OAuth token in `~/.grok/auth.json` (or `GROK_OAUTH_TOKEN`), and for Kimi it's an OAuth token in `~/.kimi-code/credentials/kimi-code.json` (or `KIMI_CODE_OAUTH_TOKEN`).
 
 | State | Default (`--agent all`) | `--agent claude` | `--agent codex` | `--agent grok` | `--agent kimi` |
 |-------|-------------------------|------------------|-----------------|----------------|----------------|
@@ -225,7 +225,7 @@ Even on partial failure (`1`), the successful agents' output is printed to stdou
 |----------|--------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token for the Claude call. Used in priority before the macOS keychain or the credentials file |
 | `GROK_OAUTH_TOKEN` | Override the OAuth token for the Grok call. Used in priority before `~/.grok/auth.json` |
-| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token for the Kimi call. Used in priority before `~/.kimi/credentials/kimi-code.json` |
+| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token for the Kimi call. Used in priority before `~/.kimi-code/credentials/kimi-code.json` |
 | `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL. lazyagent appends `/usages` |
 
 ## See also
