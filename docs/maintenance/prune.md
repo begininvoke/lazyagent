@@ -129,7 +129,7 @@ The disclaimer and prompt are both skipped when `--yes` is passed, which is the 
 
 - **Active sessions** touched in the last 5 minutes are never deleted — the originating agent might still be writing.
 - **Sub-agent transcripts** are skipped to avoid breaking their parent's file.
-- A **path guard** refuses to delete anything outside the known agent roots (`~/.claude/projects`, `~/.pi/agent/sessions`, `~/.codex/sessions`, `~/.grok/sessions`, `~/.kimi/sessions`).
+- A **path guard** refuses to delete anything outside the known agent roots (`~/.claude/projects`, `~/.pi/agent/sessions`, `~/.codex/sessions`, `~/.grok/sessions`, `~/.kimi-code/sessions`).
 - **Codex index**: the per-session name index at `~/.codex/session_index.jsonl` is rewritten atomically (temp file + rename) so no dangling names remain.
 - **Claude Desktop sidecars**: when a CLI JSONL is deleted, the matching desktop metadata JSON (`~/Library/Application Support/Claude/claude-code-sessions/local_*.json`) is cleaned up alongside.
 - **Empty project folders** left behind after deletions are removed — but never the agent roots themselves.

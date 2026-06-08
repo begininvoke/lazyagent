@@ -247,8 +247,8 @@ The maintenance subcommands define their own exit codes; see their respective pa
 | `CLAUDE_CONFIG_DIR` | Alternate Claude home when `claude_dirs` is not set in the config. Must contain a `projects/` subfolder |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Claude call. Bypasses the macOS keychain and the credentials file |
 | `GROK_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Grok billing call. Bypasses `~/.grok/auth.json` |
-| `KIMI_SHARE_DIR` | Alternate Kimi Code data root. Defaults to `~/.kimi` |
-| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Kimi call. Bypasses `~/.kimi/credentials/kimi-code.json` |
+| `KIMI_SHARE_DIR` | Alternate Kimi Code data root. Defaults to `~/.kimi-code` |
+| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Kimi call. Bypasses `~/.kimi-code/credentials/kimi-code.json` |
 | `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL for `lazyagent limits`; `/usages` is appended |
 | `XDG_CONFIG_HOME` | Overrides the default `~/.config` base for `~/.config/lazyagent/` |
 | `VISUAL` | Preferred GUI editor for <kbd>o</kbd> (TUI) / Open (GUI). See [Editor support](../reference/editor-support.md) |

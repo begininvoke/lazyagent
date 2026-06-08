@@ -18,7 +18,7 @@ lazyagent supports ten agent sources out of the box. Each has a dedicated provid
 | [OpenCode](https://opencode.ai/) | `~/.local/share/opencode/opencode.db` | SQLite | `O` |
 | [Kilo](https://kilo.ai/) | `~/.local/share/kilo/kilo.db` | SQLite | `L` |
 | [Grok CLI](https://x.ai/cli) | `~/.grok/sessions/<encoded-cwd>/<uuid>/` | Directory per session (JSONL + JSON) | `G` |
-| Kimi Code CLI | `~/.kimi/sessions/<md5-workdir>/<uuid>/` + `~/.kimi/kimi.json` | Directory per session (JSONL + JSON) | `K` |
+| Kimi Code CLI | `~/.kimi-code/sessions/wd_<name>_<hash>/<session-id>/` + `~/.kimi-code/session_index.jsonl` | Directory per session (JSONL + JSON) | `K` |
 
 The prefix appears next to each session in the TUI list, the GUI panel, and the API response so you can tell at a glance which agent produced a session.
 
@@ -85,9 +85,11 @@ Grok writes one *directory* per session, two levels deep under `~/.grok/sessions
 
 ### Kimi Code CLI
 
-Kimi writes one directory per session under `~/.kimi/sessions/<md5-workdir>/<session-uuid>/`. The parent directory is the MD5 of the local working directory path; lazyagent resolves it through `~/.kimi/kimi.json` so the UI can show the real CWD.
+Kimi writes one directory per session under `~/.kimi-code/sessions/wd_<name>_<hash>/<session-id>/`. lazyagent resolves each session's working directory through `~/.kimi-code/session_index.jsonl`, which maps every session directory to its absolute CWD.
 
-Each session directory includes `wire.jsonl` (event stream), `context.jsonl` (transcript), `state.json` (custom title and session metadata), and optional subagent/upload directories. lazyagent reads `wire.jsonl` for activity state, tool calls, recent messages, timestamps, and token counters; `context.jsonl` powers `lazyagent search`.
+Each session directory carries its main agent's event stream at `agents/main/wire.jsonl` (subagents live under `agents/<id>/wire.jsonl`) plus `state.json` (title and session metadata). lazyagent reads `wire.jsonl` for activity state, tool calls, recent messages, timestamps, and token counters, and also uses it to power `lazyagent search`.
+
+Two on-disk encodings coexist: sessions imported from the legacy kimi-cli materialize the whole conversation as `context.append_message` events, while native kimi-code sessions stream assistant content, tool calls and token usage through `context.append_loop_event` / `usage.record` events. lazyagent parses both.
 
 Kimi's local token counters include input, cache-read, cache-creation, and output tokens, so lazyagent shows token totals. Cost is only estimated when the model name matches a known pricing entry.
 
