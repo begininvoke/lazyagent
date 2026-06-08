@@ -97,7 +97,7 @@ Authentication:
           If none is found, run `+"`grok login`"+`.
   Kimi    reads its OAuth token from, in order:
             1. KIMI_CODE_OAUTH_TOKEN env var
-            2. ~/.kimi/credentials/kimi-code.json
+            2. ~/.kimi-code/credentials/kimi-code.json
           If none is found, run `+"`kimi login`"+`.
 
 Disclaimer (Claude, Codex, Grok, Kimi):
@@ -189,7 +189,7 @@ func notInstalledMessage(agent string) string {
 	case "grok":
 		return "Grok CLI is not installed or not logged in (no ~/.grok/auth.json). Run `grok login`, or set GROK_OAUTH_TOKEN."
 	case "kimi":
-		return "Kimi Code CLI is not installed or not logged in (no ~/.kimi/credentials/kimi-code.json). Run `kimi login`, or set KIMI_CODE_OAUTH_TOKEN."
+		return "Kimi Code CLI is not installed or not logged in (no ~/.kimi-code/credentials/kimi-code.json). Run `kimi login`, or set KIMI_CODE_OAUTH_TOKEN."
 	default:
 		return fmt.Sprintf("%s is not installed.", agent)
 	}
