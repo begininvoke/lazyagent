@@ -1,7 +1,7 @@
 // Package limits implements the `lazyagent limits` subcommand: a one-shot
-// summary of the user's Claude Code, Codex, Grok, and Kimi rate-limit / billing
-// windows. The --detailed view also includes a "pace" indicator that compares
-// actual consumption to a perfectly linear consumption rate.
+// summary of the user's Claude Code, Codex, Grok, Kimi, and Cursor rate-limit /
+// billing windows. The --detailed view also includes a "pace" indicator that
+// compares actual consumption to a perfectly linear consumption rate.
 //
 // IMPORTANT (Claude): the source for Claude is /api/oauth/usage on
 // api.anthropic.com — the same endpoint Claude Code's own `/status` calls.
@@ -24,6 +24,12 @@
 // IMPORTANT (Kimi): the source for Kimi is /coding/v1/usages on api.kimi.com —
 // the same endpoint Kimi Code CLI's `/status` slash command calls. lazyagent
 // uses the current access token as-is and does not refresh OAuth credentials.
+//
+// IMPORTANT (Cursor): the source for Cursor is /api/dashboard/get-aggregated-usage-events
+// on cursor.com — the same endpoint the Cursor dashboard uses to render its usage
+// summary. It is read with the session token from Cursor's local state.vscdb. We
+// report only the API (usage-based) pool, not the unlimited Auto/Composer pool.
+// Same caveats as the others: on-demand only, undocumented, fail gracefully.
 package limits
 
 import (
@@ -43,6 +49,14 @@ import (
 // surfacing them as helpful messages when the user explicitly asked for one.
 var errAgentNotInstalled = errors.New("agent not installed")
 
+// errAgentUnavailable means the agent IS installed and authenticated, but we
+// can't produce a usable report right now for a reason worth telling the user
+// about (e.g. Cursor is signed in but on a plan whose included budget we can't
+// determine). Unlike a hard error it's skipped silently in `--agent all` mode so
+// one agent's quirk never breaks the aggregate command; in explicit single-agent
+// mode the wrapped message is shown so the user knows how to fix it.
+var errAgentUnavailable = errors.New("agent unavailable")
+
 type options struct {
 	agent    string
 	detailed bool
@@ -54,19 +68,20 @@ func Run(args []string) int {
 	fs.SetOutput(os.Stderr)
 
 	var opts options
-	fs.StringVar(&opts.agent, "agent", "all", "Which agent to query: claude, codex, grok, kimi, all")
+	fs.StringVar(&opts.agent, "agent", "all", "Which agent to query: claude, codex, grok, kimi, cursor, all")
 	fs.BoolVar(&opts.detailed, "detailed", false, "Show the detailed per-window report with bars, reset times, sources, and notes")
 
 	fs.Usage = func() {
 		fmt.Fprint(os.Stderr, `lazyagent limits — show rate-limit usage
 
 Usage:
-  lazyagent limits                  Show a summary table for Claude Code, Codex, Grok, and Kimi
+  lazyagent limits                  Show a summary table for Claude Code, Codex, Grok, Kimi, and Cursor
   lazyagent limits --detailed       Show detailed per-window reports with pace and reset times
   lazyagent limits --agent claude   Show only Claude Code limits
   lazyagent limits --agent codex    Show only Codex limits
   lazyagent limits --agent grok     Show only Grok limits
   lazyagent limits --agent kimi     Show only Kimi Code limits
+  lazyagent limits --agent cursor   Show only Cursor limits (API usage pool)
 
 Summary output:
   The default table shows used % and expected % for the 5-hour window and the
@@ -99,8 +114,12 @@ Authentication:
             1. KIMI_CODE_OAUTH_TOKEN env var
             2. ~/.kimi-code/credentials/kimi-code.json
           If none is found, run `+"`kimi login`"+`.
+  Cursor  reads its session token and plan from Cursor's local state.vscdb.
+          If none is found, open Cursor and sign in. Cursor only exposes the
+          plan's included API budget indirectly, so it's derived from your plan
+          (Pro $20, Pro+ $70, Ultra $400). Override with CURSOR_INCLUDED_USD.
 
-Disclaimer (Claude, Codex, Grok, Kimi):
+Disclaimer (Claude, Codex, Grok, Kimi, Cursor):
   These providers expose their usage through undocumented endpoints used by
   their respective official CLIs. lazyagent calls them only on explicit user
   invocation. They may break or be revoked by their vendors without notice.
@@ -146,6 +165,17 @@ Flags:
 				// message at the end if nothing was shown.
 				continue
 			}
+			if errors.Is(err, errAgentUnavailable) {
+				missing++
+				if explicit {
+					// The wrapped error already carries a user-facing, actionable
+					// message (unlike the generic not-installed text).
+					fmt.Fprintf(os.Stderr, "%v\n", err)
+					exitCode = 1
+				}
+				// In `all` mode, skip silently like a missing agent.
+				continue
+			}
 			fmt.Fprintf(os.Stderr, "Error (%s): %v\n", a, err)
 			exitCode = 1
 			continue
@@ -156,8 +186,8 @@ Flags:
 	// All agents were missing AND no real errors fired: tell the user once,
 	// rather than letting them stare at an empty stdout and wonder what happened.
 	if len(reports) == 0 && !explicit && missing == len(agents) {
-		fmt.Fprintln(os.Stderr, "No supported agents are installed (none of Claude Code, Codex, Grok, or Kimi was detected).")
-		fmt.Fprintln(os.Stderr, "Run `claude` / `codex` / `grok login` / `kimi login` to authenticate.")
+		fmt.Fprintln(os.Stderr, "No supported agents are installed (none of Claude Code, Codex, Grok, Kimi, or Cursor was detected).")
+		fmt.Fprintln(os.Stderr, "Run `claude` / `codex` / `grok login` / `kimi login`, or sign in to Cursor.")
 		exitCode = 1
 	}
 
@@ -190,6 +220,8 @@ func notInstalledMessage(agent string) string {
 		return "Grok CLI is not installed or not logged in (no ~/.grok/auth.json). Run `grok login`, or set GROK_OAUTH_TOKEN."
 	case "kimi":
 		return "Kimi Code CLI is not installed or not logged in (no ~/.kimi-code/credentials/kimi-code.json). Run `kimi login`, or set KIMI_CODE_OAUTH_TOKEN."
+	case "cursor":
+		return "Cursor is not installed or not logged in (no token in state.vscdb). Open Cursor and sign in."
 	default:
 		return fmt.Sprintf("%s is not installed.", agent)
 	}
@@ -205,6 +237,8 @@ func fetchReport(ctx context.Context, agent string) (Report, error) {
 		return fetchGrokReport(ctx)
 	case "kimi":
 		return fetchKimiReport(ctx)
+	case "cursor":
+		return fetchCursorReport(ctx)
 	default:
 		return Report{}, fmt.Errorf("unsupported agent %q", agent)
 	}
@@ -214,10 +248,10 @@ func resolveAgents(arg string) ([]string, error) {
 	arg = strings.TrimSpace(strings.ToLower(arg))
 	switch arg {
 	case "", "all":
-		return []string{"claude", "codex", "grok", "kimi"}, nil
-	case "claude", "codex", "grok", "kimi":
+		return []string{"claude", "codex", "grok", "kimi", "cursor"}, nil
+	case "claude", "codex", "grok", "kimi", "cursor":
 		return []string{arg}, nil
 	default:
-		return nil, fmt.Errorf("unsupported agent %q (use claude, codex, grok, kimi, or all)", arg)
+		return nil, fmt.Errorf("unsupported agent %q (use claude, codex, grok, kimi, cursor, or all)", arg)
 	}
 }

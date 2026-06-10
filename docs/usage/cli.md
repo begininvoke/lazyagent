@@ -173,7 +173,7 @@ Full reference, including the index location, ranking, resume commands, and Grok
 
 ### `limits`
 
-`limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, and Kimi. The default table labels each 5-hour and weekly/global cell as `used` and `exp`, where `exp` is the linear pace for elapsed window time; `--detailed` prints the full per-window report with reset times and the pace indicator (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint.
+`limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default table labels each 5-hour and weekly/global cell as `used` and `exp`, where `exp` is the linear pace for elapsed window time; `--detailed` prints the full per-window report with reset times and the pace indicator (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes a single monthly window tracking its usage-based (API) spend against the plan's included credit.
 
 ```bash
 lazyagent limits                 # summary table for all supported limits providers
@@ -182,9 +182,10 @@ lazyagent limits --agent claude  # only Claude Code
 lazyagent limits --agent codex   # only Codex
 lazyagent limits --agent grok    # only Grok
 lazyagent limits --agent kimi    # only Kimi Code
+lazyagent limits --agent cursor  # only Cursor (usage-based API pool)
 ```
 
-Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data comes from `/backend-api/wham/usage` on `chatgpt.com` — the same endpoint the Codex CLI's TUI polls for its rate-limit display. Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on `api.kimi.com`, the endpoint Kimi Code CLI's `/status` slash command calls.
+Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data comes from `/backend-api/wham/usage` on `chatgpt.com` — the same endpoint the Codex CLI's TUI polls for its rate-limit display. Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on `api.kimi.com`, the endpoint Kimi Code CLI's `/status` slash command calls. Cursor data comes from `/api/dashboard/get-aggregated-usage-events` on `cursor.com` — the same endpoint the Cursor dashboard's usage summary uses — read with the session token from Cursor's local `state.vscdb`; only the usage-based (API) pool is reported, not the unlimited Auto/Composer pool.
 
 Full reference, including disclaimers and token-resolution order: [`limits`](../maintenance/limits.md).
 
@@ -250,6 +251,7 @@ The maintenance subcommands define their own exit codes; see their respective pa
 | `KIMI_SHARE_DIR` | Alternate Kimi Code data root. Defaults to `~/.kimi-code` |
 | `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Kimi call. Bypasses `~/.kimi-code/credentials/kimi-code.json` |
 | `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL for `lazyagent limits`; `/usages` is appended |
+| `CURSOR_INCLUDED_USD` | Override the Cursor plan's included API-usage dollar amount used by `lazyagent limits` as the denominator for `Used %`. Required for plans not in the built-in table (Business, Enterprise, Teams) |
 | `XDG_CONFIG_HOME` | Overrides the default `~/.config` base for `~/.config/lazyagent/` |
 | `VISUAL` | Preferred GUI editor for <kbd>o</kbd> (TUI) / Open (GUI). See [Editor support](../reference/editor-support.md) |
 | `EDITOR` | Fallback terminal editor when `$VISUAL` is unset |
