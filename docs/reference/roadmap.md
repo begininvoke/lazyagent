@@ -172,6 +172,7 @@ sidebar:
 - ✅ Codex via `/backend-api/wham/usage` on `chatgpt.com` (the same endpoint the Codex CLI's TUI polls), ChatGPT token resolved from `CODEX_OAUTH_TOKEN` / `~/.codex/auth.json`
 - ✅ Grok via `/v1/billing` on `cli-chat-proxy.grok.com`, token resolved from `GROK_OAUTH_TOKEN` / `~/.grok/auth.json`
 - ✅ Kimi Code via `/coding/v1/usages` on `api.kimi.com`, token resolved from `KIMI_CODE_OAUTH_TOKEN` / `~/.kimi-code/credentials/kimi-code.json`
+- ✅ Cursor via `/api/dashboard/get-aggregated-usage-events` on `cursor.com` (the same endpoint its dashboard uses), session token read from local `state.vscdb`; reports the usage-based (API) pool against the plan's included credit, `CURSOR_INCLUDED_USD` override
 - ✅ Honest User-Agent (no Claude Code impersonation), graceful failure on 401/429, disclaimer in `--help` and output
 
 ## Future ideas
