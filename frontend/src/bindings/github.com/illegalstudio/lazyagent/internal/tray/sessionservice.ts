@@ -13,6 +13,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as core$0 from "../core/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as limits$0 from "../limits/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -40,7 +43,9 @@ export function GetActiveCount(): $CancellablePromise<number> {
 }
 
 /**
- * GetConfig returns the current config.
+ * GetConfig returns the current config. The API passphrase is scrubbed
+ * before returning so the secret never crosses the Wails IPC boundary into
+ * the frontend (mirrors what /api/config does for HTTP callers).
  */
 export function GetConfig(): $CancellablePromise<core$0.Config> {
     return $Call.ByID(1670992424).then(($result: any) => {
@@ -49,11 +54,22 @@ export function GetConfig(): $CancellablePromise<core$0.Config> {
 }
 
 /**
+ * GetLimits fetches all supported providers and returns the computed limits
+ * view. It is called fresh each time the GUI opens the limits page; it does not
+ * poll. Missing/errored agents are omitted.
+ */
+export function GetLimits(): $CancellablePromise<limits$0.View> {
+    return $Call.ByID(1368178874).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
+/**
  * GetSessionDetail returns full detail for a session.
  */
 export function GetSessionDetail(id: string): $CancellablePromise<$models.SessionFull | null> {
     return $Call.ByID(378650659, id).then(($result: any) => {
-        return $$createType2($result);
+        return $$createType3($result);
     });
 }
 
@@ -69,7 +85,7 @@ export function GetSessionName(sessionID: string): $CancellablePromise<string> {
  */
 export function GetSessions(): $CancellablePromise<$models.SessionItem[]> {
     return $Call.ByID(330309427).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
@@ -156,7 +172,8 @@ export function TogglePin(): $CancellablePromise<void> {
 
 // Private type creation functions
 const $$createType0 = core$0.Config.createFrom;
-const $$createType1 = $models.SessionFull.createFrom;
-const $$createType2 = $Create.Nullable($$createType1);
-const $$createType3 = $models.SessionItem.createFrom;
-const $$createType4 = $Create.Array($$createType3);
+const $$createType1 = limits$0.View.createFrom;
+const $$createType2 = $models.SessionFull.createFrom;
+const $$createType3 = $Create.Nullable($$createType2);
+const $$createType4 = $models.SessionItem.createFrom;
+const $$createType5 = $Create.Array($$createType4);

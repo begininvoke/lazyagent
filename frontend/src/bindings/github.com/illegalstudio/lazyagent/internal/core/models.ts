@@ -17,6 +17,7 @@ export class Config {
     "notify_after_sec": number;
     "agents": { [_ in string]?: boolean };
     "claude_dirs"?: string[];
+    "exclude_cwd_substrings": string[];
     "tui": TUIConfig;
 
     /**
@@ -25,6 +26,7 @@ export class Config {
      * — `lazyagent --api` will prompt for one on first run.
      */
     "api_passphrase"?: string;
+
     /**
      * APISalt is a public, per-install salt used with APIPassphrase when
      * deriving the bearer token. It is not secret, but must stay stable so
@@ -55,6 +57,9 @@ export class Config {
         if (!("agents" in $$source)) {
             this["agents"] = {};
         }
+        if (!("exclude_cwd_substrings" in $$source)) {
+            this["exclude_cwd_substrings"] = [];
+        }
         if (!("tui" in $$source)) {
             this["tui"] = (new TUIConfig());
         }
@@ -68,7 +73,8 @@ export class Config {
     static createFrom($$source: any = {}): Config {
         const $$createField6_0 = $$createType0;
         const $$createField7_0 = $$createType1;
-        const $$createField8_0 = $$createType2;
+        const $$createField8_0 = $$createType1;
+        const $$createField9_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("agents" in $$parsedSource) {
             $$parsedSource["agents"] = $$createField6_0($$parsedSource["agents"]);
@@ -76,8 +82,11 @@ export class Config {
         if ("claude_dirs" in $$parsedSource) {
             $$parsedSource["claude_dirs"] = $$createField7_0($$parsedSource["claude_dirs"]);
         }
+        if ("exclude_cwd_substrings" in $$parsedSource) {
+            $$parsedSource["exclude_cwd_substrings"] = $$createField8_0($$parsedSource["exclude_cwd_substrings"]);
+        }
         if ("tui" in $$parsedSource) {
-            $$parsedSource["tui"] = $$createField8_0($$parsedSource["tui"]);
+            $$parsedSource["tui"] = $$createField9_0($$parsedSource["tui"]);
         }
         return new Config($$parsedSource as Partial<Config>);
     }
