@@ -13,6 +13,7 @@ import (
 
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
+	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/version"
 	"github.com/pkg/browser"
@@ -281,6 +282,15 @@ func (s *SessionService) GetActiveCount() int {
 // GetWindowMinutes returns the current time window in minutes.
 func (s *SessionService) GetWindowMinutes() int {
 	return s.manager.WindowMinutes()
+}
+
+// GetLimits fetches all supported providers and returns the computed limits
+// view. It is called fresh each time the GUI opens the limits page; it does not
+// poll. Missing/errored agents are omitted.
+func (s *SessionService) GetLimits() limits.View {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return limits.BuildView(limits.FetchAll(ctx), time.Now())
 }
 
 // SetWindowMinutes updates the time window.
