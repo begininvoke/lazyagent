@@ -304,7 +304,7 @@ func summaryCellSeverity(usedPercent float64, p pace) summarySeverity {
 
 // renderSummaryTable writes the default quick-scan view of all fetched reports.
 func renderSummaryTable(b *strings.Builder, reports []Report, now time.Time) {
-	t := chatops.NewTable().Headers("Agente", "5h", "Week (or Global)")
+	t := chatops.NewTable().Headers("Agent", "5h", "Week (or Global)")
 	for _, report := range reports {
 		t.Row(
 			summaryProviderName(report.Provider),

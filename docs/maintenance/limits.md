@@ -46,7 +46,7 @@ By default the command prints a compact terminal table:
 
 ```
 ╭────────┬───────────────┬──────────────────╮
-│ Agente │ 5h            │ Week (or Global) │
+│ Agent  │ 5h            │ Week (or Global) │
 ├────────┼───────────────┼──────────────────┤
 │ Claude │ 21.0% used / 40.0% exp │ 23.0% used / 57.1% exp │
 │ Codex  │ 4.0% used / 90.0% exp  │ 11.0% used / 42.9% exp │
