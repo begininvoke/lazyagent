@@ -8,6 +8,7 @@ type Theme struct {
 	Primary     lipgloss.Color
 	Accent      lipgloss.Color
 	Warning     lipgloss.Color
+	Danger      lipgloss.Color
 	Muted       lipgloss.Color
 	Text        lipgloss.Color
 	Subtext     lipgloss.Color
