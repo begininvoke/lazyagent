@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/illegalstudio/lazyagent/internal/limits"
 )
 
@@ -32,6 +33,48 @@ func sampleView() limits.View {
 			},
 		},
 	}, now)
+}
+
+// fullView builds a multi-provider view whose reports carry long Source/Note
+// disclaimers — the lines most likely to wrap and overflow the modal.
+func fullView() limits.View {
+	now := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
+	longNote := "This source is undocumented and may break without notice; lazyagent only queries it on explicit user invocation."
+	var reports []limits.Report
+	for _, p := range []string{"Claude Code", "Codex", "Grok", "Kimi Code", "Cursor"} {
+		reports = append(reports, limits.Report{
+			Provider: p,
+			Source:   longNote,
+			Note:     longNote,
+			Windows: []limits.Window{
+				{Label: "5-hour", WindowMinutes: 300, UsedPercent: 80, ResetsAt: now.Add(90 * time.Minute)},
+				{Label: "7-day", WindowMinutes: 7 * 24 * 60, UsedPercent: 40, ResetsAt: now.Add(72 * time.Hour)},
+			},
+		})
+	}
+	return limits.BuildView(reports, now)
+}
+
+// TestRenderLimitsModal_FitsScreen guards against the modal rendering larger
+// than the terminal — long disclaimer lines must be truncated, not wrapped.
+func TestRenderLimitsModal_FitsScreen(t *testing.T) {
+	view := fullView()
+	sizes := []struct{ w, h int }{
+		{100, 40}, {80, 24}, {60, 20}, {40, 15}, {30, 12},
+	}
+	for _, tab := range []int{limitsTabSummary, limitsTabDetailed} {
+		for _, s := range sizes {
+			m := limitsTestModel(tab, false, view)
+			m.width, m.height = s.w, s.h
+			out := m.renderLimitsModal()
+			if h := lipgloss.Height(out); h > s.h {
+				t.Errorf("tab=%d size=%dx%d: rendered height %d > screen %d", tab, s.w, s.h, h, s.h)
+			}
+			if w := lipgloss.Width(out); w > s.w {
+				t.Errorf("tab=%d size=%dx%d: rendered width %d > screen %d", tab, s.w, s.h, w, s.w)
+			}
+		}
+	}
 }
 
 func TestRenderLimitsModal_Loading(t *testing.T) {

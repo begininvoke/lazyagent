@@ -74,6 +74,12 @@ func (m Model) renderLimitsModal() string {
 	hint := m.renderLimitsHint(moreBelow)
 	content := title + "\n" + tabs + "\n\n" + body + "\n\n" + hint
 
+	// Truncate every line to the modal's inner width so nothing wraps. A wrapped
+	// line would render taller than its budgeted single row and push the box
+	// past the screen height (long Source/Note disclaimers on Detailed, or the
+	// hint line on narrow terminals).
+	content = truncateLinesToWidth(content, width-4)
+
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.theme.BorderFocus).
@@ -81,6 +87,7 @@ func (m Model) renderLimitsModal() string {
 		Foreground(m.theme.Text).
 		Padding(1, 2).
 		Width(width).
+		MaxHeight(m.height).
 		Render(content)
 
 	return lipgloss.Place(m.width, m.height,
@@ -187,6 +194,22 @@ func (m Model) limitsBar(percent float64, w int, color lipgloss.Color) string {
 	filled := lipgloss.NewStyle().Foreground(color).Render(strings.Repeat("█", n))
 	empty := lipgloss.NewStyle().Foreground(m.theme.Muted).Render(strings.Repeat("░", w-n))
 	return filled + empty
+}
+
+// truncateLinesToWidth truncates each line of s to at most width display cells,
+// in an ANSI-aware way, so styled lines never wrap inside the modal. Lines that
+// already fit are left untouched.
+func truncateLinesToWidth(s string, width int) string {
+	if width < 1 {
+		width = 1
+	}
+	lines := strings.Split(s, "\n")
+	for i, ln := range lines {
+		if lipgloss.Width(ln) > width {
+			lines[i] = lipgloss.NewStyle().MaxWidth(width).Render(ln)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // windowLines returns the slice of lines visible at the given scroll offset and
