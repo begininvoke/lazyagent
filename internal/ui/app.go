@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/version"
 )
@@ -32,6 +34,17 @@ type updateAvailableMsg struct{ version string }
 
 // editorFinishedMsg is sent when a TUI editor (tea.Exec) exits.
 type editorFinishedMsg struct{ err error }
+
+// limitsLoadedMsg is sent when the limits fetch completes.
+type limitsLoadedMsg struct{ view limits.View }
+
+func loadLimitsCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return limitsLoadedMsg{view: limits.BuildView(limits.FetchAll(ctx), time.Now())}
+	}
+}
 
 // Model is the main bubbletea model.
 type Model struct {
@@ -80,6 +93,13 @@ type Model struct {
 	renameMode      bool
 	renameInput     string
 	renameSessionID string
+
+	// Limits modal
+	limitsOpen    bool
+	limitsTab     int // 0 = summary, 1 = detailed
+	limitsLoading bool
+	limitsView    limits.View
+	limitsScroll  int
 }
 
 type keyMap struct {
@@ -95,6 +115,7 @@ type keyMap struct {
 	Esc    key.Binding
 	Open   key.Binding
 	Copy   key.Binding
+	Limits key.Binding
 }
 
 var keys = keyMap{
@@ -110,6 +131,7 @@ var keys = keyMap{
 	Esc:    key.NewBinding(key.WithKeys("esc")),
 	Open:   key.NewBinding(key.WithKeys("o")),
 	Copy:   key.NewBinding(key.WithKeys("c")),
+	Limits: key.NewBinding(key.WithKeys("l")),
 }
 
 func NewModel(provider core.SessionProvider) Model {
@@ -184,6 +206,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editorFinishedMsg:
 		// TUI editor exited, bubbletea resumes automatically.
 
+	case limitsLoadedMsg:
+		if m.limitsOpen {
+			m.limitsView = msg.view
+			m.limitsLoading = false
+		}
+		return m, nil
+
 	case fileWatchMsg:
 		// A JSONL file changed — reload immediately and re-arm the watcher.
 		return m, tea.Batch(makeLoadCmd(m.manager), watchCmd(m.manager.WatcherEvents()))
@@ -236,6 +265,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Flash popup: any key dismisses it.
 		if m.flashMsg != "" {
 			m.flashMsg = ""
+			return m, nil
+		}
+
+		// Limits modal: intercept keys while open.
+		if m.limitsOpen {
+			switch msg.String() {
+			case "l", "esc", "q":
+				m.limitsOpen = false
+				m.limitsLoading = false
+				m.limitsScroll = 0
+				m.limitsView = limits.View{}
+			case "tab", "left", "right":
+				m.limitsTab = (m.limitsTab + 1) % 2
+				m.limitsScroll = 0
+			case "down", "j":
+				m.limitsScroll++
+			case "up", "k":
+				if m.limitsScroll > 0 {
+					m.limitsScroll--
+				}
+			case "pgdown":
+				m.limitsScroll += 5
+			case "pgup":
+				m.limitsScroll -= 5
+				if m.limitsScroll < 0 {
+					m.limitsScroll = 0
+				}
+			}
 			return m, nil
 		}
 
@@ -324,6 +381,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch {
+		case key.Matches(msg, keys.Limits):
+			m.limitsOpen = true
+			m.limitsLoading = true
+			m.limitsTab = 0
+			m.limitsScroll = 0
+			m.limitsView = limits.View{}
+			return m, loadLimitsCmd()
+
 		case key.Matches(msg, keys.Quit):
 			return m, tea.Quit
 
@@ -694,6 +759,11 @@ func (m Model) View() string {
 			box,
 			lipgloss.WithWhitespaceBackground(m.theme.OverlayBg),
 		)
+	}
+
+	// Overlay limits modal.
+	if m.limitsOpen {
+		out = m.renderLimitsModal()
 	}
 
 	return out
@@ -1117,6 +1187,7 @@ func (m Model) renderHelp() string {
 		m.sty.helpKey.Render("scroll")+m.sty.help.Render(" navigate"),
 		m.sty.helpKey.Render("+/-")+m.sty.help.Render(" mins"),
 		m.sty.helpKey.Render("f")+m.sty.help.Render(" filter"),
+		m.sty.helpKey.Render("l")+m.sty.help.Render(" limits"),
 		m.sty.helpKey.Render("/")+m.sty.help.Render(" search"),
 		m.sty.helpKey.Render("o")+m.sty.help.Render(" open"),
 		m.sty.helpKey.Render("c")+m.sty.help.Render(" copy cmd"),
