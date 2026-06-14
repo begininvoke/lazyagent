@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/assets"
 	"github.com/illegalstudio/lazyagent/internal/core"
@@ -140,6 +141,19 @@ func Run(demoMode bool, agentMode string) error {
 		_ = browser.OpenURL("https://github.com/illegalstudio/lazyagent")
 	})
 	menu.Add("Quit lazyagent").OnClick(func(ctx *application.Context) {
+		// Wails v3 alpha's macOS shutdown can deadlock after the Cocoa event
+		// loop stops: the main goroutine blocks in an InvokeSync main-thread
+		// dispatch that the torn-down run loop never services, leaving an
+		// orphaned process with a dead, non-responsive tray icon. Start this
+		// watchdog BEFORE app.Quit(): on the deadlock path app.Quit() itself
+		// never returns (it blocks waiting for [NSApp terminate]), so code
+		// placed after it would never run. A clean quit exits the process well
+		// under this deadline; otherwise we force termination so the icon
+		// always goes away.
+		go func() {
+			time.Sleep(1500 * time.Millisecond)
+			os.Exit(0)
+		}()
 		app.Quit()
 	})
 	tray.SetMenu(menu)
