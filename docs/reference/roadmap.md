@@ -175,9 +175,17 @@ sidebar:
 - ✅ Cursor via `/api/dashboard/get-aggregated-usage-events` on `cursor.com` (the same endpoint its dashboard uses), session token read from local `state.vscdb`; reports the usage-based (API) pool against the plan's included credit, `CURSOR_INCLUDED_USD` override
 - ✅ Honest User-Agent (no Claude Code impersonation), graceful failure on 401/429, disclaimer in `--help` and output
 
+## v0.10 — Outbound webhooks
+
+- ✅ Typed `core.EventBus` for in-process pub-sub of activity transitions
+- ✅ `internal/webhook/` dispatcher with async best-effort delivery
+- ✅ Event + agent filters per webhook
+- ✅ Optional HMAC-SHA256 signing (GitHub-style header)
+- ✅ Async fan-out with bounded queue, retry on transient failures, dedup window for duplicate transitions across in-process managers
+- ✅ Documentation with payload schema and verification example
+
 ## Future ideas
 
-- ⬜ Outbound webhooks on status changes
 - ⬜ Multi-machine support via shared config / remote API
 - ⬜ TUI actions: kill session, attach terminal
 - ⬜ Session history browser (browse past conversations)

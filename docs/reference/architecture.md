@@ -28,6 +28,7 @@ lazyagent/
 │   ├── opencodefamily/         # Shared OpenCode/Kilo SQLite parser
 │   ├── api/                    # HTTP API server (REST + SSE)
 │   ├── apiauth/                # Bearer-token derivation (PBKDF2) + auth middleware
+│   ├── webhook/                # Outbound webhook dispatcher (EventBus → filtered HTTP POST)
 │   ├── ui/                     # TUI rendering (bubbletea + lipgloss, dark/light themes)
 │   ├── tray/                   # macOS menu bar (Wails v3, build-tagged)
 │   ├── chatops/                # Shared CLI helpers: agent picker, tables, notices, safety
@@ -51,7 +52,7 @@ lazyagent/
 
 ### `internal/core`
 
-The shared engine: session provider interface, file watcher (fsnotify-based, with polling fallback), activity-state classifier, cost estimation, config loading. Every other package imports it.
+The shared engine: session provider interface, file watcher (fsnotify-based, with polling fallback), activity-state classifier, cost estimation, config loading, and a typed in-process `EventBus` that publishes activity-state transitions (consumed by `internal/webhook`). Every other package imports it.
 
 ### `internal/model`
 

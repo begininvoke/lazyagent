@@ -5,6 +5,7 @@ package tray
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/version"
+	"github.com/illegalstudio/lazyagent/internal/webhook"
 	"github.com/pkg/browser"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -50,6 +52,13 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 	}
 	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
 	s.manager.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
+	if len(cfg.ValidWebhooks()) > 0 {
+		bus := core.NewEventBus()
+		s.manager.SetEventBus(bus)
+		httpClient := &http.Client{Timeout: 10 * time.Second}
+		d := webhook.New(bus, &webhook.ConfigAdapter{Cfg: cfg}, httpClient, func() string { return "" })
+		go func() { _ = d.Start(s.ctx) }()
+	}
 	if err := s.manager.StartWatcher(); err != nil {
 		return err
 	}
