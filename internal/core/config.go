@@ -48,8 +48,10 @@ var knownActivityNames = map[string]ActivityKind{
 }
 
 // knownAgentNames lists the agent names accepted in config.
+// Keep in sync with the agent keys in DefaultConfig().Agents.
 var knownAgentNames = map[string]struct{}{
 	"claude": {}, "codex": {}, "pi": {}, "cursor": {}, "amp": {}, "opencode": {},
+	"grok": {}, "kimi": {}, "kilo": {},
 }
 
 // Validate returns nil if the webhook is well-formed.
