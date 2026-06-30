@@ -191,11 +191,10 @@ func (d *Dispatcher) deliver(ctx context.Context, job deliveryJob) {
 			case <-time.After(d.backoffs[attempt-1]):
 			}
 		}
-		status, transient, err := d.doOnce(ctx, job)
+		_, transient, err := d.doOnce(ctx, job)
 		if err == nil && !transient {
-			return
-		}
-		if err == nil && status >= 400 && status < 500 {
+			// Success (2xx) or permanent failure (4xx): doOnce reports
+			// transient=false for both, so neither is retried.
 			return
 		}
 		if attempt == len(d.backoffs) {
