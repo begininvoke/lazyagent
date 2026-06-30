@@ -39,7 +39,7 @@ The first entry fires only when a Claude Code or Codex session enters the `waiti
 | `url` | string | yes | Destination endpoint. `http://` and `https://` are both accepted. |
 | `secret` | string | no | When set, each request carries an `X-Lazyagent-Signature` header (see [HMAC verification](#hmac-verification)). |
 | `events` | string array | no | Activity kinds to deliver. Empty or absent means all events. Valid values: `idle`, `waiting`, `thinking`, `compacting`, `reading`, `writing`, `running`, `searching`, `browsing`, `spawning`. |
-| `agents` | string array | no | Agent sources to deliver. Empty or absent means all agents. Valid values: `claude`, `codex`, `pi`, `cursor`, `amp`, `opencode`. |
+| `agents` | string array | no | Agent sources to deliver. Empty or absent means all agents. Valid values: `claude`, `codex`, `pi`, `cursor`, `amp`, `opencode`, `grok`, `kimi`, `kilo`. |
 | `enabled` | boolean | no | Defaults to `true`. Set to `false` to disable the entry without removing it. |
 
 ## Payload schema

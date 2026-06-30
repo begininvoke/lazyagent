@@ -43,6 +43,7 @@ Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, a
 
 - [Editor support](reference/editor-support.md) — how `$VISUAL` / `$EDITOR` are resolved
 - [Configuration](reference/configuration.md) — `~/.config/lazyagent/config.json` field by field
+- [Outbound webhooks](reference/webhooks.md) — push session state transitions to HTTP endpoints, with payload schema and HMAC verification
 - [Architecture](reference/architecture.md) — module map of the codebase
 - [Development](reference/development.md) — build targets and dependencies
 - [Roadmap](reference/roadmap.md) — shipped features and what's next
