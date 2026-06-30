@@ -1,162 +1,224 @@
 package limits
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/fs"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"time"
-
-	"github.com/illegalstudio/lazyagent/internal/codex"
 )
 
-// codexRollouts returns absolute paths to every rollout-*.jsonl under ~/.codex/sessions,
-// sorted newest-first by mtime.
-func codexRollouts() ([]string, error) {
-	root := codex.SessionsDir()
-	if root == "" {
-		return nil, fmt.Errorf("could not resolve home directory")
+// defaultCodexUsageURL is the endpoint the Codex CLI's TUI polls (~every 60s via
+// ChatWidget::prefetch_rate_limits) to show live rate-limit usage. It's the same
+// data the official client displays, so it's always current — unlike the session
+// rollouts, which only update when a turn completes.
+const defaultCodexUsageURL = "https://chatgpt.com/backend-api/wham/usage"
+
+// codexAuth is the subset of ~/.codex/auth.json we need: the ChatGPT OAuth
+// access token and the account id the usage endpoint expects as a header.
+type codexAuth struct {
+	Tokens struct {
+		AccessToken string `json:"access_token"`
+		AccountID   string `json:"account_id"`
+	} `json:"tokens"`
+}
+
+// readCodexAuth returns the bearer token and account id in this priority order:
+//  1. CODEX_OAUTH_TOKEN env var (override for CI / debugging; CODEX_ACCOUNT_ID optional)
+//  2. ~/.codex/auth.json (where the Codex CLI persists its ChatGPT login)
+//
+// Both "not installed" and "not logged in" surface as errAgentNotInstalled so the
+// dispatcher can silently skip Codex in --agent all mode.
+func readCodexAuth() (token, accountID string, err error) {
+	if v := os.Getenv("CODEX_OAUTH_TOKEN"); v != "" {
+		return v, os.Getenv("CODEX_ACCOUNT_ID"), nil
 	}
-	type fileEntry struct {
-		path  string
-		mtime time.Time
+	path := codexAuthPath()
+	if path == "" {
+		return "", "", errAgentNotInstalled
 	}
-	var entries []fileEntry
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			// Skip unreadable subtrees rather than aborting the whole walk.
-			return nil
-		}
-		if d.IsDir() || filepath.Ext(path) != ".jsonl" {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			return nil
-		}
-		entries = append(entries, fileEntry{path: path, mtime: info.ModTime()})
-		return nil
-	})
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return "", "", errAgentNotInstalled
 		}
-		return nil, err
+		return "", "", err
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].mtime.After(entries[j].mtime) })
-	out := make([]string, len(entries))
-	for i, e := range entries {
-		out[i] = e.path
+	return readCodexAuthFromBytes(data)
+}
+
+func readCodexAuthFromBytes(data []byte) (token, accountID string, err error) {
+	var a codexAuth
+	if err := json.Unmarshal(data, &a); err != nil {
+		return "", "", fmt.Errorf("parse Codex auth.json: %w", err)
 	}
-	return out, nil
+	if a.Tokens.AccessToken == "" {
+		return "", "", errAgentNotInstalled
+	}
+	return a.Tokens.AccessToken, a.Tokens.AccountID, nil
 }
 
-// codexRateLimits is the relevant subset of an event_msg/token_count payload.
-type codexRateLimits struct {
-	Primary   *codexLimitWindow `json:"primary"`
-	Secondary *codexLimitWindow `json:"secondary"`
-}
-
-type codexLimitWindow struct {
-	UsedPercent   float64 `json:"used_percent"`
-	WindowMinutes int     `json:"window_minutes"`
-	ResetsAt      int64   `json:"resets_at"` // unix seconds
-}
-
-// scanRolloutForLimits returns the last rate_limits block found in path, or nil if none.
-// Codex streams an event_msg/token_count event after each turn, with rate_limits embedded
-// in the payload. We want the most recent one in the file.
-func scanRolloutForLimits(path string) (*codexRateLimits, error) {
-	f, err := os.Open(path)
+func codexAuthPath() string {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil, err
+		return ""
 	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-
-	type envelope struct {
-		Type    string `json:"type"`
-		Payload struct {
-			Type       string           `json:"type"`
-			RateLimits *codexRateLimits `json:"rate_limits"`
-		} `json:"payload"`
-	}
-
-	var last *codexRateLimits
-	for scanner.Scan() {
-		var env envelope
-		if err := json.Unmarshal(scanner.Bytes(), &env); err != nil {
-			continue
-		}
-		if env.Type == "event_msg" && env.Payload.Type == "token_count" && env.Payload.RateLimits != nil {
-			last = env.Payload.RateLimits
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return last, nil
+	return filepath.Join(home, ".codex", "auth.json")
 }
 
-func fetchCodexReport() (Report, error) {
-	rollouts, err := codexRollouts()
+// codexUsageResponse is the subset of GET /backend-api/wham/usage we render.
+// Fields we don't use (credits, spend_control, additional_rate_limits, …) are
+// intentionally omitted.
+type codexUsageResponse struct {
+	PlanType  string            `json:"plan_type"`
+	RateLimit *codexUsageLimits `json:"rate_limit"`
+}
+
+type codexUsageLimits struct {
+	Primary   *codexUsageWindow `json:"primary_window"`
+	Secondary *codexUsageWindow `json:"secondary_window"`
+}
+
+type codexUsageWindow struct {
+	UsedPercent        float64 `json:"used_percent"`
+	LimitWindowSeconds int64   `json:"limit_window_seconds"`
+	ResetAfterSeconds  int64   `json:"reset_after_seconds"`
+	ResetAt            int64   `json:"reset_at"` // unix seconds
+}
+
+func fetchCodexReport(ctx context.Context) (Report, error) {
+	token, accountID, err := readCodexAuth()
 	if err != nil {
-		return Report{}, fmt.Errorf("scan ~/.codex/sessions: %w", err)
-	}
-	if len(rollouts) == 0 {
-		// No rollouts at all: either Codex isn't installed or it's never been run.
-		// In both cases there's nothing useful we can show.
-		return Report{}, errAgentNotInstalled
+		if errors.Is(err, errAgentNotInstalled) {
+			return Report{}, err
+		}
+		return Report{}, fmt.Errorf("read Codex auth: %w", err)
 	}
 
-	// The newest rollout may not yet have any rate_limits events (very new session
-	// before its first server response). Fall back to older rollouts in mtime order.
-	var (
-		limits     *codexRateLimits
-		sourcePath string
-	)
-	for _, p := range rollouts {
-		l, err := scanRolloutForLimits(p)
-		if err != nil {
-			continue
-		}
-		if l != nil {
-			limits = l
-			sourcePath = p
-			break
-		}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, codexUsageURL(), nil)
+	if err != nil {
+		return Report{}, err
 	}
-	if limits == nil {
-		return Report{}, fmt.Errorf("no rate_limits events found in any Codex rollout under %s", codex.SessionsDir())
+	req.Header.Set("Authorization", "Bearer "+token)
+	if accountID != "" {
+		req.Header.Set("chatgpt-account-id", accountID)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", userAgent())
+	req.Header.Set("originator", "codex_cli_rs")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Report{}, fmt.Errorf("call Codex usage endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	switch resp.StatusCode {
+	case http.StatusOK:
+		// fall through to parse
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return Report{}, fmt.Errorf("Codex OAuth token rejected (%d). It may have expired — open the Codex CLI again to refresh your login", resp.StatusCode)
+	case http.StatusTooManyRequests:
+		return Report{}, fmt.Errorf("Codex usage endpoint rate-limited (429). Try again in a minute")
+	default:
+		return Report{}, fmt.Errorf("Codex usage endpoint: %s — %s", resp.Status, snippet(body, 200))
 	}
 
-	r := Report{
+	usage, err := parseCodexUsage(body)
+	if err != nil {
+		return Report{}, err
+	}
+	report := codexUsageToReport(usage)
+	if len(report.Windows) == 0 {
+		return Report{}, fmt.Errorf("Codex usage endpoint returned no usable windows (response: %s)", snippet(body, 200))
+	}
+	return report, nil
+}
+
+func codexUsageURL() string {
+	if v := os.Getenv("CODEX_USAGE_URL"); v != "" {
+		return v
+	}
+	return defaultCodexUsageURL
+}
+
+func parseCodexUsage(data []byte) (*codexUsageResponse, error) {
+	var resp codexUsageResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("parse Codex usage response: %w", err)
+	}
+	return &resp, nil
+}
+
+func codexUsageToReport(resp *codexUsageResponse) Report {
+	report := Report{
 		Provider: "Codex",
-		Source:   fmt.Sprintf("Source: %s", sourcePath),
-		Note:     "Note: limits are read from the latest Codex session rollout, not fetched live. They reflect the server's last response.",
+		Source:   codexSource(resp),
+		Note:     "Note: reads /backend-api/wham/usage, the endpoint Codex CLI polls for its rate-limit display. May break or be revoked by OpenAI without notice.",
 	}
-	if limits.Primary != nil {
-		r.Windows = append(r.Windows, codexWindowToWindow("5-hour", *limits.Primary))
+	if resp == nil || resp.RateLimit == nil {
+		return report
 	}
-	if limits.Secondary != nil {
-		r.Windows = append(r.Windows, codexWindowToWindow("7-day", *limits.Secondary))
+	if w, ok := codexUsageWindowToWindow(resp.RateLimit.Primary); ok {
+		report.Windows = append(report.Windows, w)
 	}
-	if len(r.Windows) == 0 {
-		return Report{}, fmt.Errorf("Codex rate_limits block had no primary/secondary windows (%s)", sourcePath)
+	if w, ok := codexUsageWindowToWindow(resp.RateLimit.Secondary); ok {
+		report.Windows = append(report.Windows, w)
 	}
-	return r, nil
+	return report
 }
 
-func codexWindowToWindow(label string, w codexLimitWindow) Window {
-	return Window{
-		Label:         label,
-		WindowMinutes: w.WindowMinutes,
-		UsedPercent:   w.UsedPercent,
-		ResetsAt:      time.Unix(w.ResetsAt, 0),
+func codexUsageWindowToWindow(w *codexUsageWindow) (Window, bool) {
+	if w == nil || w.LimitWindowSeconds <= 0 {
+		return Window{}, false
 	}
+	minutes := int(w.LimitWindowSeconds / 60)
+	var reset time.Time
+	switch {
+	case w.ResetAt > 0:
+		reset = time.Unix(w.ResetAt, 0)
+	case w.ResetAfterSeconds > 0:
+		reset = time.Now().Add(time.Duration(w.ResetAfterSeconds) * time.Second)
+	}
+	return Window{
+		Label:         codexWindowLabel(minutes),
+		WindowMinutes: minutes,
+		UsedPercent:   w.UsedPercent,
+		ResetsAt:      reset,
+	}, true
+}
+
+// codexWindowLabel names a window from its length so the renderer's window
+// matchers (5-hour, 7-day/weekly) line up, while staying readable if OpenAI ever
+// changes the window sizes.
+func codexWindowLabel(minutes int) string {
+	switch minutes {
+	case 5 * 60:
+		return "5-hour"
+	case 7 * 24 * 60:
+		return "7-day"
+	}
+	switch {
+	case minutes > 0 && minutes%(24*60) == 0:
+		return fmt.Sprintf("%d-day", minutes/(24*60))
+	case minutes > 0 && minutes%60 == 0:
+		return fmt.Sprintf("%d-hour", minutes/60)
+	case minutes > 0:
+		return fmt.Sprintf("%d-minute", minutes)
+	default:
+		return "window"
+	}
+}
+
+func codexSource(resp *codexUsageResponse) string {
+	if resp != nil && resp.PlanType != "" {
+		return fmt.Sprintf("Source: Codex (ChatGPT %s) /backend-api/wham/usage", resp.PlanType)
+	}
+	return "Source: Codex /backend-api/wham/usage"
 }

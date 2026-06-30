@@ -19,8 +19,12 @@ func ResumeCommand(agent, sessionID string) string {
 		return fmt.Sprintf("pi --session %s", sessionID)
 	case "opencode":
 		return fmt.Sprintf("opencode -s %s", sessionID)
+	case "kilo":
+		return fmt.Sprintf("kilo --session=%s", sessionID)
 	case "cursor":
 		return fmt.Sprintf("cursor-agent --resume=%q", sessionID)
+	case "kimi":
+		return fmt.Sprintf("kimi --resume %s", sessionID)
 	default:
 		return ""
 	}

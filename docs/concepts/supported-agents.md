@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-lazyagent supports seven agents out of the box. Each has a dedicated provider that knows the agent's on-disk layout.
+lazyagent supports ten agent sources out of the box. Each has a dedicated provider that knows the agent's on-disk layout.
 
 | Agent | Path | Format | Prefix |
 |-------|------|--------|--------|
@@ -16,6 +16,9 @@ lazyagent supports seven agents out of the box. Each has a dedicated provider th
 | [Amp CLI](https://ampcode.com/) | `~/.local/share/amp/threads/*.json` | Per-thread JSON | `A` |
 | [pi coding agent](https://github.com/badlogic/pi-mono) | `~/.pi/agent/sessions/*/` | JSONL | `π` |
 | [OpenCode](https://opencode.ai/) | `~/.local/share/opencode/opencode.db` | SQLite | `O` |
+| [Kilo](https://kilo.ai/) | `~/.local/share/kilo/kilo.db` | SQLite | `L` |
+| [Grok CLI](https://x.ai/cli) | `~/.grok/sessions/<encoded-cwd>/<uuid>/` | Directory per session (JSONL + JSON) | `G` |
+| Kimi Code CLI | `~/.kimi-code/sessions/wd_<name>_<hash>/<session-id>/` + `~/.kimi-code/session_index.jsonl` | Directory per session (JSONL + JSON) | `K` |
 
 The prefix appears next to each session in the TUI list, the GUI panel, and the API response so you can tell at a glance which agent produced a session.
 
@@ -30,6 +33,9 @@ lazyagent --agent codex
 lazyagent --agent amp
 lazyagent --agent pi
 lazyagent --agent opencode
+lazyagent --agent kilo
+lazyagent --agent grok
+lazyagent --agent kimi
 lazyagent --agent all       # default
 ```
 
@@ -49,6 +55,8 @@ Cursor stores everything in a single SQLite database (`state.vscdb`) as key-valu
 
 CWD is inferred from the Cursor workspace URI if available, otherwise from the first file path mentioned in the session.
 
+**Usage limits.** The separate `lazyagent limits` command also reports Cursor's monthly usage-based (API) spend against the plan's included credit. It reuses the same `state.vscdb` — reading the `cursorAuth/accessToken` session token and `cursorAuth/stripeMembershipType` plan — and queries the Cursor dashboard's usage endpoint. Only the metered API pool is reported, not the unlimited Auto/Composer pool. See [Show rate-limit usage](../maintenance/limits.md#cursor).
+
 ### Codex CLI
 
 Codex writes one JSONL per session under `~/.codex/sessions/YYYY/MM/DD/`. A separate `~/.codex/session_index.jsonl` carries the user-chosen thread names, which lazyagent joins into the session list.
@@ -65,8 +73,29 @@ Pi writes JSONL into `~/.pi/agent/sessions/--<encoded-cwd>--/`. The encoding is 
 
 OpenCode uses SQLite with relational tables (`session`, `message`, `part`). lazyagent polls every 3 seconds and detects sub-agents via `parent_id`. Tool names are normalized to the same activity taxonomy as the other agents.
 
+### Kilo
+
+Kilo's CLI stores sessions in an OpenCode-compatible SQLite database at `~/.local/share/kilo/kilo.db`. lazyagent reuses the OpenCode SQLite parser, polls every 3 seconds, detects sub-agents via `parent_id`, and normalizes tool names into the shared activity taxonomy. The `KILO_DATA_DIR` environment variable can override the data directory.
+
+### Grok CLI
+
+Grok writes one *directory* per session, two levels deep under `~/.grok/sessions/<url-encoded-cwd>/<session-uuid>/`. Each session directory holds a `summary.json` (metadata), a `chat_history.jsonl` (transcript), an `updates.jsonl` stream, and several smaller files. lazyagent reads `summary.json` plus `chat_history.jsonl` and decodes the cwd from the standard URL percent-encoding of the parent directory name.
+
+**No per-session cost.** Grok's on-disk data does not expose an input/output/cache token split, so Grok sessions show no per-session token or cost figures in any interface — those fields are left at zero. (The separate `lazyagent limits` command still reports Grok's monthly billing window; that uses Grok's billing API, not on-disk session data.)
+
+**Subagent sessions** (`session_kind: "subagent"` in `summary.json`) are treated as sidechains and hidden from the default list, the same as Claude's sub-agent sessions.
+
+### Kimi Code CLI
+
+Kimi writes one directory per session under `~/.kimi-code/sessions/wd_<name>_<hash>/<session-id>/`. lazyagent resolves each session's working directory through `~/.kimi-code/session_index.jsonl`, which maps every session directory to its absolute CWD.
+
+Each session directory carries its main agent's event stream at `agents/main/wire.jsonl` (subagents live under `agents/<id>/wire.jsonl`) plus `state.json` (title and session metadata). lazyagent reads `wire.jsonl` for activity state, tool calls, recent messages, timestamps, and token counters, and also uses it to power `lazyagent search`.
+
+Two on-disk encodings coexist: sessions imported from the legacy kimi-cli materialize the whole conversation as `context.append_message` events, while native kimi-code sessions stream assistant content, tool calls and token usage through `context.append_loop_event` / `usage.record` events. lazyagent parses both.
+
+Kimi's local token counters include input, cache-read, cache-creation, and output tokens, so lazyagent shows token totals. Cost is only estimated when the model name matches a known pricing entry.
+
 ## What's not supported (yet)
 
 - **Roo Code, Continue, Cline, Aider**, and other agents with their own storage layouts — send an issue or PR with the on-disk format and we'll add a provider.
-- The two maintenance commands (`prune`, `compact`) intentionally omit Cursor and OpenCode (third-party SQLite databases) and Amp (remote-resynced local files). See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.
-- The [`limits`](../maintenance/limits.md) command supports only Claude Code and Codex — they're the only agents lazyagent observes that expose stable 5-hour and weekly windows.
+- The destructive maintenance commands intentionally omit Cursor, OpenCode, and Kilo (third-party SQLite databases) and Amp (remote-resynced local files). Kimi is covered by both `prune` and `compact`; compaction rewrites its session JSONL files and nested subagent outputs while leaving metadata and prompts intact. See [Prune](../maintenance/prune.md) and [Compact](../maintenance/compact.md) for the reasoning.

@@ -3,6 +3,7 @@
 ![GitHub Downloads](https://img.shields.io/github/downloads/illegalstudio/lazyagent/total?v=1)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
+[![Download on the App Store](https://img.shields.io/badge/App%20Store-Download-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/us/app/lazyagent/id6773359156)
 [![Follow @nahime0 on X](https://img.shields.io/badge/Follow%20%40nahime0-000000?logo=x&logoColor=white)](https://x.com/nahime0)
 
 > 🐦 **[Follow me on X (@nahime0)](https://x.com/nahime0) for updates, new features, and behind-the-scenes development.**
@@ -11,22 +12,32 @@
 
 **A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents from a single place.**
 
-Watch sessions from [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — no lock-in, no server, purely observational.
+Watch sessions from [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Grok CLI](https://x.ai/cli), [Kilo](https://kilo.ai/), Kimi Code CLI, [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — no lock-in, no server, purely observational.
 
 Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
-> ⭐ If lazyagent is useful to you, consider [starring the repo](https://github.com/illegalstudio/lazyagent) — it helps others discover it!
->
-> 💛 Loving it? Consider [becoming a sponsor](https://github.com/sponsors/nahime0) to keep the project alive and growing.
+## Support the project
+
+⭐ If lazyagent is useful to you, consider [starring the repo](https://github.com/illegalstudio/lazyagent) — it helps others discover it!
+
+💛 Loving it? Consider [becoming a sponsor](https://github.com/sponsors/nahime0) to keep the project alive and growing.
+
+## lazyagent for iOS
+
+Want to keep an eye on your agents from your pocket? **[lazyagent is available on the App Store](https://apps.apple.com/us/app/lazyagent/id6773359156)** for iPhone and iPad.
+
+The iOS app is a **paid** app — and that's on purpose. Buying it is one of the easiest ways to support the project and keep development going. Thank you! 💛
+
+That said, lazyagent and its API are **fully open source**. If you'd rather not pay for the app, you're more than welcome to build your own client on top of the API — that's exactly what it's there for. No hard feelings, the choice is yours. 🙂
 
 ## News
 
 📢 **Chat maintenance is here!** Subcommands that keep your agent transcripts (and your rate limits) under control:
 
 - **[`lazyagent prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
-- **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, and Codex.
-- **[`lazyagent search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp) with highlighted snippets and an incremental local index.
-- **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand 5-hour and weekly rate-limit snapshot for Claude Code and Codex, with a pace indicator that flags whether you're under-, on-, or over-utilizing the window.
+- **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, Codex, Grok, and Kimi.
+- **[`lazyagent search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp, Grok, Kimi) with highlighted snippets and an incremental local index.
+- **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand rate-limit / billing summary for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), Kimi Code, and Cursor (monthly API usage), with a detailed pace view available via `--detailed`.
 - **Outbound webhooks on session state transitions** — send a signed JSON payload to Slack, a custom dashboard, or a CI endpoint whenever a session goes idle, waits for input, or changes state. See [Webhooks](docs/reference/webhooks.md).
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across a few commands, with every rewrite validated and backed up by default.
@@ -49,8 +60,7 @@ Unlike other tools, lazyagent doesn't replace your workflow — it watches it. L
 ### Homebrew
 
 ```bash
-brew tap illegalstudio/tap
-brew install lazyagent
+brew install illegalstudio/tap/lazyagent
 ```
 
 ### Go (TUI only)
@@ -78,20 +88,22 @@ make build
 ```
 lazyagent                        Launch the terminal UI (monitors all agents)
 lazyagent --agent claude         Monitor only Claude Code sessions
+lazyagent --agent grok           Monitor only Grok CLI sessions
+lazyagent --agent kimi           Monitor only Kimi Code CLI sessions
 lazyagent --api                  Start the HTTP API (Bearer-token protected)
 lazyagent --gui                  Launch the macOS menu bar app
 lazyagent --tui --gui --api      Run everything together
 lazyagent prune --days N         Delete chat sessions older than N days
 lazyagent compact                Shrink chat files by truncating bulky payloads
 lazyagent search "query"         Search chat transcripts with snippets
-lazyagent limits                 Show 5h / weekly rate-limit usage and pace
+lazyagent limits                 Show 5h / weekly / monthly usage summary
 lazyagent passphrase             Set or rotate the HTTP API passphrase
 lazyagent --help                 Show full help
 ```
 
 ## Documentation
 
-Full documentation — supported agents, activity states, keybindings, configuration, the HTTP API, the `prune` and `compact` maintenance commands, and architecture — lives at:
+Full documentation — supported agents, activity states, keybindings, configuration, the HTTP API, maintenance commands, and architecture — lives at:
 
 - **[lazyagent.dev/docs](https://lazyagent.dev/docs)** — rendered website
 - [`docs/`](docs/) — Markdown sources in this repository, organized by topic:

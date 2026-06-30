@@ -11,11 +11,13 @@
   } from "./lib/stores";
   import SessionList from "./lib/SessionList.svelte";
   import SessionDetail from "./lib/SessionDetail.svelte";
+  import LimitsPage from "./lib/LimitsPage.svelte";
   import * as SessionService from "./bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
   import { Events } from "@wailsio/runtime";
 
   let showDetail = $derived($selectedId !== null);
   let searching = $state(false);
+  let showLimits = $state(false);
   let updateVersion = $state("");
   let isDetached = $state(false);
   let isPinned = $state(false);
@@ -59,6 +61,14 @@
       return;
     }
 
+    if (showLimits) {
+      if (e.key === "Escape" || e.key === "l" || e.key === "L") {
+        e.preventDefault();
+        showLimits = false;
+      }
+      return;
+    }
+
     if (e.key === "Escape") {
       if (showDetail) {
         e.preventDefault();
@@ -79,6 +89,9 @@
     } else if (e.key === "-") {
       e.preventDefault();
       adjustWindow(-10);
+    } else if (e.key === "l" || e.key === "L") {
+      e.preventDefault();
+      showLimits = true;
     }
   }
 
@@ -158,6 +171,11 @@
       </span>
     </div>
     <div class="flex items-center gap-2 no-drag">
+      <button
+        class="rounded px-1.5 py-0.5 text-[11px] font-medium {showLimits ? 'text-accent bg-accent/10' : 'text-subtext hover:text-text'}"
+        onclick={() => (showLimits = !showLimits)}
+        title="Show limits (l)"
+      >limits</button>
       {#if $activityFilter}
         <button
           class="rounded px-1.5 py-0.5 text-[11px] font-medium text-accent bg-accent/10 hover:bg-accent/20"
@@ -207,7 +225,11 @@
 
   <!-- Content -->
   <div class="flex-1 flex min-h-0">
-    {#if showDetail}
+    {#if showLimits}
+      <div class="flex-1 overflow-hidden">
+        <LimitsPage />
+      </div>
+    {:else if showDetail}
       <div class="w-[45%] border-r border-border overflow-hidden">
         <SessionList />
       </div>
@@ -236,6 +258,7 @@
       <span><kbd class="text-text/60">j/k</kbd> navigate</span>
       <span><kbd class="text-text/60">/</kbd> search</span>
       <span><kbd class="text-text/60">f</kbd> filter</span>
+      <span><kbd class="text-text/60">l</kbd> limits</span>
       <span><kbd class="text-text/60">+/−</kbd> window</span>
       <span><kbd class="text-text/60">r</kbd> rename</span>
       <span><kbd class="text-text/60">d</kbd> {isDetached ? "attach" : "detach"}</span>

@@ -1,11 +1,11 @@
 ---
 title: "Compact session files"
-description: "Rewrite session JSONLs in place, truncating bulky tool outputs and thinking blocks while preserving the conversation."
+description: "Rewrite session files in place, truncating bulky tool outputs and thinking blocks while preserving the conversation."
 sidebar:
   order: 2
 ---
 
-`lazyagent compact` **shrinks** session files in place without deleting them. Tool outputs, embedded images, and long thinking blocks are truncated above a threshold; the message graph, prompts, and tool call metadata are preserved so every compacted session stays resumable with the originating agent.
+`lazyagent compact` **shrinks** session files in place without deleting them. Tool outputs, embedded images, terminal logs, and long thinking blocks are truncated above a threshold; the message graph, prompts, and tool call metadata are preserved so compacted sessions stay usable with the originating agent.
 
 For *deleting* entire sessions, see [Prune](prune.md) instead.
 
@@ -25,7 +25,7 @@ All flags are optional. With no flags, compact opens the interactive agent picke
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
 | `--days N` | int | `0` (unset) | Only compact sessions idle more than N days |
-| `--agent LIST` | string | *unset* | Comma-separated subset: `claude,pi,codex`. Empty opens the picker |
+| `--agent LIST` | string | *unset* | Comma-separated subset: `claude,pi,codex,grok,kimi`. Empty opens the picker |
 | `--threshold-kb N` | int | `10` | Truncate JSON string values larger than N KiB |
 | `--min-size-kb N` | int | `512` | Skip files smaller than N KiB |
 | `--dry-run` | bool | `false` | Print a grouped summary, rewrite nothing |
@@ -48,13 +48,13 @@ lazyagent compact --yes                               # skip the destructive-op 
 
 ## How it works
 
-Each JSONL line is parsed, walked, and re-serialized. Where a string value exceeds the threshold, lazyagent keeps a prefix (minimum 256 bytes, typically `threshold / 10`) and appends a marker:
+For JSONL transcripts, each line is parsed, walked, and re-serialized. Where a string value exceeds the threshold, lazyagent keeps a prefix (minimum 256 bytes, typically `threshold / 10`) and appends a marker:
 
 ```
 [truncated by lazyagent compact — was 47123 bytes, kept first 4096]
 ```
 
-The full rewrite is validated: **the line count before and after must match**, otherwise the rewrite is aborted and the original file is left untouched. For extra safety a `.bak` sidecar is written by default; pass `--no-backup` to skip it.
+The full JSONL rewrite is validated: **the line count before and after must match**, otherwise the rewrite is aborted and the original file is left untouched. Grok terminal logs and Kimi subagent outputs are truncated as plain text files. For extra safety a `.bak` sidecar is written by default; pass `--no-backup` to skip it.
 
 Files where the rewrite wouldn't actually shrink the file (usually because JSON map-key re-ordering added a handful of bytes but nothing was truncated) are silently left alone — no needless `.bak`, no wasted I/O.
 
@@ -75,7 +75,7 @@ Tuning guide:
 
 ## Agent selection
 
-Same interactive picker as `prune` when `--agent` is omitted — see [Prune: agent selection](prune.md#agent-selection) for the keybindings. Pass `--agent claude,codex,pi` to skip the picker.
+Same interactive picker as `prune` when `--agent` is omitted — see [Prune: agent selection](prune.md#agent-selection) for the keybindings. Pass `--agent claude,codex,pi,grok,kimi` to skip the picker.
 
 ## What gets truncated
 
@@ -108,6 +108,23 @@ Each agent has its own set of field paths. Only oversized values are touched; sh
 - `payload.message` — long agent_message payloads
 - `payload.arguments` — function call arguments
 - `payload.content[].text` / `input_text` / `output_text` — message content blocks
+
+### Grok CLI
+
+- `updates.jsonl` — the ACP update stream
+- `chat_history.jsonl` — oversized `tool_result` payloads
+- `rewind_points.jsonl` — checkpoint snapshots
+- `terminal/*.log` — raw terminal capture logs
+
+Truncating `rewind_points.jsonl` disables Grok's rewind feature for that session.
+
+### Kimi Code
+
+- `agents/main/wire.jsonl` — oversized user input blocks, thinking/text parts, tool-call arguments, and tool-result payloads
+- `agents/*/wire.jsonl` — the same fields for Kimi subagents embedded in a parent session
+- `agents/*/output` — raw subagent output files
+
+`state.json`, `prompt.txt`, and subagent metadata are left untouched.
 
 ## Dry runs
 
@@ -146,13 +163,13 @@ The disclaimer and prompt are both skipped with `--yes`, which always acts on ev
 - **`.bak` sidecar** — written by default before each rewrite. Pass `--no-backup` to skip.
 - **File mode preserved** — a 0600 transcript stays 0600 after compaction; no quiet permission widening.
 - **Active sessions** (touched in the last 5 minutes) are skipped.
-- **Sub-agent transcripts** are skipped to avoid breaking the parent's file.
+- **Discovered sub-agent sessions** are skipped to avoid breaking the parent's file. Kimi's nested subagent payload/output files are compacted as part of their parent session.
 - **Path guard** refuses to rewrite anything outside the known agent roots.
 - **No-op guard** — if a simulated rewrite wouldn't actually shrink the file, it's left alone.
 
 ## Restoring from a backup
 
-Every rewrite (unless `--no-backup`) produces a `<filename>.jsonl.bak` sibling. To undo a compaction:
+Every rewrite (unless `--no-backup`) produces a `<filename>.bak` sibling. To undo a compaction:
 
 ```bash
 mv session.jsonl.bak session.jsonl
@@ -163,11 +180,13 @@ mv session.jsonl.bak session.jsonl
 - **claude** (Claude Code CLI and Desktop share the same JSONL format)
 - **pi**
 - **codex**
+- **grok**
+- **kimi**
 
 Not supported:
 
 - **Amp** — local files are re-synced from the remote; rewriting them gets overwritten on the next sync.
-- **Cursor** and **OpenCode** — sessions live inside third-party SQLite databases. Rewriting their internals is deferred to a future version.
+- **Cursor**, **OpenCode**, and **Kilo** — sessions live inside third-party SQLite databases. Rewriting their internals is deferred to a future version.
 
 ## Examples
 

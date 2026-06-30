@@ -8,6 +8,9 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/claude"
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/cursor"
+	"github.com/illegalstudio/lazyagent/internal/grok"
+	"github.com/illegalstudio/lazyagent/internal/kilo"
+	"github.com/illegalstudio/lazyagent/internal/kimi"
 	"github.com/illegalstudio/lazyagent/internal/model"
 	"github.com/illegalstudio/lazyagent/internal/opencode"
 	"github.com/illegalstudio/lazyagent/internal/pi"
@@ -86,6 +89,29 @@ func (p *OpenCodeProvider) WatchDirs() []string {
 	return nil
 }
 
+// KiloProvider discovers Kilo sessions from SQLite.
+type KiloProvider struct {
+	cache *kilo.SessionCache
+}
+
+// NewKiloProvider creates a KiloProvider.
+func NewKiloProvider() *KiloProvider {
+	return &KiloProvider{cache: kilo.NewSessionCache()}
+}
+
+func (p *KiloProvider) DiscoverSessions() ([]*model.Session, error) {
+	return kilo.DiscoverSessions(p.cache)
+}
+
+func (p *KiloProvider) UseWatcher() bool               { return false }
+func (p *KiloProvider) RefreshInterval() time.Duration { return 3 * time.Second }
+func (p *KiloProvider) WatchDirs() []string {
+	if d := kilo.KiloDataDir(); d != "" {
+		return []string{d}
+	}
+	return nil
+}
+
 // CursorProvider discovers Cursor sessions from store.db files.
 type CursorProvider struct {
 	cache *cursor.SessionCache
@@ -155,6 +181,42 @@ func (p *AmpProvider) WatchDirs() []string {
 	return nil
 }
 
+// GrokProvider discovers xAI Grok CLI sessions from disk.
+type GrokProvider struct {
+	cache *model.SessionCache
+}
+
+// NewGrokProvider creates a GrokProvider with an mtime-based cache.
+func NewGrokProvider() *GrokProvider {
+	return &GrokProvider{cache: model.NewSessionCache()}
+}
+
+func (p *GrokProvider) DiscoverSessions() ([]*model.Session, error) {
+	return grok.DiscoverSessions(p.cache)
+}
+
+func (p *GrokProvider) UseWatcher() bool               { return true }
+func (p *GrokProvider) RefreshInterval() time.Duration { return 0 }
+func (p *GrokProvider) WatchDirs() []string            { return []string{grok.GrokSessionsDir()} }
+
+// KimiProvider discovers Kimi Code CLI sessions from disk.
+type KimiProvider struct {
+	cache *model.SessionCache
+}
+
+// NewKimiProvider creates a KimiProvider with an mtime-based cache.
+func NewKimiProvider() *KimiProvider {
+	return &KimiProvider{cache: model.NewSessionCache()}
+}
+
+func (p *KimiProvider) DiscoverSessions() ([]*model.Session, error) {
+	return kimi.DiscoverSessions(p.cache)
+}
+
+func (p *KimiProvider) UseWatcher() bool               { return true }
+func (p *KimiProvider) RefreshInterval() time.Duration { return 0 }
+func (p *KimiProvider) WatchDirs() []string            { return []string{kimi.SessionsDir()} }
+
 // BuildProvider creates a SessionProvider based on agent mode and config.
 // When agentMode is "all", it reads the agents config to decide which providers
 // to include. A specific agentMode (e.g. "claude") overrides the config.
@@ -166,12 +228,18 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		return NewPiProvider()
 	case "opencode":
 		return NewOpenCodeProvider()
+	case "kilo":
+		return NewKiloProvider()
 	case "cursor":
 		return NewCursorProvider()
 	case "codex":
 		return NewCodexProvider()
 	case "amp":
 		return NewAmpProvider()
+	case "grok":
+		return NewGrokProvider()
+	case "kimi":
+		return NewKimiProvider()
 	default: // "all"
 		var providers []SessionProvider
 		if cfg.AgentEnabled("claude") {
@@ -183,6 +251,9 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		if cfg.AgentEnabled("opencode") {
 			providers = append(providers, NewOpenCodeProvider())
 		}
+		if cfg.AgentEnabled("kilo") {
+			providers = append(providers, NewKiloProvider())
+		}
 		if cfg.AgentEnabled("cursor") {
 			providers = append(providers, NewCursorProvider())
 		}
@@ -191,6 +262,12 @@ func BuildProvider(agentMode string, cfg Config) SessionProvider {
 		}
 		if cfg.AgentEnabled("amp") {
 			providers = append(providers, NewAmpProvider())
+		}
+		if cfg.AgentEnabled("grok") {
+			providers = append(providers, NewGrokProvider())
+		}
+		if cfg.AgentEnabled("kimi") {
+			providers = append(providers, NewKimiProvider())
 		}
 		if len(providers) == 0 {
 			// All disabled — return a no-op provider.

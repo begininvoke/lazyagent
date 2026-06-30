@@ -8,6 +8,7 @@ func LightTheme() Theme {
 		Primary:     lipgloss.Color("#6D28D9"),
 		Accent:      lipgloss.Color("#059669"),
 		Warning:     lipgloss.Color("#D97706"),
+		Danger:      lipgloss.Color("#DC2626"),
 		Muted:       lipgloss.Color("#6B7280"),
 		Text:        lipgloss.Color("#111827"),
 		Subtext:     lipgloss.Color("#4B5563"),

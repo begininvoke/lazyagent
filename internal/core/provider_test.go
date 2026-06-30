@@ -96,6 +96,48 @@ func TestMultiProvider_RefreshInterval(t *testing.T) {
 	}
 }
 
+func TestBuildProvider_Grok(t *testing.T) {
+	p := BuildProvider("grok", DefaultConfig())
+	if _, ok := p.(*GrokProvider); !ok {
+		t.Fatalf("BuildProvider(\"grok\") = %T, want *GrokProvider", p)
+	}
+}
+
+func TestBuildProvider_Kimi(t *testing.T) {
+	p := BuildProvider("kimi", DefaultConfig())
+	if _, ok := p.(*KimiProvider); !ok {
+		t.Fatalf("BuildProvider(\"kimi\") = %T, want *KimiProvider", p)
+	}
+}
+
+func TestBuildProvider_Kilo(t *testing.T) {
+	p := BuildProvider("kilo", DefaultConfig())
+	if _, ok := p.(*KiloProvider); !ok {
+		t.Fatalf("BuildProvider(\"kilo\") = %T, want *KiloProvider", p)
+	}
+}
+
+func TestDefaultConfig_GrokEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	if !cfg.AgentEnabled("grok") {
+		t.Error("grok must be enabled by default")
+	}
+}
+
+func TestDefaultConfig_KiloEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	if !cfg.AgentEnabled("kilo") {
+		t.Error("kilo must be enabled by default")
+	}
+}
+
+func TestDefaultConfig_KimiEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	if !cfg.AgentEnabled("kimi") {
+		t.Error("kimi must be enabled by default")
+	}
+}
+
 var errTest = errorString("test error")
 
 type errorString string

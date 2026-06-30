@@ -80,6 +80,12 @@ sidebar:
 - ✅ Tool name normalization and activity mapping
 - ✅ Subagent detection via `parent_id`
 
+## v0.6.1 — Kilo support
+
+- ✅ Kilo session discovery from OpenCode-compatible SQLite
+- ✅ `--agent kilo` flag and `L` prefix
+- ✅ Reused OpenCode parser with separate data directory and DB name
+
 ## v0.7 — Cursor support
 
 - ✅ Cursor session discovery from `state.vscdb`
@@ -121,7 +127,7 @@ sidebar:
 
 ## v0.8.2 — Resume command
 
-- ✅ Resume command builder for all supported agents
+- ✅ Resume command builder for agents that expose a direct resume command
 - ✅ Cross-platform clipboard support (macOS, Wayland, X11)
 - ✅ <kbd>c</kbd> key in TUI to copy resume command to clipboard
 - ✅ Resume command shown in GUI session detail with copy button
@@ -144,12 +150,29 @@ sidebar:
 - ✅ Line-count validation, `.bak` sidecars, preserved file permissions, path guards
 - ✅ Shared `chatops` package powering the interactive UI for both subcommands
 
+## v0.9.x — Grok support
+
+- ✅ Grok CLI session discovery from `~/.grok/sessions/`
+- ✅ `--agent grok` flag and `G` prefix in session lists
+- ✅ Search, prune, and compact support for Grok session directories
+- ✅ Monthly Grok billing snapshot in `lazyagent limits`
+
+## v0.9.x — Kimi support
+
+- ✅ Kimi Code CLI session discovery from `~/.kimi-code/sessions/`
+- ✅ `--agent kimi` flag and `K` prefix in session lists
+- ✅ Search, prune, and compact support for Kimi session directories
+- ✅ Kimi usage snapshot in `lazyagent limits`
+
 ## v0.9.x — Rate-limit visibility
 
-- ✅ `lazyagent limits` — on-demand snapshot of 5-hour and weekly rate-limit windows
+- ✅ `lazyagent limits` — on-demand snapshot of 5-hour, weekly, and monthly usage windows
 - ✅ Pace indicator comparing actual consumption to a perfectly linear pace (under / on track / over)
 - ✅ Claude Code via `/api/oauth/usage` (the same endpoint Claude Code's `/status` uses), token resolved from env / macOS keychain / `~/.claude/.credentials.json`
-- ✅ Codex via the latest rollout JSONL under `~/.codex/sessions/` — no network call, fallback to older rollouts when the most recent has no `rate_limits` event yet
+- ✅ Codex via `/backend-api/wham/usage` on `chatgpt.com` (the same endpoint the Codex CLI's TUI polls), ChatGPT token resolved from `CODEX_OAUTH_TOKEN` / `~/.codex/auth.json`
+- ✅ Grok via `/v1/billing` on `cli-chat-proxy.grok.com`, token resolved from `GROK_OAUTH_TOKEN` / `~/.grok/auth.json`
+- ✅ Kimi Code via `/coding/v1/usages` on `api.kimi.com`, token resolved from `KIMI_CODE_OAUTH_TOKEN` / `~/.kimi-code/credentials/kimi-code.json`
+- ✅ Cursor via `/api/dashboard/get-aggregated-usage-events` on `cursor.com` (the same endpoint its dashboard uses), session token read from local `state.vscdb`; reports the usage-based (API) pool against the plan's included credit, `CURSOR_INCLUDED_USD` override
 - ✅ Honest User-Agent (no Claude Code impersonation), graceful failure on 401/429, disclaimer in `--help` and output
 
 ## v0.10 — Outbound webhooks

@@ -10,7 +10,7 @@ This page documents the root `lazyagent` command — the one you run to monitor 
 - [`lazyagent prune`](../maintenance/prune.md) — delete old or orphaned chat files
 - [`lazyagent compact`](../maintenance/compact.md) — truncate bulky payloads in place
 - [`lazyagent search`](../maintenance/search.md) — search transcript-file agents with highlighted snippets
-- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour and weekly rate-limit usage with a pace indicator
+- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage summary; add `--detailed` for pace
 
 ## Synopsis
 
@@ -97,6 +97,9 @@ Restrict monitoring to one agent. Valid values:
 | `pi` | pi coding agent |
 | `codex` | Codex CLI |
 | `amp` | Amp CLI |
+| `grok` | Grok CLI |
+| `kilo` | Kilo |
+| `kimi` | Kimi Code CLI |
 | `cursor` | Cursor IDE |
 | `opencode` | OpenCode |
 | `all` | Every enabled agent (default) |
@@ -104,6 +107,9 @@ Restrict monitoring to one agent. Valid values:
 ```bash
 lazyagent --agent claude     # only Claude
 lazyagent --agent codex      # only Codex
+lazyagent --agent grok       # only Grok
+lazyagent --agent kilo       # only Kilo
+lazyagent --agent kimi       # only Kimi Code
 lazyagent --agent all        # default — every agent
 ```
 
@@ -149,11 +155,11 @@ lazyagent passphrase               # rotate the API passphrase
 lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
 ```
 
-See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), and [`limits`](../maintenance/limits.md) for their flag tables.
+See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), [`search`](../maintenance/search.md), and [`limits`](../maintenance/limits.md) for their flag tables.
 
 ### `search`
 
-`search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp) using an incremental SQLite FTS5 index under the user cache directory. Cursor and OpenCode are excluded because their history lives in third-party SQLite databases.
+`search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp, Grok, Kimi) using an incremental SQLite FTS5 index under the user cache directory. Cursor, OpenCode, and Kilo are excluded because their history lives in third-party SQLite databases.
 
 ```bash
 lazyagent search "race condition"
@@ -161,21 +167,25 @@ lazyagent search --agent codex "parser"
 lazyagent search --reindex "config"
 ```
 
-After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command. Piped output stays non-interactive.
+After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command when lazyagent knows one. Grok sessions are searchable but not directly resumable, because Grok CLI does not expose a resume command. Piped output stays non-interactive.
 
-Full reference, including the index location, ranking, and resume commands: [`search`](../maintenance/search.md).
+Full reference, including the index location, ranking, resume commands, and Grok caveat: [`search`](../maintenance/search.md).
 
 ### `limits`
 
-`limits` prints a one-shot snapshot of the 5-hour and weekly rate-limit windows for Claude Code and Codex, with a pace indicator that compares actual consumption to a perfectly linear pace (`underutilizing` / `on track` / `overutilizing`).
+`limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default table labels each 5-hour and weekly/global cell as `used` and `exp`, where `exp` is the linear pace for elapsed window time; `--detailed` prints the full per-window report with reset times and the pace indicator (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes a single monthly window tracking its usage-based (API) spend against the plan's included credit.
 
 ```bash
-lazyagent limits                 # both agents
+lazyagent limits                 # summary table for all supported limits providers
+lazyagent limits --detailed      # detailed report with bars, reset times, and pace
 lazyagent limits --agent claude  # only Claude Code
 lazyagent limits --agent codex   # only Codex
+lazyagent limits --agent grok    # only Grok
+lazyagent limits --agent kimi    # only Kimi Code
+lazyagent limits --agent cursor  # only Cursor (usage-based API pool)
 ```
 
-Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data is read from the latest rollout JSONL under `~/.codex/sessions/` (no network call).
+Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data comes from `/backend-api/wham/usage` on `chatgpt.com` — the same endpoint the Codex CLI's TUI polls for its rate-limit display. Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on `api.kimi.com`, the endpoint Kimi Code CLI's `/status` slash command calls. Cursor data comes from `/api/dashboard/get-aggregated-usage-events` on `cursor.com` — the same endpoint the Cursor dashboard's usage summary uses — read with the session token from Cursor's local `state.vscdb`; only the usage-based (API) pool is reported, not the unlimited Auto/Composer pool.
 
 Full reference, including disclaimers and token-resolution order: [`limits`](../maintenance/limits.md).
 
@@ -237,6 +247,11 @@ The maintenance subcommands define their own exit codes; see their respective pa
 |----------|--------|
 | `CLAUDE_CONFIG_DIR` | Alternate Claude home when `claude_dirs` is not set in the config. Must contain a `projects/` subfolder |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Claude call. Bypasses the macOS keychain and the credentials file |
+| `GROK_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Grok billing call. Bypasses `~/.grok/auth.json` |
+| `KIMI_SHARE_DIR` | Alternate Kimi Code data root. Defaults to `~/.kimi-code` |
+| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Kimi call. Bypasses `~/.kimi-code/credentials/kimi-code.json` |
+| `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL for `lazyagent limits`; `/usages` is appended |
+| `CURSOR_INCLUDED_USD` | Override the Cursor plan's included API-usage dollar amount used by `lazyagent limits` as the denominator for `Used %`. Required for plans not in the built-in table (Business, Enterprise, Teams) |
 | `XDG_CONFIG_HOME` | Overrides the default `~/.config` base for `~/.config/lazyagent/` |
 | `VISUAL` | Preferred GUI editor for <kbd>o</kbd> (TUI) / Open (GUI). See [Editor support](../reference/editor-support.md) |
 | `EDITOR` | Fallback terminal editor when `$VISUAL` is unset |

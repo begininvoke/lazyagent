@@ -28,6 +28,9 @@ Scope the scan to a single agent with `--agent`:
 ```bash
 lazyagent --agent claude   # Claude Code CLI and Desktop
 lazyagent --agent codex    # Codex CLI only
+lazyagent --agent grok     # Grok CLI only
+lazyagent --agent kilo     # Kilo only
+lazyagent --agent kimi     # Kimi Code CLI only
 ```
 
 To permanently hide an agent without passing `--agent` every time, set it to `false` in the [`agents` config block](../reference/configuration.md#agents).
@@ -48,16 +51,20 @@ The mobile app fetches the public salt from `/api/auth`, then derives the bearer
 
 ## Check rate-limit usage before a long run
 
-Before starting an agent task that might burn through quota, snapshot where you stand on the 5-hour and weekly windows:
+Before starting an agent task that might burn through quota, snapshot where you stand across the supported providers (Claude/Codex on 5h + 7d windows, Grok on the monthly billing window, Kimi on the windows returned by Kimi Code, Cursor on the monthly usage-based API window):
 
 ```bash
-lazyagent limits                 # both Claude Code and Codex
+lazyagent limits                 # summary table for all supported limits providers
+lazyagent limits --detailed      # detailed report with reset times and pace
 lazyagent limits --agent claude  # just Claude
+lazyagent limits --agent grok    # just Grok (monthly billing)
+lazyagent limits --agent kimi    # just Kimi Code
+lazyagent limits --agent cursor  # just Cursor (usage-based API pool)
 ```
 
-The `Pace` line tells you whether you're consuming faster than linear (`overutilizing`), in line, or slower (`underutilizing`). If Claude reports `overutilizing` on the 5-hour window with hours still to go, that's a strong hint to defer the run or fan it out across days.
+In the `--detailed` output, the `Pace` line tells you whether you're consuming faster than linear (`overutilizing`), in line, or slower (`underutilizing`). If Claude reports `overutilizing` on the 5-hour window with hours still to go, that's a strong hint to defer the run or fan it out across days.
 
-Claude data comes from an undocumented endpoint Anthropic uses for `/status` — the command is on-demand only and never polled. Codex data is read locally from the latest session rollout, no network call. See [`limits`](../maintenance/limits.md) for the full disclaimer.
+Claude, Codex, Grok, Kimi, and Cursor data all come from endpoints used by their respective official CLIs (or, for Cursor, its dashboard) — the command is on-demand only and never polled. See [`limits`](../maintenance/limits.md) for the full disclaimer.
 
 ## Quick status check from the shell
 
@@ -135,7 +142,7 @@ You deleted `~/projects/abandoned-app` and want every session associated with it
 lazyagent prune --orphaned --dry-run-verbose | grep abandoned-app
 
 # Commit
-lazyagent prune --orphaned --agent claude,codex,pi
+lazyagent prune --orphaned --agent claude,codex,pi,grok,kimi
 ```
 
 `--orphaned` catches anything whose CWD no longer resolves — the exact case here.

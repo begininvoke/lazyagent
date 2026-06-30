@@ -1,13 +1,13 @@
 ---
 title: "Search chat transcripts"
-description: "Full-text search over local agent transcripts, with highlighted snippets, an incremental SQLite FTS5 index, and an interactive resume picker."
+description: "Full-text search over local agent transcripts, with highlighted snippets, an incremental SQLite FTS5 index, and an optional interactive opener."
 sidebar:
   order: 4
 ---
 
-`lazyagent search` finds messages across every chat transcript on your machine. Run a query, get a ranked list of sessions with highlighted snippets, optionally pick one and resume it directly with the originating agent.
+`lazyagent search` finds messages across every chat transcript on your machine. Run a query, get a ranked list of sessions with highlighted snippets, optionally pick one and reopen it when the originating agent exposes a resume command.
 
-It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, and **Amp**. Cursor and OpenCode are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
+It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, **Amp**, **Grok**, and **Kimi Code**. Cursor, OpenCode, and Kilo are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
 
 ## Synopsis
 
@@ -23,7 +23,7 @@ lazyagent search [QUERY] [--agent LIST]
 
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
-| `--agent LIST` | string | `all` | Comma-separated subset: `claude,codex,pi,amp`, or `all` |
+| `--agent LIST` | string | `all` | Comma-separated subset: `claude,codex,pi,amp,grok,kimi`, or `all` |
 | `--limit N` | int | `20` | Maximum chat sessions to show |
 | `--snippets N` | int | `2` | Maximum snippet lines per session |
 | `--reindex` | bool | `false` | Drop the local index and rebuild it before searching |
@@ -34,7 +34,7 @@ lazyagent search [QUERY] [--agent LIST]
 ```bash
 lazyagent search "race condition"               # all agents
 lazyagent search --agent codex "parser bug"     # one agent
-lazyagent search --agent claude,codex "auth"    # subset
+lazyagent search --agent claude,codex,kimi "auth" # subset
 lazyagent search --limit 5 "regex"              # tighter result list
 lazyagent search --snippets 4 "OAuth"           # more context per session
 lazyagent search --reindex "config"             # force a full rebuild
@@ -54,7 +54,7 @@ Ranking uses FTS5's built-in `bm25(chunks)` — the most relevant matches appear
 
 ## Output
 
-For each matching session lazyagent prints a header (agent, project path, session name) and up to `--snippets` highlighted snippets — pieces of the conversation that contain the query terms. The agent is shown with its single-letter prefix (C, X, π, A) for visual scanning across mixed result sets.
+For each matching session lazyagent prints a header (agent, project path, session name) and up to `--snippets` highlighted snippets — pieces of the conversation that contain the query terms. The agent is shown with its single-letter prefix (C, X, π, A, G, K) for visual scanning across mixed result sets.
 
 Pipe-safe behavior: when stdout is not a terminal the interactive resume prompt is skipped, so `lazyagent search query | grep ...` and `| jq` work cleanly. Headers and snippets still go to stdout; warnings (e.g. "indexing failed for X session: …") go to stderr.
 
@@ -66,7 +66,7 @@ After printing results in an interactive terminal, lazyagent shows:
 Open a chat? Enter result #, or press Enter to quit:
 ```
 
-Type a 1-based result number to open that session in the originating agent. lazyagent runs the right resume command for you:
+Type a 1-based result number to open that session in the originating agent when a resume command is available. lazyagent runs the right command for you:
 
 | Agent | Resume command |
 |-------|----------------|
@@ -74,8 +74,11 @@ Type a 1-based result number to open that session in the originating agent. lazy
 | codex | `codex resume <session-id>` |
 | amp | `amp threads continue <session-id>` |
 | pi | `pi --session <session-id>` |
+| kimi | `kimi --resume <session-id>` |
 
 The command runs from the session's original CWD when that directory still exists, otherwise from the current shell directory. Pressing <kbd>Enter</kbd> on an empty line exits without opening anything.
+
+> **Grok sessions** are indexed and searchable, but `search` cannot resume them directly — Grok exposes no resume command, so selecting a Grok result reports that and exits.
 
 ## Index management
 
@@ -105,10 +108,12 @@ The next `lazyagent search` invocation will rebuild it.
 - **codex** — Codex CLI (`~/.codex/sessions/`)
 - **pi** — pi coding agent (`~/.pi/agent/sessions/`)
 - **amp** — Amp CLI (`~/.local/share/amp/threads/`)
+- **grok** — Grok CLI (`~/.grok/sessions/`)
+- **kimi** — Kimi Code CLI (`~/.kimi-code/sessions/`)
 
 Not supported:
 
-- **Cursor** and **OpenCode** — sessions live inside third-party SQLite databases. Reading from them at search time would require coupling to their schema; for now they're left to their own in-app search.
+- **Cursor**, **OpenCode**, and **Kilo** — sessions live inside third-party SQLite databases. Reading from them at search time would require coupling to their schema; for now they're left to their own in-app search.
 
 ## Examples
 
@@ -141,4 +146,4 @@ lazyagent search --reindex "anything"
 
 - [`lazyagent prune`](prune.md) — delete entire chat files (destructive, complementary)
 - [`lazyagent compact`](compact.md) — shrink chat files in place (destructive, complementary)
-- [`lazyagent limits`](limits.md) — show 5-hour and weekly rate-limit usage
+- [`lazyagent limits`](limits.md) — show 5-hour, weekly, and monthly usage summary
