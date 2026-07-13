@@ -4,8 +4,8 @@ all: build
 
 # Build with frontend (TUI + GUI support)
 build: frontend
-	rm -rf internal/assets/dist
-	cp -r frontend/dist internal/assets/dist
+	rm -rf internal/assets/dist/*
+	cp -r frontend/dist/. internal/assets/dist/
 	go build -o lazyagent .
 
 # Build TUI only (no frontend or Wails needed)
@@ -27,11 +27,11 @@ install:
 # Dev mode: rebuild frontend and run GUI app
 dev: bindings
 	cd frontend && npm run build
-	rm -rf internal/assets/dist
-	cp -r frontend/dist internal/assets/dist
+	rm -rf internal/assets/dist/*
+	cp -r frontend/dist/. internal/assets/dist/
 	go run . --gui
 
 # Clean build artifacts
 clean:
 	rm -f lazyagent
-	rm -rf frontend/dist internal/assets/dist
+	rm -rf frontend/dist internal/assets/dist/*
