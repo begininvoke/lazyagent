@@ -19,6 +19,7 @@ export class Config {
     "claude_dirs"?: string[];
     "exclude_cwd_substrings": string[];
     "tui": TUIConfig;
+    "webhooks"?: WebhookConfig[];
 
     /**
      * APIPassphrase is the secret used to derive the bearer token that
@@ -75,6 +76,7 @@ export class Config {
         const $$createField7_0 = $$createType1;
         const $$createField8_0 = $$createType1;
         const $$createField9_0 = $$createType2;
+        const $$createField10_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("agents" in $$parsedSource) {
             $$parsedSource["agents"] = $$createField6_0($$parsedSource["agents"]);
@@ -87,6 +89,9 @@ export class Config {
         }
         if ("tui" in $$parsedSource) {
             $$parsedSource["tui"] = $$createField9_0($$parsedSource["tui"]);
+        }
+        if ("webhooks" in $$parsedSource) {
+            $$parsedSource["webhooks"] = $$createField10_0($$parsedSource["webhooks"]);
         }
         return new Config($$parsedSource as Partial<Config>);
     }
@@ -119,7 +124,53 @@ export class TUIConfig {
     }
 }
 
+/**
+ * WebhookConfig is a single outbound webhook destination.
+ */
+export class WebhookConfig {
+    "name": string;
+    "url": string;
+    "secret"?: string;
+    "events"?: string[];
+    "agents"?: string[];
+
+    /**
+     * absent = true
+     */
+    "enabled"?: boolean | null;
+
+    /** Creates a new WebhookConfig instance. */
+    constructor($$source: Partial<WebhookConfig> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("url" in $$source)) {
+            this["url"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new WebhookConfig instance from a string or object.
+     */
+    static createFrom($$source: any = {}): WebhookConfig {
+        const $$createField3_0 = $$createType1;
+        const $$createField4_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("events" in $$parsedSource) {
+            $$parsedSource["events"] = $$createField3_0($$parsedSource["events"]);
+        }
+        if ("agents" in $$parsedSource) {
+            $$parsedSource["agents"] = $$createField4_0($$parsedSource["agents"]);
+        }
+        return new WebhookConfig($$parsedSource as Partial<WebhookConfig>);
+    }
+}
+
 // Private type creation functions
 const $$createType0 = $Create.Map($Create.Any, $Create.Any);
 const $$createType1 = $Create.Array($Create.Any);
 const $$createType2 = TUIConfig.createFrom;
+const $$createType3 = WebhookConfig.createFrom;
+const $$createType4 = $Create.Array($$createType3);

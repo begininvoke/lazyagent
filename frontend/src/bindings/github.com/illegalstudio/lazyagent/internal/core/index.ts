@@ -3,5 +3,6 @@
 
 export {
     Config,
-    TUIConfig
+    TUIConfig,
+    WebhookConfig
 } from "./models.js";
