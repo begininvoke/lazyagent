@@ -11,7 +11,7 @@ Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a
 
 Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall, or *"how much of my Grok monthly credit have I burned this month?"* before kicking off a long Grok run.
 
-The same limits are viewable interactively without leaving lazyagent: in the **TUI** press `l` to open a centered modal with **Summary** and **Detailed** tabs (the Detailed tab scrolls inside the modal); in the **GUI** click **limits** in the header or press `l` to open the limits page (`l` or `Esc` closes it). Both read limits on entry only — leave and re-enter to refresh.
+The same limits are viewable interactively without leaving lazyagent: in the **TUI** press `l` to open a centered modal with **Summary** and **Detailed** tabs (the Detailed tab scrolls inside the modal); in the **GUI** click **limits** in the header or press `l` to open the limits page (`l` or `Esc` closes it). Both read limits on entry and refresh on demand when you press `r`; neither view polls in the background.
 
 ## Synopsis
 

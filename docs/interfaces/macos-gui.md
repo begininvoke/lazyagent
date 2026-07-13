@@ -32,7 +32,8 @@ Press <kbd>d</kbd> again or close the window to snap it back to the menu bar.
 | <kbd>+</kbd> / <kbd>-</kbd> | Adjust time window |
 | <kbd>f</kbd> | Cycle activity filter |
 | <kbd>/</kbd> | Search sessions |
-| <kbd>r</kbd> | Rename session (empty resets) |
+| <kbd>l</kbd> | Open or close the limits view |
+| <kbd>r</kbd> | Rename session; refresh while the limits view is open |
 | <kbd>d</kbd> | Detach / reattach panel |
 | <kbd>esc</kbd> | Close detail / dismiss search |
 
