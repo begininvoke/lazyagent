@@ -128,6 +128,50 @@ func TestLimitsOpenClose(t *testing.T) {
 	}
 }
 
+func TestLimitsRefresh(t *testing.T) {
+	m := limitsTestModel(limitsTabDetailed, false, sampleView())
+	m.limitsScroll = 3
+	m.limitsRequest = 7
+
+	refreshed, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	rm := refreshed.(Model)
+	if !rm.limitsOpen || !rm.limitsLoading {
+		t.Fatalf("after 'r': open=%v loading=%v, want true/true", rm.limitsOpen, rm.limitsLoading)
+	}
+	if cmd == nil {
+		t.Fatal("expected a load command after refreshing limits")
+	}
+	if rm.limitsRequest != 8 {
+		t.Fatalf("limitsRequest = %d, want 8", rm.limitsRequest)
+	}
+	if rm.limitsTab != limitsTabDetailed || rm.limitsScroll != 3 {
+		t.Fatalf("refresh changed position: tab=%d scroll=%d", rm.limitsTab, rm.limitsScroll)
+	}
+
+	stale, _ := rm.Update(limitsLoadedMsg{view: limits.View{}, requestID: 7})
+	sm := stale.(Model)
+	if !sm.limitsLoading || !sm.limitsView.Available {
+		t.Fatal("stale response replaced the active limits refresh")
+	}
+
+	updatedView := limits.View{Available: false}
+	loaded, _ := sm.Update(limitsLoadedMsg{view: updatedView, requestID: 8})
+	lm := loaded.(Model)
+	if lm.limitsLoading {
+		t.Fatal("current refresh response left loading enabled")
+	}
+	if lm.limitsView.Available {
+		t.Fatal("current refresh response was not applied")
+	}
+}
+
+func TestRenderLimitsModal_RefreshHint(t *testing.T) {
+	out := limitsTestModel(limitsTabSummary, false, sampleView()).renderLimitsModal()
+	if !strings.Contains(out, "r refresh") {
+		t.Fatalf("limits modal missing refresh hint: %q", out)
+	}
+}
+
 func TestWindowLines(t *testing.T) {
 	lines := []string{"a", "b", "c", "d", "e"}
 	cases := []struct {

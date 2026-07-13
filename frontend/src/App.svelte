@@ -18,6 +18,7 @@
   let showDetail = $derived($selectedId !== null);
   let searching = $state(false);
   let showLimits = $state(false);
+  let limitsRefreshToken = $state(0);
   let updateVersion = $state("");
   let isDetached = $state(false);
   let isPinned = $state(false);
@@ -65,6 +66,9 @@
       if (e.key === "Escape" || e.key === "l" || e.key === "L") {
         e.preventDefault();
         showLimits = false;
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        limitsRefreshToken += 1;
       }
       return;
     }
@@ -227,7 +231,7 @@
   <div class="flex-1 flex min-h-0">
     {#if showLimits}
       <div class="flex-1 overflow-hidden">
-        <LimitsPage />
+        <LimitsPage refreshToken={limitsRefreshToken} />
       </div>
     {:else if showDetail}
       <div class="w-[45%] border-r border-border overflow-hidden">
@@ -260,7 +264,7 @@
       <span><kbd class="text-text/60">f</kbd> filter</span>
       <span><kbd class="text-text/60">l</kbd> limits</span>
       <span><kbd class="text-text/60">+/−</kbd> window</span>
-      <span><kbd class="text-text/60">r</kbd> rename</span>
+      <span><kbd class="text-text/60">r</kbd> {showLimits ? "refresh" : "rename"}</span>
       <span><kbd class="text-text/60">d</kbd> {isDetached ? "attach" : "detach"}</span>
       <span><kbd class="text-text/60">esc</kbd> back</span>
     </div>

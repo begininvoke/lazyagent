@@ -35,14 +35,21 @@ type updateAvailableMsg struct{ version string }
 // editorFinishedMsg is sent when a TUI editor (tea.Exec) exits.
 type editorFinishedMsg struct{ err error }
 
-// limitsLoadedMsg is sent when the limits fetch completes.
-type limitsLoadedMsg struct{ view limits.View }
+// limitsLoadedMsg is sent when a limits fetch completes. The request ID keeps
+// an older fetch from overwriting a newer refresh.
+type limitsLoadedMsg struct {
+	view      limits.View
+	requestID uint64
+}
 
-func loadLimitsCmd() tea.Cmd {
+func loadLimitsCmd(requestID uint64) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		return limitsLoadedMsg{view: limits.BuildView(limits.FetchAll(ctx), time.Now())}
+		return limitsLoadedMsg{
+			view:      limits.BuildView(limits.FetchAll(ctx), time.Now()),
+			requestID: requestID,
+		}
 	}
 }
 
@@ -100,6 +107,7 @@ type Model struct {
 	limitsLoading bool
 	limitsView    limits.View
 	limitsScroll  int
+	limitsRequest uint64
 }
 
 type keyMap struct {
@@ -210,7 +218,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// TUI editor exited, bubbletea resumes automatically.
 
 	case limitsLoadedMsg:
-		if m.limitsOpen {
+		if m.limitsOpen && msg.requestID == m.limitsRequest {
 			m.limitsView = msg.view
 			m.limitsLoading = false
 		}
@@ -295,6 +303,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.limitsScroll < 0 {
 					m.limitsScroll = 0
 				}
+			case "r":
+				m.limitsLoading = true
+				m.limitsRequest++
+				return m, loadLimitsCmd(m.limitsRequest)
 			}
 			return m, nil
 		}
@@ -390,7 +402,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.limitsTab = 0
 			m.limitsScroll = 0
 			m.limitsView = limits.View{}
-			return m, loadLimitsCmd()
+			m.limitsRequest++
+			return m, loadLimitsCmd(m.limitsRequest)
 
 		case key.Matches(msg, keys.Quit):
 			return m, tea.Quit

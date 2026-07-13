@@ -55,8 +55,8 @@ export function GetConfig(): $CancellablePromise<core$0.Config> {
 
 /**
  * GetLimits fetches all supported providers and returns the computed limits
- * view. It is called fresh each time the GUI opens the limits page; it does not
- * poll. Missing/errored agents are omitted.
+ * view. The GUI calls it when the limits page opens and on manual refresh; it
+ * does not poll. Missing/errored agents are omitted.
  */
 export function GetLimits(): $CancellablePromise<limits$0.View> {
     return $Call.ByID(1368178874).then(($result: any) => {

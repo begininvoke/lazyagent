@@ -103,7 +103,8 @@ TUI keybindings:
   ↑/k, ↓/j    Navigate sessions       tab       Switch panel focus
   +/-          Adjust time window       f         Cycle activity filter
   /            Search by project path   o         Open in editor ($VISUAL)
-  r            Rename session           q/ctrl+c  Quit
+  l            Open limits              r         Rename / refresh limits
+  q/ctrl+c     Quit
 
 If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/lazyagent
 `)

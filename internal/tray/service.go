@@ -294,8 +294,8 @@ func (s *SessionService) GetWindowMinutes() int {
 }
 
 // GetLimits fetches all supported providers and returns the computed limits
-// view. It is called fresh each time the GUI opens the limits page; it does not
-// poll. Missing/errored agents are omitted.
+// view. The GUI calls it when the limits page opens and on manual refresh; it
+// does not poll. Missing/errored agents are omitted.
 func (s *SessionService) GetLimits() limits.View {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

@@ -108,7 +108,7 @@ func (m Model) renderLimitsTabs() string {
 }
 
 func (m Model) renderLimitsHint(moreBelow bool) string {
-	h := "tab/←→ switch · j/k scroll · l/esc close"
+	h := "tab/←→ switch · j/k scroll · r refresh · l/esc close"
 	if moreBelow {
 		h = "↓ more · " + h
 	}

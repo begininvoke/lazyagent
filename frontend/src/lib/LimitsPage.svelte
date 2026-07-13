@@ -1,29 +1,33 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import * as SessionService from "../bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
   import { View, Severity } from "../bindings/github.com/illegalstudio/lazyagent/internal/limits/models";
 
+  let { refreshToken = 0 }: { refreshToken?: number } = $props();
   let loading = $state(true);
   let view = $state<View | null>(null);
   let tab = $state<"summary" | "detailed">("summary");
-  let mounted = true;
 
-  onMount(() => {
+  $effect(() => {
+    refreshToken;
+    let cancelled = false;
+    loading = true;
+
     SessionService.GetLimits()
       .then((v) => {
-        if (mounted) {
+        if (!cancelled) {
           view = v;
           loading = false;
         }
       })
       .catch(() => {
-        if (mounted) {
+        if (!cancelled) {
           view = new View({ Reports: [], Summary: [], Available: false });
           loading = false;
         }
       });
+
     return () => {
-      mounted = false;
+      cancelled = true;
     };
   });
 
@@ -64,7 +68,7 @@
       class="rounded px-2 py-0.5 text-[12px] font-medium {tab === 'detailed' ? 'text-accent bg-accent/10' : 'text-subtext hover:text-text'}"
       onclick={() => (tab = "detailed")}
     >Detailed</button>
-    <span class="ml-auto text-[10px] text-subtext">esc / l to close</span>
+    <span class="ml-auto text-[10px] text-subtext">r to refresh · esc / l to close</span>
   </div>
 
   <div class="flex-1 overflow-auto p-3">
