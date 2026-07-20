@@ -73,3 +73,44 @@ func TestFilterByDirSortsByLastActivityDesc(t *testing.T) {
 		t.Errorf("oldest must be last, got %v", got[2].LastActivity)
 	}
 }
+
+// sessID builds a session with an explicit SessionID distinct from its CWD,
+// for tiebreak assertions where two sessions share a LastActivity.
+func sessID(id, cwd string, last time.Time) *model.Session {
+	return &model.Session{SessionID: id, CWD: cwd, LastActivity: last}
+}
+
+func TestFilterByDirTiebreaksEqualLastActivityBySessionID(t *testing.T) {
+	base := t.TempDir()
+	now := time.Now()
+	in := []*model.Session{
+		sessID("zzz", base, now),
+		sessID("aaa", base, now),
+	}
+	got, err := FilterByDir(in, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 sessions, got %d", len(got))
+	}
+	if got[0].SessionID != "aaa" || got[1].SessionID != "zzz" {
+		t.Errorf("equal-timestamp tiebreak must be ascending SessionID, got %s, %s", got[0].SessionID, got[1].SessionID)
+	}
+}
+
+func TestFilterByDirSessionUnderSymlinkedSubdir(t *testing.T) {
+	target := t.TempDir()
+	external := t.TempDir() // outside target
+	subLink := filepath.Join(target, "sub-link")
+	if err := os.Symlink(external, subLink); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	got, err := FilterByDir([]*model.Session{sess(subLink, time.Now(), false)}, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("session recorded under a symlinked subdir of the target must match, got %d matches", len(got))
+	}
+}

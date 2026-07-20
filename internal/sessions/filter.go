@@ -10,6 +10,22 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
+// resolveSymlink returns the symlink-resolved, cleaned form of cleaned, and
+// whether that differs from cleaned (i.e. there was actually something to
+// resolve). Both targetVariants and matchesDir need this same clean+resolve
+// step, just applied to different paths.
+func resolveSymlink(cleaned string) (resolved string, ok bool) {
+	r, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		return "", false
+	}
+	r = filepath.Clean(r)
+	if r == cleaned {
+		return "", false
+	}
+	return r, true
+}
+
 // targetVariants normalizes dir for matching: the cleaned absolute path
 // plus, when it differs, the symlink-resolved form — so /tmp also matches
 // sessions recorded under /private/tmp on macOS.
@@ -20,32 +36,40 @@ func targetVariants(dir string) ([]string, error) {
 	}
 	abs = filepath.Clean(abs)
 	variants := []string{abs}
-	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
-		if resolved = filepath.Clean(resolved); resolved != abs {
-			variants = append(variants, resolved)
-		}
+	if resolved, ok := resolveSymlink(abs); ok {
+		variants = append(variants, resolved)
 	}
 	return variants, nil
 }
 
-// matchesDir reports whether cwd equals a target variant or lies beneath one
+// matchesVariants reports whether cwd equals a variant or lies beneath one
 // (prefix on a path boundary: /foo/bar must not match /foo/barbaz).
+func matchesVariants(cwd string, variants []string) bool {
+	for _, v := range variants {
+		if cwd == v || strings.HasPrefix(cwd, v+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesDir reports whether a session's recorded cwd falls under one of the
+// target variants. The spec matches on the cleaned, *unresolved* recorded
+// CWD first: a session recorded under a symlinked subdirectory of the target
+// (e.g. <target>/sub-link -> somewhere else entirely) must still match,
+// because the recorded path itself is what lies under the target. Only when
+// that fails do we fall back to resolving symlinks in cwd, which is what
+// lets e.g. /tmp-recorded sessions match a /private/tmp target on macOS.
 func matchesDir(cwd string, variants []string) bool {
 	if cwd == "" {
 		return false
 	}
 	cwd = filepath.Clean(cwd)
-	// Resolve symlinks in CWD for accurate matching, especially on macOS where
-	// /tmp may be a symlink to /private/tmp
-	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
-		if resolved = filepath.Clean(resolved); resolved != cwd {
-			cwd = resolved
-		}
+	if matchesVariants(cwd, variants) {
+		return true
 	}
-	for _, v := range variants {
-		if cwd == v || strings.HasPrefix(cwd, v+string(filepath.Separator)) {
-			return true
-		}
+	if resolved, ok := resolveSymlink(cwd); ok {
+		return matchesVariants(resolved, variants)
 	}
 	return false
 }
@@ -66,8 +90,11 @@ func FilterByDir(sessions []*model.Session, dir string) ([]*model.Session, error
 			out = append(out, s)
 		}
 	}
-	slices.SortFunc(out, func(a, b *model.Session) int {
-		return b.LastActivity.Compare(a.LastActivity)
+	slices.SortStableFunc(out, func(a, b *model.Session) int {
+		if c := b.LastActivity.Compare(a.LastActivity); c != 0 {
+			return c
+		}
+		return strings.Compare(a.SessionID, b.SessionID)
 	})
 	return out, nil
 }
