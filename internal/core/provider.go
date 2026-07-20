@@ -135,6 +135,13 @@ func (p *CursorProvider) WatchDirs() []string {
 	return nil
 }
 
+// DirScopedProvider is implemented by providers that can discover sessions
+// for a single directory more cheaply than a full scan (e.g. by head-reading
+// each file's cwd before fully parsing it).
+type DirScopedProvider interface {
+	DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error)
+}
+
 // CodexProvider discovers Codex CLI sessions from JSONL transcripts.
 type CodexProvider struct {
 	cache *model.SessionCache
@@ -147,6 +154,12 @@ func NewCodexProvider() *CodexProvider {
 
 func (p *CodexProvider) DiscoverSessions() ([]*model.Session, error) {
 	return codex.DiscoverSessions(p.cache)
+}
+
+// DiscoverSessionsMatching implements DirScopedProvider: it scopes discovery
+// to files whose cwd matches cwdMatch, skipping full parses of the rest.
+func (p *CodexProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
+	return codex.DiscoverSessionsFiltered(p.cache, cwdMatch)
 }
 
 func (p *CodexProvider) UseWatcher() bool               { return false }
@@ -344,4 +357,61 @@ func (m MultiProvider) WatchDirs() []string {
 		dirs = append(dirs, p.WatchDirs()...)
 	}
 	return dirs
+}
+
+// DiscoverMatching discovers sessions from p, using the dir-scoped fast path
+// (DirScopedProvider) where p (or, for a MultiProvider, a member) implements
+// it. If p is a MultiProvider, its members are queried concurrently, with
+// the same best-effort error handling as MultiProvider.DiscoverSessions: a
+// failing member contributes nothing.
+//
+// Note: results from a member that does NOT implement DirScopedProvider come
+// from a plain DiscoverSessions call and are NOT pre-filtered by cwdMatch —
+// filtering those remains the caller's responsibility (e.g. via a downstream
+// FilterByDir pass).
+func DiscoverMatching(p SessionProvider, cwdMatch func(string) bool) ([]*model.Session, error) {
+	if mp, ok := p.(MultiProvider); ok {
+		return discoverMatchingMulti(mp, cwdMatch)
+	}
+	return discoverMatchingOne(p, cwdMatch)
+}
+
+func discoverMatchingOne(p SessionProvider, cwdMatch func(string) bool) ([]*model.Session, error) {
+	if dsp, ok := p.(DirScopedProvider); ok {
+		return dsp.DiscoverSessionsMatching(cwdMatch)
+	}
+	return p.DiscoverSessions()
+}
+
+func discoverMatchingMulti(mp MultiProvider, cwdMatch func(string) bool) ([]*model.Session, error) {
+	if len(mp.Providers) <= 1 {
+		// Fast path: no need for goroutines.
+		for _, p := range mp.Providers {
+			return discoverMatchingOne(p, cwdMatch)
+		}
+		return nil, nil
+	}
+
+	type result struct {
+		sessions []*model.Session
+	}
+	results := make([]result, len(mp.Providers))
+	var wg sync.WaitGroup
+	for i, p := range mp.Providers {
+		wg.Add(1)
+		go func(idx int, prov SessionProvider) {
+			defer wg.Done()
+			sessions, err := discoverMatchingOne(prov, cwdMatch)
+			if err == nil {
+				results[idx] = result{sessions: sessions}
+			}
+		}(i, p)
+	}
+	wg.Wait()
+
+	var all []*model.Session
+	for _, r := range results {
+		all = append(all, r.sessions...)
+	}
+	return all, nil
 }

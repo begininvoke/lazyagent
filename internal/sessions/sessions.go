@@ -73,7 +73,15 @@ Flags:
 
 	cfg := core.LoadConfig()
 	provider := core.BuildProvider(*agent, cfg)
-	all, err := provider.DiscoverSessions()
+
+	variants, err := targetVariants(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
+	match := func(cwd string) bool { return matchesDir(cwd, variants) }
+
+	all, err := core.DiscoverMatching(provider, match)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1

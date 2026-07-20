@@ -143,3 +143,95 @@ var errTest = errorString("test error")
 type errorString string
 
 func (e errorString) Error() string { return string(e) }
+
+// dirScopedFakeProvider is a test-local provider that implements
+// DirScopedProvider so DiscoverMatching's fast path can be exercised. It
+// records the matcher it received and returns its own preconfigured, already
+// filtered sessions (ignoring the matcher's actual verdicts) so the test can
+// assert DiscoverMatching used the fast-path result rather than falling back
+// to DiscoverSessions.
+type dirScopedFakeProvider struct {
+	sessions        []*model.Session
+	err             error
+	unfiltered      []*model.Session // returned by DiscoverSessions if called (should not be, when fast path is used)
+	receivedMatcher bool
+	watcher         bool
+	interval        time.Duration
+	dirs            []string
+}
+
+func (f *dirScopedFakeProvider) DiscoverSessions() ([]*model.Session, error) {
+	return f.unfiltered, nil
+}
+
+func (f *dirScopedFakeProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
+	f.receivedMatcher = cwdMatch != nil
+	return f.sessions, f.err
+}
+
+func (f *dirScopedFakeProvider) UseWatcher() bool               { return f.watcher }
+func (f *dirScopedFakeProvider) RefreshInterval() time.Duration { return f.interval }
+func (f *dirScopedFakeProvider) WatchDirs() []string            { return f.dirs }
+
+func TestDiscoverMatching_UsesDirScopedFastPath(t *testing.T) {
+	p := &dirScopedFakeProvider{
+		sessions:   []*model.Session{{SessionID: "matched"}},
+		unfiltered: []*model.Session{{SessionID: "should-not-be-used"}},
+	}
+	matcher := func(cwd string) bool { return true }
+
+	sessions, err := DiscoverMatching(p, matcher)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !p.receivedMatcher {
+		t.Error("expected DiscoverSessionsMatching to receive a non-nil matcher")
+	}
+	if len(sessions) != 1 || sessions[0].SessionID != "matched" {
+		t.Fatalf("sessions = %#v, want the fast-path result", sessions)
+	}
+}
+
+func TestDiscoverMatching_FallsBackToPlainDiscoverSessions(t *testing.T) {
+	p := fakeProvider{sessions: []*model.Session{
+		{SessionID: "s1"},
+	}}
+
+	sessions, err := DiscoverMatching(p, func(string) bool { return true })
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].SessionID != "s1" {
+		t.Fatalf("sessions = %#v, want plain DiscoverSessions result", sessions)
+	}
+}
+
+func TestDiscoverMatching_MultiProviderFanOut(t *testing.T) {
+	scoped := &dirScopedFakeProvider{
+		sessions: []*model.Session{{SessionID: "scoped-hit"}},
+	}
+	plain := fakeProvider{sessions: []*model.Session{
+		{SessionID: "plain-hit"},
+	}}
+	failing := fakeProvider{err: errTest}
+
+	mp := MultiProvider{Providers: []SessionProvider{scoped, plain, failing}}
+	sessions, err := DiscoverMatching(mp, func(string) bool { return true })
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !scoped.receivedMatcher {
+		t.Error("expected the dir-scoped member to receive the matcher")
+	}
+
+	ids := make(map[string]bool)
+	for _, s := range sessions {
+		ids[s.SessionID] = true
+	}
+	if !ids["scoped-hit"] || !ids["plain-hit"] {
+		t.Fatalf("sessions = %#v, want scoped-hit and plain-hit present", sessions)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("got %d sessions, want 2 (failing member contributes nothing)", len(sessions))
+	}
+}
