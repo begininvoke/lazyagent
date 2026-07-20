@@ -2,8 +2,10 @@ package codex
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -36,7 +38,20 @@ func SessionIndexPath() string {
 
 // DiscoverSessions scans the Codex sessions tree for JSONL session files.
 func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
-	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache)
+	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, nil)
+}
+
+// DiscoverSessionsFiltered scans the Codex sessions tree like DiscoverSessions,
+// but skips fully parsing files whose working directory does not match
+// cwdMatch. A file's cwd is determined cheaply via a head-read of its first
+// line (see headCWD); when that cannot be determined, the file is
+// conservatively treated as matching and fully parsed, so a session is never
+// silently dropped — the worst case is an unnecessary full parse.
+//
+// cwdMatch may be nil, in which case every session matches (equivalent to
+// DiscoverSessions).
+func DiscoverSessionsFiltered(cache *model.SessionCache, cwdMatch func(string) bool) ([]*model.Session, error) {
+	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, cwdMatch)
 }
 
 type parseJob struct {
@@ -53,7 +68,7 @@ type parseResult struct {
 	newOffset int64
 }
 
-func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.SessionCache) ([]*model.Session, error) {
+func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.SessionCache, cwdMatch func(string) bool) ([]*model.Session, error) {
 	if sessionsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
 	}
@@ -76,9 +91,24 @@ func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.Session
 		cached, offset, mtime := cache.GetIncremental(path)
 
 		if cached != nil && offset == 0 {
+			// Full cache hit — we already know the cwd, no need to touch the file.
+			if cwdMatch != nil && !cwdMatch(cached.CWD) {
+				return nil
+			}
 			sessions = append(sessions, cached)
 			return nil
 		}
+
+		if cwdMatch != nil {
+			// Cheap prefilter before committing to a full (or incremental)
+			// parse: head-read the file's cwd from its first line. If it
+			// can't be determined, conservatively fall through to a full
+			// parse rather than risk silently dropping a session.
+			if cwd, ok := headCWD(path); ok && !cwdMatch(cwd) {
+				return nil
+			}
+		}
+
 		jobs = append(jobs, parseJob{
 			path:   path,
 			cached: cached,
@@ -222,6 +252,62 @@ type sessionMetaPayload struct {
 	CLIVersion    string          `json:"cli_version"`
 	AgentNickname string          `json:"agent_nickname"`
 	Source        json.RawMessage `json:"source"`
+}
+
+// maxHeadLineSize bounds how much of a rollout file's first line headCWD
+// will read before giving up, so a pathological line can't force reading
+// large amounts of data into memory.
+const maxHeadLineSize = 1 << 20 // 1 MiB
+
+// headCWD reads only the first line of a Codex rollout JSONL file and, if it
+// is a well-formed session_meta entry with a non-empty cwd, returns that cwd.
+// It never reads past the first newline (or maxHeadLineSize, whichever comes
+// first), so it stays cheap even on multi-GiB files. ok is false whenever the
+// cwd could not be determined (missing file, empty file, unparsable first
+// line, wrong envelope type, or missing cwd) — callers should treat that as
+// "unknown, don't filter it out" rather than "no match".
+func headCWD(path string) (cwd string, ok bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+
+	r := bufio.NewReaderSize(f, 64*1024)
+	var line []byte
+	for {
+		chunk, err := r.ReadSlice('\n')
+		line = append(line, chunk...)
+		if len(line) > maxHeadLineSize {
+			return "", false
+		}
+		if err == nil {
+			break
+		}
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		if err == io.EOF {
+			if len(line) == 0 {
+				return "", false
+			}
+			break // last (only) line, no trailing newline
+		}
+		return "", false
+	}
+
+	var env jsonlEnvelope
+	if err := json.Unmarshal(bytes.TrimRight(line, "\r\n"), &env); err != nil {
+		return "", false
+	}
+	if env.Type != "session_meta" {
+		return "", false
+	}
+	var meta sessionMetaPayload
+	if err := json.Unmarshal(env.Payload, &meta); err != nil || meta.CWD == "" {
+		return "", false
+	}
+	return meta.CWD, true
 }
 
 type turnContextPayload struct {

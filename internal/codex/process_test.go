@@ -48,7 +48,7 @@ func TestDiscoverSessions_FromSyntheticDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache())
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestDiscoverSessions_ParallelMultipleFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache())
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -186,5 +186,178 @@ func TestDiscoverSessions_ParallelMultipleFiles(t *testing.T) {
 	}
 	if len(ids) != 5 {
 		t.Errorf("got %d unique session IDs, want 5", len(ids))
+	}
+}
+
+func TestHeadCWD_ValidSessionMeta(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	content := `{"timestamp":"2026-03-28T11:26:17.785Z","type":"session_meta","payload":{"id":"s1","cwd":"/tmp/project-a","cli_version":"0.116.0","source":"cli"}}
+{"timestamp":"2026-03-28T11:26:18.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, ok := headCWD(path)
+	if !ok {
+		t.Fatal("headCWD ok = false, want true")
+	}
+	if cwd != "/tmp/project-a" {
+		t.Fatalf("headCWD cwd = %q, want /tmp/project-a", cwd)
+	}
+}
+
+func TestHeadCWD_GarbageFirstLine(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	content := "not valid json at all\n{\"timestamp\":\"2026-03-28T11:26:18.000Z\",\"type\":\"session_meta\",\"payload\":{\"cwd\":\"/tmp/project-a\"}}\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := headCWD(path); ok {
+		t.Fatal("headCWD ok = true, want false for garbage first line")
+	}
+}
+
+func TestHeadCWD_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := headCWD(path); ok {
+		t.Fatal("headCWD ok = true, want false for empty file")
+	}
+}
+
+func TestHeadCWD_NonexistentFile(t *testing.T) {
+	if _, ok := headCWD(filepath.Join(t.TempDir(), "missing.jsonl")); ok {
+		t.Fatal("headCWD ok = true, want false for missing file")
+	}
+}
+
+// writeRolloutFile is a small helper for the DiscoverSessionsFiltered tests:
+// it writes a minimal rollout file with the given cwd (or, if cwd is empty,
+// a garbage first line that headCWD cannot parse) under dir/2026/03/<day>.
+func writeRolloutFile(t *testing.T, root string, day int, sessionID, cwd string) string {
+	t.Helper()
+	dayDir := filepath.Join(root, "2026", "03", fmt.Sprintf("%02d", day))
+	if err := os.MkdirAll(dayDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dayDir, fmt.Sprintf("rollout-2026-03-%02dT11-00-00-%s.jsonl", day, sessionID))
+
+	var firstLine string
+	if cwd == "" {
+		firstLine = `not a json line at all`
+	} else {
+		firstLine = fmt.Sprintf(`{"timestamp":"2026-03-%02dT11:00:00.000Z","type":"session_meta","payload":{"id":"%s","cwd":"%s","cli_version":"0.116.0","source":"cli"}}`, day, sessionID, cwd)
+	}
+	content := firstLine + "\n" + fmt.Sprintf(`{"timestamp":"2026-03-%02dT11:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}`, day) + "\n"
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestDiscoverSessionsFiltered_ScopesToMatchingCWD(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(t.TempDir(), "session_index.jsonl")
+
+	pathA := writeRolloutFile(t, dir, 1, "sess-a-0000-0000-0000-000000000000", "/tmp/project-a")
+	pathB := writeRolloutFile(t, dir, 2, "sess-b-0000-0000-0000-000000000000", "/tmp/project-b")
+	pathMalformed := writeRolloutFile(t, dir, 3, "sess-c-0000-0000-0000-000000000000", "")
+
+	matchA := func(cwd string) bool { return cwd == "/tmp/project-a" }
+
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matchA)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	gotPaths := make(map[string]bool)
+	for _, s := range sessions {
+		gotPaths[s.JSONLPath] = true
+	}
+
+	if !gotPaths[pathA] {
+		t.Errorf("expected matching cwd file %s to be included", pathA)
+	}
+	if !gotPaths[pathMalformed] {
+		t.Errorf("expected malformed-first-line file %s to be included (conservative fallback)", pathMalformed)
+	}
+	if gotPaths[pathB] {
+		t.Errorf("did not expect non-matching cwd file %s to be included", pathB)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("got %d sessions, want 2", len(sessions))
+	}
+}
+
+func TestDiscoverSessionsFiltered_NilMatcherReturnsAll(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(t.TempDir(), "session_index.jsonl")
+
+	writeRolloutFile(t, dir, 1, "sess-a-0000-0000-0000-000000000000", "/tmp/project-a")
+	writeRolloutFile(t, dir, 2, "sess-b-0000-0000-0000-000000000000", "/tmp/project-b")
+	writeRolloutFile(t, dir, 3, "sess-c-0000-0000-0000-000000000000", "")
+
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sessions) != 3 {
+		t.Fatalf("got %d sessions, want 3 (nil matcher must not filter anything)", len(sessions))
+	}
+}
+
+func TestDiscoverSessionsFiltered_CacheHitFilteredWithoutFileRead(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(t.TempDir(), "session_index.jsonl")
+
+	pathA := writeRolloutFile(t, dir, 1, "sess-a-0000-0000-0000-000000000000", "/tmp/project-a")
+	pathB := writeRolloutFile(t, dir, 2, "sess-b-0000-0000-0000-000000000000", "/tmp/project-b")
+
+	cache := model.NewSessionCache()
+	// Prime the cache with a full parse (nil matcher) so both files are cached.
+	if _, err := discoverSessionsFromDir(dir, indexPath, cache, nil); err != nil {
+		t.Fatalf("priming pass: unexpected error: %v", err)
+	}
+
+	matchA := func(cwd string) bool { return cwd == "/tmp/project-a" }
+	sessions, err := discoverSessionsFromDir(dir, indexPath, cache, matchA)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	gotPaths := make(map[string]bool)
+	for _, s := range sessions {
+		gotPaths[s.JSONLPath] = true
+	}
+	if !gotPaths[pathA] {
+		t.Errorf("expected cached matching-cwd file %s to be included", pathA)
+	}
+	if gotPaths[pathB] {
+		t.Errorf("did not expect cached non-matching-cwd file %s to be included", pathB)
+	}
+}
+
+func TestDiscoverSessions_StillReturnsEverything(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(t.TempDir(), "session_index.jsonl")
+
+	writeRolloutFile(t, dir, 1, "sess-a-0000-0000-0000-000000000000", "/tmp/project-a")
+	writeRolloutFile(t, dir, 2, "sess-b-0000-0000-0000-000000000000", "/tmp/project-b")
+
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("got %d sessions, want 2", len(sessions))
 	}
 }
