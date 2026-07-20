@@ -53,15 +53,34 @@ type pickerModel struct {
 	status   string
 	dirLabel string
 	now      time.Time
+	height   int // terminal height from the last tea.WindowSizeMsg; 0 = unknown
 }
+
+// defaultVisibleRows is the row budget View falls back to when the terminal
+// height is unknown (height == 0, e.g. in unit tests that never deliver a
+// tea.WindowSizeMsg).
+const defaultVisibleRows = 20
+
+// chromeLines is the number of non-row lines View always emits: the box's
+// top border, the title, the blank line separating the title from the rows,
+// the box's bottom border, and the footer. The status line, when present,
+// and the "N more" clip indicators are counted on top of this.
+const chromeLines = 5
 
 func (m pickerModel) Init() tea.Cmd { return nil }
 
 func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
-	if !ok {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.height = msg.Height
 		return m, nil
+	case tea.KeyMsg:
+		return m.updateKey(msg)
 	}
+	return m, nil
+}
+
+func (m pickerModel) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key.String() {
 	case "up", "k":
 		if m.cursor > 0 {
@@ -100,9 +119,75 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// rowBudget returns how many session rows View can render: the terminal
+// height minus chromeLines minus one more if a status line is showing, with
+// a floor of 1. Falls back to defaultVisibleRows when the height is unknown.
+func (m pickerModel) rowBudget() int {
+	if m.height <= 0 {
+		return defaultVisibleRows
+	}
+	budget := m.height - chromeLines
+	if m.status != "" {
+		budget--
+	}
+	if budget < 1 {
+		budget = 1
+	}
+	return budget
+}
+
+// visibleRange returns the half-open row window [start, end) of at most
+// height rows that contains cursor, scrolling the window — never the
+// cursor — as needed to stay within [0, total). When the whole list fits,
+// it returns the full range.
+func visibleRange(cursor, total, height int) (start, end int) {
+	if height <= 0 || total <= height {
+		return 0, total
+	}
+	start = cursor - height/2
+	if start < 0 {
+		start = 0
+	}
+	end = start + height
+	if end > total {
+		end = total
+		start = end - height
+		if start < 0 {
+			start = 0
+		}
+	}
+	return start, end
+}
+
 func (m pickerModel) View() string {
+	total := len(m.sessions)
+	budget := m.rowBudget()
+	start, end := visibleRange(m.cursor, total, budget)
+	clippedAbove := start > 0
+	clippedBelow := end < total
+	// The clip indicators themselves consume rows out of the same budget,
+	// so once we know we need one, shrink the budget and re-window.
+	if clippedAbove {
+		budget--
+	}
+	if clippedBelow {
+		budget--
+	}
+	if clippedAbove || clippedBelow {
+		if budget < 1 {
+			budget = 1
+		}
+		start, end = visibleRange(m.cursor, total, budget)
+		clippedAbove = start > 0
+		clippedBelow = end < total
+	}
+
 	var rows []string
-	for i, s := range m.sessions {
+	if clippedAbove {
+		rows = append(rows, chatops.StyleMuted.Render(fmt.Sprintf("  … %d more above", start)))
+	}
+	for i := start; i < end; i++ {
+		s := m.sessions[i]
 		marker := "  "
 		if i == m.cursor {
 			marker = styleCursor.Render("▸ ")
@@ -115,7 +200,11 @@ func (m pickerModel) View() string {
 		}
 		rows = append(rows, row)
 	}
-	title := chatops.StyleTableHeader.Render(fmt.Sprintf("Sessions in %s (%d)", m.dirLabel, len(m.sessions)))
+	if clippedBelow {
+		rows = append(rows, chatops.StyleMuted.Render(fmt.Sprintf("  … %d more below", total-end)))
+	}
+
+	title := chatops.StyleTableHeader.Render(fmt.Sprintf("Sessions in %s (%d)", m.dirLabel, total))
 	box := stylePickerBox.Render(title + "\n\n" + strings.Join(rows, "\n"))
 	footer := chatops.StyleFooter.Render("  ↑/↓ move · enter open · c copy resume cmd · q quit")
 	if m.status != "" {

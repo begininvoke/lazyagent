@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -119,6 +120,146 @@ func TestTitleFor(t *testing.T) {
 	}
 	if got := titleFor(&model.Session{}, ""); got != "(no messages)" {
 		t.Errorf("fallback, got %q", got)
+	}
+}
+
+func TestPickerCKeyOnGrokShowsStatusAndStaysOpen(t *testing.T) {
+	m := pickerModel{sessions: []*model.Session{{Agent: "grok", SessionID: "g"}}, titles: []string{"t"}}
+	next, cmd := m.Update(keyRune('c'))
+	m = next.(pickerModel)
+	if cmd != nil {
+		t.Fatal("picker must stay open when the row has no resume command")
+	}
+	if m.status == "" {
+		t.Fatal("expected a status message for grok")
+	}
+	if m.action == actionCopy {
+		t.Fatal("action must not be actionCopy when there is nothing to copy")
+	}
+}
+
+func TestPickerCKeyOnCopyableSessionCopiesAndQuits(t *testing.T) {
+	// opencode has a display resume command (copyable) but no executable argv.
+	m := pickerModel{sessions: []*model.Session{{Agent: "opencode", SessionID: "o"}}, titles: []string{"t"}}
+	next, cmd := m.Update(keyRune('c'))
+	m = next.(pickerModel)
+	if m.action != actionCopy {
+		t.Fatalf("action = %v, want actionCopy", m.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected tea.Quit after copy")
+	}
+}
+
+func TestPickerArrowAliasNavigation(t *testing.T) {
+	m := pickerModel{
+		sessions: []*model.Session{
+			{Agent: "claude", SessionID: "a"},
+			{Agent: "claude", SessionID: "b"},
+		},
+		titles: []string{"one", "two"},
+	}
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = next.(pickerModel)
+	if m.cursor != 1 {
+		t.Fatalf("down arrow: cursor = %d, want 1", m.cursor)
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = next.(pickerModel)
+	if m.cursor != 0 {
+		t.Fatalf("up arrow: cursor = %d, want 0", m.cursor)
+	}
+}
+
+func TestVisibleRangeWithinHeightReturnsFullRange(t *testing.T) {
+	start, end := visibleRange(2, 5, 20)
+	if start != 0 || end != 5 {
+		t.Errorf("visibleRange(2,5,20) = (%d,%d), want (0,5)", start, end)
+	}
+}
+
+func TestVisibleRangeAtTop(t *testing.T) {
+	start, end := visibleRange(0, 100, 10)
+	if start != 0 || end != 10 {
+		t.Errorf("visibleRange(0,100,10) = (%d,%d), want (0,10)", start, end)
+	}
+}
+
+func TestVisibleRangeAtBottom(t *testing.T) {
+	start, end := visibleRange(99, 100, 10)
+	if start != 90 || end != 100 {
+		t.Errorf("visibleRange(99,100,10) = (%d,%d), want (90,100)", start, end)
+	}
+}
+
+func TestVisibleRangeInMiddleIsCentered(t *testing.T) {
+	start, end := visibleRange(50, 100, 10)
+	if start != 45 || end != 55 {
+		t.Errorf("visibleRange(50,100,10) = (%d,%d), want (45,55)", start, end)
+	}
+}
+
+func TestVisibleRangeCursorAlwaysWithinWindow(t *testing.T) {
+	total := 100
+	height := 7
+	for cursor := 0; cursor < total; cursor++ {
+		start, end := visibleRange(cursor, total, height)
+		if cursor < start || cursor >= end {
+			t.Fatalf("cursor %d out of window [%d,%d)", cursor, start, end)
+		}
+		if end-start > height {
+			t.Fatalf("window [%d,%d) exceeds height %d", start, end, height)
+		}
+	}
+}
+
+func TestPickerWindowFollowsCursorAfterWindowSizeMsg(t *testing.T) {
+	sessions := make([]*model.Session, 30)
+	titles := make([]string, 30)
+	for i := range sessions {
+		sessions[i] = &model.Session{Agent: "claude", SessionID: fmt.Sprintf("s%d", i)}
+		titles[i] = fmt.Sprintf("session %d", i)
+	}
+	m := pickerModel{sessions: sessions, titles: titles}
+
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
+	m = next.(pickerModel)
+	if m.height != 15 {
+		t.Fatalf("height = %d, want 15", m.height)
+	}
+
+	// Cursor starts at 0: the window must start at 0.
+	budget := m.rowBudget()
+	start, end := visibleRange(m.cursor, len(m.sessions), budget)
+	if start != 0 {
+		t.Fatalf("initial window start = %d, want 0", start)
+	}
+	if m.cursor < start || m.cursor >= end {
+		t.Fatalf("cursor %d not within initial window [%d,%d)", m.cursor, start, end)
+	}
+
+	// Drive the cursor to the bottom; the window must follow and reach the end.
+	for i := 0; i < len(sessions)-1; i++ {
+		next, _ = m.Update(keyRune('j'))
+		m = next.(pickerModel)
+	}
+	if m.cursor != len(sessions)-1 {
+		t.Fatalf("cursor = %d, want %d", m.cursor, len(sessions)-1)
+	}
+	budget = m.rowBudget()
+	start, end = visibleRange(m.cursor, len(m.sessions), budget)
+	if m.cursor < start || m.cursor >= end {
+		t.Fatalf("cursor %d not within window [%d,%d) at bottom", m.cursor, start, end)
+	}
+	if end != len(sessions) {
+		t.Fatalf("window should reach the end when cursor is at the bottom, got end=%d", end)
+	}
+}
+
+func TestPickerRowBudgetFallsBackWhenHeightUnknown(t *testing.T) {
+	m := pickerModel{}
+	if got := m.rowBudget(); got != defaultVisibleRows {
+		t.Errorf("rowBudget() with unknown height = %d, want %d", got, defaultVisibleRows)
 	}
 }
 
