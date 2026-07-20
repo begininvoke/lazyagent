@@ -104,7 +104,7 @@ Flags:
 		fmt.Fprintf(os.Stderr, "No sessions found in %s.\n", abbreviateHome(dir))
 		return 0
 	}
-	if !isatty.IsTerminal(os.Stdin.Fd()) {
+	if !isatty.IsTerminal(os.Stdin.Fd()) || !isatty.IsTerminal(os.Stderr.Fd()) {
 		fmt.Fprintln(os.Stderr, "Error: the interactive picker needs a terminal (use --json for scripted output)")
 		return 2
 	}
@@ -161,7 +161,7 @@ func openSession(s *model.Session) int {
 // abbreviateHome shortens a path with the user's home directory to ~/...
 func abbreviateHome(path string) string {
 	home, err := os.UserHomeDir()
-	if err == nil && home != "" && strings.HasPrefix(path, home) {
+	if err == nil && home != "" && (path == home || strings.HasPrefix(path, home+"/")) {
 		return "~" + strings.TrimPrefix(path, home)
 	}
 	return path

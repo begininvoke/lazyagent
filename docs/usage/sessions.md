@@ -74,6 +74,6 @@ copied to the clipboard instead; Grok has no resume command.
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success — including quitting the picker or an empty listing |
-| 1 | Runtime failure (discovery, resume exec, clipboard) |
-| 2 | Usage error (unknown `--agent`, `--dir` not a directory, no TTY without `--json`) |
+| `0` | Success — including quitting the picker or an empty listing |
+| `1` | Runtime failure (discovery, resume exec, clipboard) |
+| `2` | Usage error (unknown `--agent`, `--dir` not a directory, no TTY without `--json`) |
