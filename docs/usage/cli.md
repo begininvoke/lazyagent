@@ -11,6 +11,7 @@ This page documents the root `lazyagent` command — the one you run to monitor 
 - [`lazyagent compact`](../maintenance/compact.md) — truncate bulky payloads in place
 - [`lazyagent search`](../maintenance/search.md) — search transcript-file agents with highlighted snippets
 - [`lazyagent limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage summary; add `--detailed` for pace
+- [`lazyagent sessions`](sessions.md) — list sessions for the current directory and reopen one
 
 ## Synopsis
 
