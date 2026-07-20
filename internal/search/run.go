@@ -237,21 +237,9 @@ func openResult(result sessionResult) int {
 }
 
 func resumeCommand(agent, sessionID string) (*exec.Cmd, string) {
-	if sessionID == "" {
+	argv := core.ResumeArgv(agent, sessionID)
+	if argv == nil {
 		return nil, ""
 	}
-	switch agent {
-	case "claude":
-		return exec.Command("claude", "--resume", sessionID), core.ResumeCommand(agent, sessionID)
-	case "codex":
-		return exec.Command("codex", "resume", sessionID), core.ResumeCommand(agent, sessionID)
-	case "amp":
-		return exec.Command("amp", "threads", "continue", sessionID), core.ResumeCommand(agent, sessionID)
-	case "pi":
-		return exec.Command("pi", "--session", sessionID), core.ResumeCommand(agent, sessionID)
-	case "kimi":
-		return exec.Command("kimi", "--resume", sessionID), core.ResumeCommand(agent, sessionID)
-	default:
-		return nil, ""
-	}
+	return exec.Command(argv[0], argv[1:]...), core.ResumeCommand(agent, sessionID)
 }
