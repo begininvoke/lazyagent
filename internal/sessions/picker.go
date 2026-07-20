@@ -134,6 +134,9 @@ func agentColor(agent string) lipgloss.Color {
 // runPicker shows the interactive list and returns the chosen session and
 // action. A nil session means the user quit without choosing.
 func runPicker(list []*model.Session, titles []string, dirLabel string) (*model.Session, pickerAction, error) {
+	if len(list) == 0 {
+		return nil, actionQuit, nil
+	}
 	m := pickerModel{sessions: list, titles: titles, dirLabel: dirLabel, now: time.Now()}
 	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stderr))
 	final, err := p.Run()

@@ -121,3 +121,16 @@ func TestTitleFor(t *testing.T) {
 		t.Errorf("fallback, got %q", got)
 	}
 }
+
+func TestRunPickerEmptyList(t *testing.T) {
+	s, action, err := runPicker(nil, nil, "x")
+	if s != nil {
+		t.Errorf("session = %v, want nil", s)
+	}
+	if action != actionQuit {
+		t.Errorf("action = %v, want actionQuit", action)
+	}
+	if err != nil {
+		t.Errorf("err = %v, want nil", err)
+	}
+}
