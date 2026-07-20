@@ -147,6 +147,8 @@ type CodexProvider struct {
 	cache *model.SessionCache
 }
 
+var _ DirScopedProvider = (*CodexProvider)(nil)
+
 // NewCodexProvider creates a CodexProvider.
 func NewCodexProvider() *CodexProvider {
 	return &CodexProvider{cache: model.NewSessionCache()}
