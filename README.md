@@ -32,7 +32,7 @@ That said, lazyagent and its API are **fully open source**. If you'd rather not 
 
 ## News
 
-📢 **Chat maintenance is here!** Subcommands that keep your agent transcripts (and your rate limits) under control:
+📢 **Session tools are here!** Commands to find, reopen, search, and maintain your agent sessions — plus keep rate-limit usage visible:
 
 - **[`lazyagent prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
 - **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, Codex, Grok, and Kimi.
@@ -41,7 +41,7 @@ That said, lazyagent and its API are **fully open source**. If you'd rather not 
 - **[`lazyagent sessions`](docs/usage/sessions.md)** — list every session recorded for the current directory — across all agents — and reopen one with the originating agent's CLI. Interactive picker, `--json` for scripts.
 - **Outbound webhooks on session state transitions** — send a signed JSON payload to Slack, a custom dashboard, or a CI endpoint whenever a session goes idle, waits for input, or changes state. See [Webhooks](docs/reference/webhooks.md).
 
-Typical savings on a year of daily use: **80+ MiB reclaimed** across a few commands, with every rewrite validated and backed up by default.
+Typical savings on a year of daily use: **80+ MiB reclaimed** across the cleanup commands, with every rewrite validated and backed up by default.
 
 ## Why lazyagent?
 
@@ -97,6 +97,7 @@ lazyagent --tui --gui --api      Run everything together
 lazyagent prune --days N         Delete chat sessions older than N days
 lazyagent compact                Shrink chat files by truncating bulky payloads
 lazyagent search "query"         Search chat transcripts with snippets
+lazyagent sessions               List and reopen sessions for the current directory
 lazyagent limits                 Show 5h / weekly / monthly usage summary
 lazyagent passphrase             Set or rotate the HTTP API passphrase
 lazyagent --help                 Show full help
@@ -111,6 +112,7 @@ Full documentation — supported agents, activity states, keybindings, configura
   - [Getting started](docs/getting-started/) — install, quickstart
   - [Concepts](docs/concepts/) — how it works, supported agents, activity states, session info
   - [Interfaces](docs/interfaces/) — terminal UI, macOS GUI, HTTP API
+  - [Usage](docs/usage/) — CLI reference, directory-scoped sessions, recipes
   - [Maintenance](docs/maintenance/) — `prune`, `compact`, `search`, and `limits` commands
   - [Reference](docs/reference/) — configuration, architecture, development, roadmap
 

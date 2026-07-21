@@ -49,6 +49,19 @@ Right-click the tray icon for a compact menu:
 
 The GUI uses Catppuccin Mocha as its theme and renders sparklines as real SVG area charts (unlike the TUI's Unicode braille). Activity badges use the same color taxonomy across all interfaces.
 
+## Startup and cache
+
+The initial session list loads progressively: results appear as each agent
+provider finishes instead of the panel waiting for the slowest provider.
+Subsequent changes continue to arrive through the normal watcher and polling
+paths.
+
+The GUI reuses lazyagent's persistent discovery cache across process runs.
+This makes later startups faster but also means session metadata and short
+transcript snippets may be stored in the system cache directory. See
+[Persistent discovery cache](../concepts/how-it-works.md#persistent-discovery-cache)
+for location, permissions, and cleanup behavior.
+
 ## Combining with other interfaces
 
 ```bash

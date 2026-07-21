@@ -178,6 +178,14 @@ Three mechanisms keep the API current:
 
 SSE clients receive pushes from all three. REST clients see the latest state on each request.
 
+At startup, the API completes its initial discovery before it begins serving
+requests, so the first REST response and SSE snapshot are complete rather
+than progressively populated. It still reuses lazyagent's persistent
+discovery cache to keep that initial scan fast. The cache may contain session
+metadata and short transcript snippets; see
+[Persistent discovery cache](../concepts/how-it-works.md#persistent-discovery-cache)
+for location, permissions, and cleanup behavior.
+
 ## Network access
 
 By default the server binds to `127.0.0.1` (localhost only). To expose it on the network — e.g. for a mobile companion app on the same Wi-Fi:

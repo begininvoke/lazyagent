@@ -15,7 +15,8 @@ lazyagent/
 ├── internal/
 │   ├── core/                   # Shared: watcher, activity, session, config
 │   │   └── provider.go         # SessionProvider interface + Multi/Live/Pi/OpenCode/Kilo/Cursor/Codex/Amp/Grok/Kimi providers
-│   ├── model/                  # Shared types (Session, ToolCall, DesktopMeta, …)
+│   ├── model/                  # Shared session types + incremental/persistent cache state
+│   ├── diskcache/              # Atomic, permission-safe JSON cache I/O
 │   ├── amp/                    # Amp CLI thread parsing and session discovery
 │   ├── claude/                 # Claude Code JSONL parsing, Desktop sidecar, session discovery
 │   ├── codex/                  # Codex CLI JSONL parsing and session discovery
@@ -35,6 +36,7 @@ lazyagent/
 │   ├── prune/                  # `lazyagent prune` — delete old or orphaned chat files
 │   ├── compact/                # `lazyagent compact` — truncate oversized session payloads
 │   ├── search/                 # `lazyagent search` — local transcript full-text search
+│   ├── sessions/               # `lazyagent sessions` — directory-scoped listing and picker
 │   ├── limits/                 # `lazyagent limits` — rate-limit / billing snapshots
 │   ├── demo/                   # Fake session data for screenshots
 │   └── assets/                 # Embedded frontend dist (go:embed)
@@ -52,25 +54,43 @@ lazyagent/
 
 ### `internal/core`
 
-The shared engine: session provider interface, file watcher (fsnotify-based, with polling fallback), activity-state classifier, cost estimation, config loading, and a typed in-process `EventBus` that publishes activity-state transitions (consumed by `internal/webhook`). Every other package imports it.
+The shared engine: session provider interface, file watcher (fsnotify-based, with polling fallback), activity-state classifier, cost estimation, config loading, and a typed in-process `EventBus` that publishes activity-state transitions (consumed by `internal/webhook`). Most feature packages build on it.
 
-### `internal/model`
+### `internal/model`, `internal/diskcache`
 
-Pure types — `Session`, `ToolCall`, `ConversationMessage`, `DesktopMeta`, and the `SessionCache` that backs incremental JSONL parsing. No behavior, no imports beyond `time` and `sync`.
+`internal/model` owns `Session`, `ToolCall`, `ConversationMessage`,
+`DesktopMeta`, and the `SessionCache` that backs incremental JSONL parsing.
+The cache can be saved and restored between processes; `internal/diskcache`
+provides the shared atomic JSON read/write mechanics and enforces restrictive
+file and directory permissions.
 
 ### Per-agent providers (`internal/amp`, `claude`, `codex`, `cursor`, `grok`, `kilo`, `kimi`, `pi`, `opencode`)
 
-Each owns the on-disk layout and parsing for its agent. They expose discovery functions that return `[]*model.Session`, integrated via the `SessionProvider` interface in `core/provider.go`.
+Each owns the on-disk layout and parsing for its agent. They expose discovery functions integrated through `SessionProvider` in `core/provider.go`; optional capability interfaces add directory-scoped discovery, streaming batches, and persistent caches where the provider can implement them efficiently.
 
 OpenCode and Kilo share the `internal/opencodefamily` parser because their local SQLite schemas are compatible; their provider packages only declare data directories, database names, and agent keys.
 
 ### `internal/ui`, `internal/tray`, `internal/api`
 
-The three interfaces. Each consumes `SessionProvider.DiscoverSessions()` on a loop and renders the result. They're decoupled enough that `--tui --gui --api` runs them all concurrently without coordination overhead.
+The three interfaces consume a `SessionManager`, which coordinates discovery,
+filtering, activity updates, watchers, and persistent provider caches. The TUI
+and GUI use streaming discovery for their first load so sessions appear as
+providers finish; the API performs a synchronous first load so it never serves
+a partial initial snapshot. Later updates use the same watcher/polling paths.
+The interfaces remain decoupled enough that `--tui --gui --api` runs them all
+concurrently.
+
+### `internal/sessions`
+
+Implements `lazyagent sessions`: directory matching, deterministic sorting,
+the progressive Bubble Tea picker, stable JSON output, resume/copy behavior,
+and the one-shot command's cache lifecycle. Directory matching helpers live
+in `internal/core` so the HTTP API's `GET /api/sessions?dir=` filter uses the
+same semantics.
 
 ### `internal/chatops`
 
-A small toolbox of CLI helpers shared by the maintenance commands: the interactive agent picker, tables, the destructive-operation disclaimer, the "all clean" zen box, `y/N` confirmation, `EnsureWithin` path guard, and `HumanBytes` formatter.
+A small toolbox of CLI helpers shared by session and maintenance commands: the interactive agent picker, tables, notices, the destructive-operation disclaimer, the "all clean" zen box, `y/N` confirmation, `EnsureWithin` path guard, and `HumanBytes` formatter.
 
 ### `internal/prune`, `internal/compact`
 

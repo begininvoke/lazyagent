@@ -39,6 +39,19 @@ It's the default because it's the most information-dense interface. The layout i
 - **Braille spinner** — animates while the session is actively executing.
 - **Sparkline** — a Unicode braille mini-chart of the last N minutes of activity.
 
+## Startup and cache
+
+The first session load is progressive: results appear as each agent provider
+finishes, while the title bar shows `loading…`. Once every provider has
+completed, the indicator disappears and normal watcher-driven refreshes take
+over.
+
+The TUI reuses lazyagent's persistent discovery cache across process runs.
+This makes later startups faster but also means session metadata and short
+transcript snippets may be stored in the system cache directory. See
+[Persistent discovery cache](../concepts/how-it-works.md#persistent-discovery-cache)
+for location, permissions, and cleanup behavior.
+
 ## Themes
 
 Two themes ship in: `dark` (default) and `light`. Switch by setting `tui.theme` in [Configuration](../reference/configuration.md):

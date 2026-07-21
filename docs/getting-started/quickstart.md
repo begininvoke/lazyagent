@@ -50,11 +50,12 @@ lazyagent --agent all       # every agent (default)
 
 Every value for `--agent` is documented in [CLI reference](../usage/cli.md#-agent-name).
 
-## Maintenance at a glance
+## Session commands at a glance
 
-The maintenance subcommands keep chat transcripts and usage windows under control:
+The companion commands let you reopen, search, and maintain sessions or inspect usage windows:
 
 ```bash
+lazyagent sessions               # list and reopen sessions for this directory
 lazyagent prune --days 30        # delete sessions idle for >30 days
 lazyagent compact                # shrink session files in place
 lazyagent search "query"         # search local transcripts
@@ -63,6 +64,7 @@ lazyagent limits                 # show rate-limit / billing usage summary
 
 `prune` and `compact` support `--dry-run` and an interactive agent picker. Full reference:
 
+- [Sessions for a directory](../usage/sessions.md)
 - [Prune old sessions](../maintenance/prune.md)
 - [Compact session files](../maintenance/compact.md)
 - [Search chat transcripts](../maintenance/search.md)

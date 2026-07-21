@@ -145,18 +145,19 @@ Prints the full usage text, including short keybinding reference.
 
 ## Subcommand dispatch
 
-When the first positional argument is `prune`, `compact`, `search`, `limits`, or `passphrase`, lazyagent switches into subcommand mode — root-level flags are ignored and the subcommand parses its own set.
+When the first positional argument is `prune`, `compact`, `search`, `sessions`, `limits`, or `passphrase`, lazyagent switches into subcommand mode — root-level flags are ignored and the subcommand parses its own set.
 
 ```bash
 lazyagent prune --days 30          # prune subcommand
 lazyagent compact --agent claude   # compact subcommand
 lazyagent search --agent codex api # search subcommand
+lazyagent sessions --agent codex   # sessions subcommand
 lazyagent limits --agent claude    # limits subcommand
 lazyagent passphrase               # rotate the API passphrase
 lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
 ```
 
-See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), [`search`](../maintenance/search.md), and [`limits`](../maintenance/limits.md) for their flag tables.
+See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), [`search`](../maintenance/search.md), [`sessions`](sessions.md), and [`limits`](../maintenance/limits.md) for their flag tables.
 
 ### `search`
 
@@ -231,6 +232,9 @@ lazyagent --demo --gui
 
 # Search chat history
 lazyagent search "api server"
+
+# List and reopen sessions for the current directory
+lazyagent sessions
 ```
 
 ## Exit codes
@@ -240,7 +244,7 @@ lazyagent search "api server"
 | `0` | Normal exit |
 | `1` | Runtime error (bind failure, invalid argument, IO error, …) — details printed to stderr |
 
-The maintenance subcommands define their own exit codes; see their respective pages.
+Subcommands define their own exit codes; see their respective reference pages.
 
 ## Environment variables
 

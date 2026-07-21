@@ -70,6 +70,20 @@ copied to the clipboard instead; Grok has no resume command.
 ]
 ```
 
+Every object always contains all seven fields. Fields that do not apply are
+emitted as empty strings rather than omitted, so scripts can rely on a stable
+shape.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `agent` | string | Agent that owns the session |
+| `session_id` | string | Agent-specific session identifier |
+| `name` | string | Custom session name, agent-provided name, or `""` when neither exists |
+| `cwd` | string | Recorded working directory |
+| `last_activity` | string | Last activity timestamp in RFC 3339 format |
+| `messages` | integer | Number of messages recorded for the session |
+| `resume_command` | string | Command to resume the session, or `""` when the agent exposes none |
+
 ## Performance
 
 ### Progressive picker
@@ -78,7 +92,10 @@ When you run `lazyagent sessions`, the picker opens immediately and results stre
 
 ### Discovery cache
 
-The sessions command maintains persistent discovery caches under your system cache directory:
+All session-discovery surfaces — `lazyagent sessions`, the TUI, the macOS GUI,
+and the HTTP API — maintain persistent discovery caches under your system
+cache directory. They use the same location and file format, so a warm cache
+created by one surface can speed up another:
 
 - **macOS**: `~/Library/Caches/lazyagent/`
 - **Linux**: `~/.cache/lazyagent/`
@@ -86,7 +103,9 @@ The sessions command maintains persistent discovery caches under your system cac
 
 Cache files follow the pattern `discovery-<agent>.json` and `cwdindex-<agent>.json` (for example, `discovery-claude.json` and `cwdindex-claude.json` for Claude Code). Files are created with permission `0600`; the directory has `0700`.
 
-Cache contents are **advisory**: deleting the cache directory is always safe and won't break anything. On the next run, `lazyagent sessions` simply re-scans the session data and rebuilds the cache.
+Cache contents are **advisory**: deleting these files is always safe and won't
+break anything. The next lazyagent surface you start simply re-scans the
+session data and rebuilds them.
 
 Repeat runs typically complete in tens of milliseconds when caches are warm; only sessions from files that changed on disk are re-read.
 

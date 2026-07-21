@@ -5,7 +5,7 @@ sidebar:
   order: 4
 ---
 
-lazyagent computes a single `Session` record per conversation, regardless of which agent produced it. The record is shown in the detail panel (TUI and GUI), returned by `/api/sessions/{id}`, and used as the input to both maintenance subcommands.
+lazyagent computes a single `Session` record per conversation, regardless of which agent produced it. The record is shown in the detail panel (TUI and GUI), returned by `/api/sessions/{id}`, and reused by session-oriented commands such as `lazyagent sessions`, `prune`, `compact`, and `search`.
 
 ## The fields
 
