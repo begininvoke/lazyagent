@@ -16,6 +16,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/sessions"
 	"github.com/illegalstudio/lazyagent/internal/version"
 	"github.com/illegalstudio/lazyagent/internal/webhook"
 	"github.com/pkg/browser"
@@ -52,6 +53,9 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 	}
 	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
 	s.manager.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
+	if dir, ok := sessions.ResolveCacheDir(); ok {
+		s.manager.EnableCachePersistence(dir)
+	}
 	if len(cfg.ValidWebhooks()) > 0 {
 		bus := core.NewEventBus()
 		s.manager.SetEventBus(bus)
@@ -63,8 +67,24 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 		return err
 	}
 
-	// Initial load
-	_ = s.manager.Reload()
+	// Progressive first load: BeginReloadStreaming synchronously marks the
+	// stream as in-flight (core.SessionManager's streamInFlight guard)
+	// BEFORE watchLoop starts below -- watchLoop's ticker/event cases call
+	// Reload/UpdateActivities unconditionally on every tick or file event,
+	// so this ordering is what actually prevents a race: a bare
+	// `go s.manager.ReloadStreaming(...)` followed immediately by
+	// `go s.watchLoop()` could not otherwise guarantee the guard is active
+	// before watchLoop's first tick or an already-queued watcher event (the
+	// watcher was started above, so its channel can already have one
+	// buffered) gets processed. The actual (potentially slow) discovery
+	// work still runs in the background so ServiceStartup returns
+	// immediately. Each batch calls emitUpdate, so the frontend's existing
+	// "sessions:updated" listener (App.svelte) re-fetches via GetSessions
+	// and the list grows in place — no frontend change needed, since
+	// GetSessions already just returns whatever's currently in the
+	// manager. Subsequent reloads (watchLoop below) stay synchronous.
+	run := s.manager.BeginReloadStreaming()
+	go run(s.emitUpdate)
 
 	// Background goroutine: watch for file changes + periodic refresh
 	go s.watchLoop()
@@ -83,7 +103,7 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 
 // ServiceShutdown is called by Wails when the app stops.
 func (s *SessionService) ServiceShutdown() error {
-	s.manager.StopWatcher()
+	s.manager.Close()
 	return nil
 }
 

@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestResumeCommand(t *testing.T) {
 	tests := []struct {
@@ -22,5 +25,32 @@ func TestResumeCommand(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("ResumeCommand(%q, %q) = %q, want %q", tt.agent, tt.sessionID, got, tt.want)
 		}
+	}
+}
+
+func TestResumeArgv(t *testing.T) {
+	cases := []struct {
+		agent string
+		want  []string
+	}{
+		{"claude", []string{"claude", "--resume", "abc"}},
+		{"codex", []string{"codex", "resume", "abc"}},
+		{"amp", []string{"amp", "threads", "continue", "abc"}},
+		{"pi", []string{"pi", "--session", "abc"}},
+		{"kimi", []string{"kimi", "--resume", "abc"}},
+		// Display-only agents: copyable via ResumeCommand but not executable.
+		{"opencode", nil},
+		{"kilo", nil},
+		{"cursor", nil},
+		{"grok", nil},
+		{"unknown", nil},
+	}
+	for _, c := range cases {
+		if got := ResumeArgv(c.agent, "abc"); !slices.Equal(got, c.want) {
+			t.Errorf("ResumeArgv(%q) = %v, want %v", c.agent, got, c.want)
+		}
+	}
+	if got := ResumeArgv("claude", ""); got != nil {
+		t.Errorf("empty session ID: want nil, got %v", got)
 	}
 }

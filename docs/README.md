@@ -31,6 +31,7 @@ Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, a
 
 - [CLI reference](usage/cli.md) — every `lazyagent` flag, with syntax and examples
 - [Recipes](usage/recipes.md) — end-to-end walkthroughs for common workflows
+- [Sessions for a directory](usage/sessions.md) — list every recorded session for a directory and reopen one, across all agents
 
 ## Maintenance
 

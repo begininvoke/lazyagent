@@ -85,6 +85,29 @@ func DBPathFor(source Source) string {
 
 // DiscoverSessionsFor reads an OpenCode-compatible SQLite database and returns sessions.
 func DiscoverSessionsFor(source Source, cache *SessionCache) ([]*model.Session, error) {
+	return DiscoverSessionsForFiltered(source, cache, nil)
+}
+
+// DiscoverSessionsForFiltered reads an OpenCode-compatible SQLite database
+// like DiscoverSessionsFor, but skips loading a session's messages — the
+// expensive part of building a session, see buildSession's joined
+// message/part query — for any session whose row-level `directory` value
+// cwdMatch rules out.
+//
+// Investigation (see buildSession, which sets session.CWD = ds.Directory and
+// never touches it again): the returned Session.CWD comes solely from the
+// session row's `directory` column — no message or part data can change it.
+// So filtering on a row's Directory value before loading its messages is
+// exact: it can produce neither a false positive nor a false negative
+// relative to running DiscoverSessionsFor unfiltered and filtering the
+// result by the same matcher afterwards. The post-build recheck below is
+// kept anyway, as a cheap, always-true invariant here, for symmetry with
+// other dir-scoped providers (codex, claude) whose CWD isn't fixed at the
+// row level and so need such a recheck for correctness, not just symmetry.
+//
+// cwdMatch may be nil, in which case every session matches (equivalent to
+// DiscoverSessionsFor).
+func DiscoverSessionsForFiltered(source Source, cache *SessionCache, cwdMatch func(string) bool) ([]*model.Session, error) {
 	source = normalizeSource(source)
 	if cache == nil {
 		cache = NewSessionCache()
@@ -117,12 +140,24 @@ func DiscoverSessionsFor(source Source, cache *SessionCache) ([]*model.Session, 
 	seen := make(map[string]struct{})
 	var sessions []*model.Session
 	for _, ds := range dbSessions {
+		// Always mark the row seen (even when the prefilter below skips it)
+		// so cache.Prune doesn't evict cache entries belonging to sessions
+		// outside this call's directory scope.
 		seen[ds.ID] = struct{}{}
+
+		if cwdMatch != nil && !cwdMatch(ds.Directory) {
+			// Skip-optimization: exact, per the doc comment above — safe to
+			// skip the expensive message/part query entirely.
+			continue
+		}
 
 		// Check cache using time_updated as staleness indicator.
 		cache.mu.Lock()
 		if e, ok := cache.entries[ds.ID]; ok && e.timeUpdated == ds.TimeUpdated {
 			cache.mu.Unlock()
+			if cwdMatch != nil && !cwdMatch(e.session.CWD) {
+				continue
+			}
 			sessions = append(sessions, e.session)
 			continue
 		}
@@ -148,6 +183,11 @@ func DiscoverSessionsFor(source Source, cache *SessionCache) ([]*model.Session, 
 		cache.entries[ds.ID] = cacheEntry{timeUpdated: ds.TimeUpdated, session: session}
 		cache.mu.Unlock()
 
+		// Uniform post-build filter: an always-true invariant given the row
+		// prefilter above is exact — see doc comment — kept for symmetry.
+		if cwdMatch != nil && !cwdMatch(session.CWD) {
+			continue
+		}
 		sessions = append(sessions, session)
 	}
 

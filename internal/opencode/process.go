@@ -39,3 +39,11 @@ func DBPath() string {
 func DiscoverSessions(cache *SessionCache) ([]*model.Session, error) {
 	return opencodefamily.DiscoverSessionsFor(source, cache)
 }
+
+// DiscoverSessionsFiltered reads the OpenCode SQLite database like
+// DiscoverSessions, but skips loading messages for sessions whose directory
+// doesn't match cwdMatch (see opencodefamily.DiscoverSessionsForFiltered).
+// cwdMatch may be nil, in which case every session matches.
+func DiscoverSessionsFiltered(cache *SessionCache, cwdMatch func(string) bool) ([]*model.Session, error) {
+	return opencodefamily.DiscoverSessionsForFiltered(source, cache, cwdMatch)
+}

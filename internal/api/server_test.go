@@ -2,10 +2,14 @@ package api
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +62,35 @@ func authedGet(t *testing.T, url string) *http.Response {
 	return resp
 }
 
+// fixedSessionProvider returns a fixed set of sessions, for tests that need
+// GET /api/sessions to have known CWDs to filter against.
+type fixedSessionProvider struct {
+	sessions []*model.Session
+}
+
+func (p fixedSessionProvider) DiscoverSessions() ([]*model.Session, error) { return p.sessions, nil }
+func (fixedSessionProvider) UseWatcher() bool                              { return false }
+func (fixedSessionProvider) RefreshInterval() time.Duration                { return 0 }
+func (fixedSessionProvider) WatchDirs() []string                           { return nil }
+
+// newTestServerWithSessions is like newTestServer but seeds the manager
+// with a fixed set of sessions via one synchronous Reload, so dir-filter
+// tests have known CWDs to filter against.
+func newTestServerWithSessions(t *testing.T, sessions []*model.Session) (*Server, *httptest.Server) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	srv, err := New(":0", fixedSessionProvider{sessions: sessions}, testToken, testSalt, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	srv.ln.Close()
+	if err := srv.manager.Reload(); err != nil {
+		t.Fatalf("Reload: %v", err)
+	}
+	ts := httptest.NewServer(srv.srv.Handler)
+	return srv, ts
+}
+
 func TestGetSessions(t *testing.T) {
 	_, ts := newTestServer(t)
 	defer ts.Close()
@@ -73,6 +106,133 @@ func TestGetSessions(t *testing.T) {
 	var items []SessionItem
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		t.Fatalf("decode: %v", err)
+	}
+}
+
+// TestGetSessionsNoDirParamUnchanged is the binding "byte-identical"
+// requirement: an absent dir param and an explicit empty dir= must produce
+// exactly the same response as GET /api/sessions always has, unfiltered.
+func TestGetSessionsNoDirParamUnchanged(t *testing.T) {
+	base := t.TempDir()
+	now := time.Now()
+	sessions := []*model.Session{
+		{SessionID: "a", CWD: base, LastActivity: now},
+		{SessionID: "b", CWD: "/somewhere/else", LastActivity: now},
+	}
+	_, ts := newTestServerWithSessions(t, sessions)
+	defer ts.Close()
+
+	respNoParam := authedGet(t, ts.URL+"/api/sessions")
+	defer respNoParam.Body.Close()
+	bodyNoParam, err := io.ReadAll(respNoParam.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	respEmptyParam := authedGet(t, ts.URL+"/api/sessions?dir=")
+	defer respEmptyParam.Body.Close()
+	bodyEmptyParam, err := io.ReadAll(respEmptyParam.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(bodyNoParam, bodyEmptyParam) {
+		t.Fatalf("dir= (empty) must be byte-identical to no dir param at all\nno-param: %s\nempty:    %s", bodyNoParam, bodyEmptyParam)
+	}
+
+	var items []SessionItem
+	if err := json.Unmarshal(bodyNoParam, &items); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2 (both sessions, unfiltered)", len(items))
+	}
+}
+
+// TestGetSessionsDirFilter covers exact match, subdirectory match, and
+// false-prefix exclusion — the same matching semantics as `lazyagent
+// sessions`.
+func TestGetSessionsDirFilter(t *testing.T) {
+	base := t.TempDir()
+	sub := filepath.Join(base, "sub")
+	now := time.Now()
+	sessions := []*model.Session{
+		{SessionID: "exact", CWD: base, LastActivity: now},
+		{SessionID: "subdir", CWD: sub, LastActivity: now},
+		{SessionID: "false-prefix", CWD: base + "extra", LastActivity: now},
+		{SessionID: "unrelated", CWD: "/somewhere/else", LastActivity: now},
+	}
+	_, ts := newTestServerWithSessions(t, sessions)
+	defer ts.Close()
+
+	resp := authedGet(t, ts.URL+"/api/sessions?dir="+url.QueryEscape(base))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var items []SessionItem
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got := make(map[string]bool, len(items))
+	for _, it := range items {
+		got[it.SessionID] = true
+	}
+	if len(items) != 2 || !got["exact"] || !got["subdir"] {
+		t.Fatalf("dir filter returned %v (%d items), want exactly [exact subdir]", got, len(items))
+	}
+}
+
+// TestGetSessionsDirFilterRejectsRelativePath: the API has no meaningful
+// "current directory" for a remote client, so a non-absolute dir is a 400,
+// matching the existing error convention (JSON body with an "error" key).
+func TestGetSessionsDirFilterRejectsRelativePath(t *testing.T) {
+	_, ts := newTestServer(t)
+	defer ts.Close()
+
+	resp := authedGet(t, ts.URL+"/api/sessions?dir=relative/path")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("content-type = %q, want application/json", ct)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] == "" {
+		t.Fatal("expected a non-empty \"error\" field in the 400 body")
+	}
+}
+
+// TestGetSessionsDirFilterNonexistentDirMatchesCleanedPath is the API
+// relaxation vs. the CLI: the API may serve remote clients, so a dir that
+// doesn't exist on this machine's disk is not an error — it matches on the
+// cleaned path alone (no symlink resolution possible, no existence check).
+func TestGetSessionsDirFilterNonexistentDirMatchesCleanedPath(t *testing.T) {
+	base := t.TempDir()
+	nonexistent := filepath.Join(base, "does-not-exist")
+	now := time.Now()
+	sessions := []*model.Session{
+		{SessionID: "target", CWD: nonexistent, LastActivity: now},
+		{SessionID: "other", CWD: base, LastActivity: now},
+	}
+	_, ts := newTestServerWithSessions(t, sessions)
+	defer ts.Close()
+
+	resp := authedGet(t, ts.URL+"/api/sessions?dir="+url.QueryEscape(nonexistent))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (no existence requirement)", resp.StatusCode)
+	}
+	var items []SessionItem
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(items) != 1 || items[0].SessionID != "target" {
+		t.Fatalf("got %d items (%v), want exactly [target]", len(items), items)
 	}
 }
 

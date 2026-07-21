@@ -14,6 +14,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/sessions"
 	"github.com/illegalstudio/lazyagent/internal/version"
 )
 
@@ -64,6 +65,14 @@ type Model struct {
 	selectedID   string // session ID of the currently selected item
 	listOffset   int
 	detailOffset int
+
+	// Progressive first load (see streaming.go): the update/done channels
+	// startStreamingLoadCmd created for the in-flight
+	// core.SessionManager.ReloadStreaming call, so streamNextCmd can keep
+	// waiting on them across repeated Update calls until the stream
+	// finishes.
+	streamUpdates <-chan struct{}
+	streamDone    <-chan struct{}
 
 	width  int
 	height int
@@ -150,6 +159,9 @@ func NewModel(provider core.SessionProvider, bus *core.EventBus) Model {
 	if bus != nil {
 		mgr.SetEventBus(bus)
 	}
+	if dir, ok := sessions.ResolveCacheDir(); ok {
+		mgr.EnableCachePersistence(dir)
+	}
 	_ = mgr.StartWatcher()
 	return Model{
 		theme:     t,
@@ -158,6 +170,13 @@ func NewModel(provider core.SessionProvider, bus *core.EventBus) Model {
 		loading:   true,
 		manager:   mgr,
 	}
+}
+
+// Manager returns the underlying SessionManager so callers (main.go) can run
+// shutdown logic — e.g. Close(), which flushes the persisted discovery cache
+// if EnableCachePersistence was used — after the bubbletea program exits.
+func (m Model) Manager() *core.SessionManager {
+	return m.manager
 }
 
 func checkUpdateCmd() tea.Cmd {
@@ -170,7 +189,24 @@ func checkUpdateCmd() tea.Cmd {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{makeLoadCmd(m.manager), renderTickCmd(), checkUpdateCmd()}
+	// The initial load is the manager's progressive first load (see
+	// streaming.go) rather than a plain Reload: sessions appear as each
+	// provider member completes instead of waiting for the slowest one.
+	// Subsequent reloads (below, watcher/tick-driven) stay synchronous via
+	// makeLoadCmd/Reload -- they're incremental-fast already.
+	//
+	// BeginReloadStreaming is called synchronously, right here, BEFORE any
+	// Cmd in this batch is dispatched -- including watchCmd, whose channel
+	// can already have a queued event waiting (StartWatcher ran earlier, in
+	// NewModel). That ordering is what actually guarantees
+	// core.SessionManager's streamInFlight guard is active before a watcher
+	// event or the first tick could otherwise race the stream's own
+	// startup; deferring the flag-set into a goroutine spawned by one of
+	// these Cmds would not give the same guarantee (Go makes no promise a
+	// spawned goroutine's first statement runs before a sibling Cmd's
+	// does). See BeginReloadStreaming's doc for the full reasoning.
+	run := m.manager.BeginReloadStreaming()
+	cmds := []tea.Cmd{runStreamingLoadCmd(run), renderTickCmd(), checkUpdateCmd()}
 	if events := m.manager.WatcherEvents(); events != nil {
 		cmds = append(cmds, watchCmd(events))
 	} else {
@@ -226,6 +262,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case fileWatchMsg:
 		// A JSONL file changed — reload immediately and re-arm the watcher.
+		// If the progressive first load is still in flight, Reload() is a
+		// no-op (core.SessionManager absorbs it — see streamInFlight) rather
+		// than racing the stream's own merges; the sessionsMsg this produces
+		// still carries whatever's currently in the manager and is handled
+		// exactly like any other reload below.
 		return m, tea.Batch(makeLoadCmd(m.manager), watchCmd(m.manager.WatcherEvents()))
 
 	case renderTickMsg:
@@ -239,33 +280,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(makeLoadCmd(m.manager), tickCmd())
 
 	case sessionsMsg:
-		m.loading = false
+		// Deliberately does NOT touch m.loading: during the progressive
+		// first load, only streamDoneMsg (below) may clear it — a
+		// watcher/tick-driven reload landing mid-stream must not make the
+		// loading indicator disappear early (see fileWatchMsg above).
 		m.lastRefresh = time.Now()
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
-			m.refreshVisible()
-			// Try to restore selection by session ID.
-			found := false
-			if m.selectedID != "" {
-				for i, s := range m.visible {
-					if s.SessionID == m.selectedID {
-						m.cursor = i
-						found = true
-						break
-					}
-				}
-			}
-			if !found {
-				if n := len(m.visible); m.cursor >= n && n > 0 {
-					m.cursor = n - 1
-				}
-				if len(m.visible) > 0 {
-					m.selectedID = m.visible[m.cursor].SessionID
-				}
-			}
-			m.ensureListVisible()
+			m.afterSessionsUpdate()
 		}
+
+	case streamStartedMsg:
+		// The progressive first load's background goroutine is running;
+		// remember its channels so streamNextCmd can keep waiting on them
+		// across every subsequent batch/done message.
+		m.streamUpdates = msg.updates
+		m.streamDone = msg.done
+		return m, streamNextCmd(msg.updates, msg.done)
+
+	case streamBatchMsg:
+		// A provider member's sessions were just merged into the manager —
+		// re-render with whatever's accumulated so far and keep waiting for
+		// the next batch or completion. loading stays true.
+		m.afterSessionsUpdate()
+		return m, streamNextCmd(m.streamUpdates, m.streamDone)
+
+	case streamDoneMsg:
+		// The stream has finished — every provider member has completed (or
+		// failed; best-effort). This is the only thing that clears loading.
+		m.loading = false
+		m.lastRefresh = time.Now()
+		m.afterSessionsUpdate()
+		return m, nil
 
 	case tea.MouseMsg:
 		if !m.searchMode {
@@ -621,6 +668,36 @@ func (m *Model) refreshVisible() {
 	m.visible = m.manager.VisibleSessions()
 }
 
+// afterSessionsUpdate recomputes the visible list and preserves cursor
+// selection by session ID (or clamps into range if the previously selected
+// session disappeared) whenever the underlying session set changes — shared
+// by the periodic-reload sessionsMsg handler and the progressive
+// first-load's streamBatchMsg/streamDoneMsg handlers, which all need
+// identical selection-preserving behavior each time the manager's snapshot
+// grows or is replaced.
+func (m *Model) afterSessionsUpdate() {
+	m.refreshVisible()
+	found := false
+	if m.selectedID != "" {
+		for i, s := range m.visible {
+			if s.SessionID == m.selectedID {
+				m.cursor = i
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		if n := len(m.visible); m.cursor >= n && n > 0 {
+			m.cursor = n - 1
+		}
+		if len(m.visible) > 0 {
+			m.selectedID = m.visible[m.cursor].SessionID
+		}
+	}
+	m.ensureListVisible()
+}
+
 func (m *Model) ensureListVisible() {
 	vis := m.listVisibleRows()
 	if vis <= 0 {
@@ -791,10 +868,16 @@ func (m Model) renderTitleBar() string {
 		title += " v" + version.Version
 	}
 	left := m.sty.title.Render(title)
+	countLabel := fmt.Sprintf("%d sessions [last %dm]", len(m.visible), m.manager.WindowMinutes())
+	if m.loading {
+		// Progressive first load still in flight (see streaming.go) —
+		// disappears the moment streamDoneMsg clears m.loading.
+		countLabel += "  loading…"
+	}
 	count := lipgloss.NewStyle().
 		Background(m.theme.Primary).Foreground(m.theme.TitleSubtext).
 		Padding(0, 1).
-		Render(fmt.Sprintf("%d sessions [last %dm]", len(m.visible), m.manager.WindowMinutes()))
+		Render(countLabel)
 
 	parts := []string{left, count}
 

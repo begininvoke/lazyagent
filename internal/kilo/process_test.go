@@ -103,6 +103,100 @@ func TestDiscoverSessions_KiloFixture(t *testing.T) {
 	}
 }
 
+// TestDiscoverSessionsFiltered_WiringReachesOpenCodeFamilyAndFilters is a
+// wiring test: it proves DiscoverSessionsFiltered is reachable through the
+// kilo package's thin Source declaration and that it actually filters by
+// directory, not just that it compiles. The heavy-lifting (row-level
+// prefilter exactness, skip-optimization, equivalence property) is tested
+// once, at the shared opencodefamily engine level.
+func TestDiscoverSessionsFiltered_WiringReachesOpenCodeFamilyAndFilters(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("KILO_DATA_DIR", dir)
+	writeTwoDirFixtureDB(t, filepath.Join(dir, "kilo.db"))
+
+	matchA := func(cwd string) bool { return cwd == "/tmp/kilo-project-a" }
+	sessions, err := DiscoverSessionsFiltered(NewSessionCache(), matchA)
+	if err != nil {
+		t.Fatalf("DiscoverSessionsFiltered() error = %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("len(sessions) = %d, want 1", len(sessions))
+	}
+	if got := sessions[0]; got.SessionID != "ses_kilo_a" || got.Agent != "kilo" || got.CWD != "/tmp/kilo-project-a" {
+		t.Errorf("session = %+v, want ses_kilo_a in /tmp/kilo-project-a agent kilo", got)
+	}
+
+	all, err := DiscoverSessionsFiltered(NewSessionCache(), nil)
+	if err != nil {
+		t.Fatalf("DiscoverSessionsFiltered(nil) error = %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("len(all) = %d, want 2 (nil matcher must return everything)", len(all))
+	}
+}
+
+// writeTwoDirFixtureDB creates two sessions in two different directories,
+// each with a single well-formed message, using the minimal OpenCode-family
+// schema (see opencodefamily's writeCompatDB for the source of this shape).
+func writeTwoDirFixtureDB(t *testing.T, dbPath string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	stmts := []string{
+		`CREATE TABLE session (
+			id text PRIMARY KEY,
+			project_id text NOT NULL,
+			parent_id text,
+			directory text NOT NULL,
+			title text NOT NULL,
+			version text NOT NULL,
+			time_created integer NOT NULL,
+			time_updated integer NOT NULL,
+			time_compacting integer,
+			time_archived integer
+		)`,
+		`CREATE TABLE message (
+			id text PRIMARY KEY,
+			session_id text NOT NULL,
+			time_created integer NOT NULL,
+			time_updated integer NOT NULL,
+			data text NOT NULL
+		)`,
+		`CREATE TABLE part (
+			id text PRIMARY KEY,
+			message_id text NOT NULL,
+			session_id text NOT NULL,
+			time_created integer NOT NULL,
+			time_updated integer NOT NULL,
+			data text NOT NULL
+		)`,
+		`INSERT INTO session (id, project_id, parent_id, directory, title, version, time_created, time_updated, time_compacting, time_archived)
+		 VALUES ('ses_kilo_a', 'proj_a', NULL, '/tmp/kilo-project-a', 'A', '7.3.12', 1700000000000, 1700000001000, NULL, NULL)`,
+		`INSERT INTO session (id, project_id, parent_id, directory, title, version, time_created, time_updated, time_compacting, time_archived)
+		 VALUES ('ses_kilo_b', 'proj_b', NULL, '/tmp/kilo-project-b', 'B', '7.3.12', 1700000000000, 1700000002000, NULL, NULL)`,
+		`INSERT INTO message (id, session_id, time_created, time_updated, data)
+		 VALUES ('msg_kilo_a', 'ses_kilo_a', 1700000000000, 1700000000000, '{"role":"user","time":{"created":1700000000000}}')`,
+		`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+		 VALUES ('part_kilo_a', 'msg_kilo_a', 'ses_kilo_a', 1700000000000, 1700000000000, '{"type":"text","text":"hi from a"}')`,
+		`INSERT INTO message (id, session_id, time_created, time_updated, data)
+		 VALUES ('msg_kilo_b', 'ses_kilo_b', 1700000000000, 1700000000000, '{"role":"user","time":{"created":1700000000000}}')`,
+		`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+		 VALUES ('part_kilo_b', 'msg_kilo_b', 'ses_kilo_b', 1700000000000, 1700000000000, '{"type":"text","text":"hi from b"}')`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("exec %q: %v", stmt, err)
+		}
+	}
+}
+
 func loadSQLFixture(t *testing.T, dbPath, fixture string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {

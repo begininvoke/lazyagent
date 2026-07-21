@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/sessions"
 )
 
 // DefaultPort is the preferred port. If busy, the server tries sequential ports.
@@ -55,6 +57,9 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 	cfg := core.LoadConfig()
 	manager := core.NewSessionManager(cfg.WindowMinutes, provider)
 	manager.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
+	if dir, ok := sessions.ResolveCacheDir(); ok {
+		manager.EnableCachePersistence(dir)
+	}
 	if bus != nil {
 		manager.SetEventBus(bus)
 	}
@@ -128,8 +133,16 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := s.manager.StartWatcher(); err != nil {
 		log.Printf("Warning: file watcher unavailable: %v", err)
 	}
-	defer s.manager.StopWatcher()
+	defer s.manager.Close()
 
+	// Deliberately synchronous (core.SessionManager.Reload, not the
+	// progressive ReloadStreaming the TUI/GUI use for their first load):
+	// API clients expect complete data as soon as the server starts
+	// accepting requests, not a snapshot that's still growing. A warm
+	// persisted cache (EnableCachePersistence above) already makes even
+	// this first reload fast in the common case, so there's little to gain
+	// from streaming it and a real cost (partial results reachable over
+	// HTTP) to avoid.
 	if err := s.manager.Reload(); err != nil {
 		log.Printf("Warning: initial reload failed: %v", err)
 	}
@@ -247,12 +260,59 @@ func (s *Server) handleGetSessions(w http.ResponseWriter, r *http.Request) {
 	filter := core.ActivityKind(r.URL.Query().Get("filter"))
 
 	visible := s.manager.QuerySessions(search, filter)
+
+	if dir := r.URL.Query().Get("dir"); dir != "" {
+		filtered, ok := s.filterByDir(w, visible, dir)
+		if !ok {
+			return // filterByDir already wrote the 400 response
+		}
+		visible = filtered
+	}
+
 	items := make([]SessionItem, 0, len(visible))
 	for _, sess := range visible {
 		activity := s.manager.ActivityFor(sess.SessionID)
 		items = append(items, s.buildSessionItem(sess, activity))
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+// filterByDir narrows visible to the sessions whose CWD is dir or a
+// subdirectory of it, using the exact matching semantics `lazyagent
+// sessions` uses (core.DirMatchVariants/CWDMatchesDir — see task 15).
+//
+// Unlike the CLI, dir is not required to exist on this machine: the API may
+// serve a remote client (e.g. a mobile app) whose filesystem the server
+// never sees, so requiring os.Stat to succeed would make the filter
+// unusable for exactly the clients it's for. core.DirMatchVariants already
+// treats a failed symlink resolution as "no extra variant" rather than an
+// error, so a nonexistent dir just matches on its cleaned path.
+//
+// dir must be absolute, though: the API has no meaningful "current
+// directory" to resolve a relative path against on the caller's behalf, and
+// resolving one against the server process's own cwd would silently do the
+// wrong thing. That (and any other resolution failure) is reported as 400
+// with a JSON {"error": "..."} body, matching this handler file's existing
+// convention (see handleSetSessionName, handleGetSession).
+//
+// Returns ok=false when it has already written an error response.
+func (s *Server) filterByDir(w http.ResponseWriter, visible []*model.Session, dir string) (filtered []*model.Session, ok bool) {
+	if !filepath.IsAbs(dir) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "dir must be an absolute path"})
+		return nil, false
+	}
+	variants, err := core.DirMatchVariants(dir)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return nil, false
+	}
+	out := make([]*model.Session, 0, len(visible))
+	for _, sess := range visible {
+		if core.CWDMatchesDir(sess.CWD, variants) {
+			out = append(out, sess)
+		}
+	}
+	return out, true
 }
 
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {

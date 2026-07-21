@@ -2,8 +2,10 @@ package codex
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -36,7 +38,38 @@ func SessionIndexPath() string {
 
 // DiscoverSessions scans the Codex sessions tree for JSONL session files.
 func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
-	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache)
+	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, nil, nil)
+}
+
+// DiscoverSessionsFiltered scans the Codex sessions tree like DiscoverSessions,
+// but skips fully parsing files whose cwd is known — with certainty — not to
+// match cwdMatch. A file's *final* cwd (what a full parse would end up
+// producing, since later turn_context entries overwrite session_meta's
+// initial cwd — see parseJSONL's turn_context handling) is determined
+// cheaply via a head-read of the first line (headCWD) and, when that alone
+// isn't conclusive, a bounded backward scan of the file's last 512 KiB for
+// the most recent turn_context cwd (tailFinalCWD, see shouldParseForCWD). A
+// file is skipped ONLY when one of those positively resolves a non-matching
+// final cwd; whenever the outcome is uncertain (head unreadable, no
+// turn_context found in the tail window, etc.) the file is parsed anyway,
+// and every parsed session's *actual* final cwd is checked against cwdMatch
+// before being returned — so a session is never silently dropped, only ever
+// parsed unnecessarily in the worst case.
+//
+// cwdMatch may be nil, in which case every session matches (equivalent to
+// DiscoverSessions).
+func DiscoverSessionsFiltered(cache *model.SessionCache, cwdMatch func(string) bool) ([]*model.Session, error) {
+	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, cwdMatch, nil)
+}
+
+// DiscoverSessionsFilteredIndexed is DiscoverSessionsFiltered plus a
+// CWDIndex: cwdIdx (may be nil, equivalent to DiscoverSessionsFiltered)
+// lets the head/tail prefilter reuse previously-determined results — from
+// earlier in this process or reloaded from a persisted index written by a
+// previous run — for files whose (mtime, size) haven't changed, avoiding
+// the I/O entirely for files that keep getting skipped run after run.
+func DiscoverSessionsFilteredIndexed(cache *model.SessionCache, cwdMatch func(string) bool, cwdIdx *CWDIndex) ([]*model.Session, error) {
+	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, cwdMatch, cwdIdx)
 }
 
 type parseJob struct {
@@ -53,7 +86,7 @@ type parseResult struct {
 	newOffset int64
 }
 
-func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.SessionCache) ([]*model.Session, error) {
+func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.SessionCache, cwdMatch func(string) bool, cwdIdx *CWDIndex) ([]*model.Session, error) {
 	if sessionsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
 	}
@@ -76,9 +109,29 @@ func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.Session
 		cached, offset, mtime := cache.GetIncremental(path)
 
 		if cached != nil && offset == 0 {
+			// Full cache hit — cached.CWD is the *final* cwd from a
+			// previous full parse (turn_context overwrites already applied),
+			// so it's safe to filter on directly without touching the file.
+			if cwdMatch != nil && !cwdMatch(cached.CWD) {
+				return nil
+			}
 			sessions = append(sessions, cached)
 			return nil
 		}
+
+		if cwdMatch != nil && cached == nil {
+			// A genuine first-time full parse (no cached data at all): try
+			// to rule the file out before committing to the expensive parse.
+			// Incremental jobs (cached != nil, offset > 0) are deliberately
+			// NOT prefiltered here — their appended bytes are cheap to parse
+			// regardless, any cached.CWD they'd be checked against may
+			// already be stale, and the uniform post-parse filter below is
+			// the single source of truth for whether they're included.
+			if !shouldParseForCWDIndexed(path, cwdMatch, cwdIdx) {
+				return nil
+			}
+		}
+
 		jobs = append(jobs, parseJob{
 			path:   path,
 			cached: cached,
@@ -153,12 +206,24 @@ func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.Session
 				continue
 			}
 			enrichSession(r.session, wtCache, names)
+			// Always cache the fully parsed result, regardless of this
+			// call's matcher — the cache is shared across queries.
 			cache.Put(r.path, r.mtime, r.newOffset, r.session)
+			// Uniform post-parse filter: the head/tail prefilter above is
+			// purely a skip optimization, so the parsed session's actual
+			// CWD (not whatever the prefilter guessed) is the single
+			// source of truth for whether it's returned.
+			if cwdMatch != nil && !cwdMatch(r.session.CWD) {
+				continue
+			}
 			sessions = append(sessions, r.session)
 		}
 	}
 
 	cache.Prune(seen)
+	if cwdIdx != nil {
+		cwdIdx.Prune(seen)
+	}
 	return sessions, nil
 }
 
@@ -222,6 +287,203 @@ type sessionMetaPayload struct {
 	CLIVersion    string          `json:"cli_version"`
 	AgentNickname string          `json:"agent_nickname"`
 	Source        json.RawMessage `json:"source"`
+}
+
+// maxHeadLineSize bounds how much of a rollout file's first line headCWD
+// will read before giving up, so a pathological line can't force reading
+// large amounts of data into memory.
+const maxHeadLineSize = 1 << 20 // 1 MiB
+
+// headCWD reads only the first line of a Codex rollout JSONL file and, if it
+// is a well-formed session_meta entry with a non-empty cwd, returns that cwd.
+// It never reads past the first newline (or maxHeadLineSize, whichever comes
+// first), so it stays cheap even on multi-GiB files. ok is false whenever the
+// cwd could not be determined (missing file, empty file, unparsable first
+// line, wrong envelope type, or missing cwd) — callers should treat that as
+// "unknown, don't filter it out" rather than "no match".
+func headCWD(path string) (cwd string, ok bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+
+	r := bufio.NewReaderSize(f, 64*1024)
+	var line []byte
+	for {
+		chunk, err := r.ReadSlice('\n')
+		line = append(line, chunk...)
+		if len(line) > maxHeadLineSize {
+			return "", false
+		}
+		if err == nil {
+			break
+		}
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		if err == io.EOF {
+			if len(line) == 0 {
+				return "", false
+			}
+			break // last (only) line, no trailing newline
+		}
+		return "", false
+	}
+
+	var env jsonlEnvelope
+	if err := json.Unmarshal(bytes.TrimRight(line, "\r\n"), &env); err != nil {
+		return "", false
+	}
+	if env.Type != "session_meta" {
+		return "", false
+	}
+	var meta sessionMetaPayload
+	if err := json.Unmarshal(env.Payload, &meta); err != nil || meta.CWD == "" {
+		return "", false
+	}
+	return meta.CWD, true
+}
+
+// maxTailScanSize bounds how much of a rollout file's tail tailFinalCWD will
+// read when looking for the last turn_context cwd.
+const maxTailScanSize = 512 * 1024 // 512 KiB
+
+// tailFinalCWD reads up to the last maxTailScanSize bytes of a Codex rollout
+// file (a single bounded seek+read) and scans backwards through its lines
+// for the most recent turn_context entry with a non-empty payload.cwd —
+// mirroring parseJSONL's turn_context handling, where later entries
+// overwrite the session's cwd and an empty cwd does not overwrite. Because
+// later turn_context entries always win, the last non-empty one (searching
+// backwards from EOF) IS the file's final cwd, matching what a full parse
+// would produce.
+//
+// found is false when no turn_context with a non-empty cwd appears in the
+// scanned window — the file may have none at all, or the last one lies
+// further back than the window covers — callers must treat that as
+// "unknown, don't rule the file out" rather than "no match".
+func tailFinalCWD(path string) (cwd string, found bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return "", false
+	}
+	size := info.Size()
+	if size == 0 {
+		return "", false
+	}
+
+	start := int64(0)
+	if size > maxTailScanSize {
+		start = size - maxTailScanSize
+	}
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return "", false
+	}
+	buf, err := io.ReadAll(f)
+	if err != nil {
+		return "", false
+	}
+
+	lines := bytes.Split(buf, []byte("\n"))
+	if start > 0 && len(lines) > 0 {
+		// The window boundary likely cut the first line off mid-record —
+		// discard it rather than risk mis-parsing a truncated line.
+		lines = lines[1:]
+	}
+
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := bytes.TrimRight(lines[i], "\r")
+		if len(line) == 0 {
+			continue
+		}
+		var env jsonlEnvelope
+		if err := json.Unmarshal(line, &env); err != nil {
+			continue
+		}
+		if env.Type != "turn_context" {
+			continue
+		}
+		var ctx turnContextPayload
+		if err := json.Unmarshal(env.Payload, &ctx); err != nil {
+			continue
+		}
+		if ctx.CWD != "" {
+			return ctx.CWD, true
+		}
+	}
+	return "", false
+}
+
+// shouldParseForCWD reports whether a rollout file might still end up
+// matching cwdMatch and should therefore be parsed. It tries headCWD first
+// (cheap, first line only); if that doesn't match, it falls back to
+// tailFinalCWD, which finds the file's actual final cwd (later turn_context
+// entries overwrite session_meta's initial cwd — see parseJSONL). It returns
+// false — "skip, don't parse" — ONLY when the tail scan positively finds a
+// non-matching final cwd. Every other outcome (head matches, tail finds a
+// match, or neither head nor tail can determine the cwd) conservatively
+// returns true, so a session is never skipped without certainty; the actual
+// parsed cwd is still checked afterward by the caller's uniform post-parse
+// filter.
+//
+// This is shouldParseForCWDIndexed with a nil index (always live I/O) — see
+// that function for the cache-aware version used by discovery once a
+// CWDIndex is available.
+func shouldParseForCWD(path string, cwdMatch func(string) bool) bool {
+	return shouldParseForCWDIndexed(path, cwdMatch, nil)
+}
+
+// shouldParseForCWDIndexed is shouldParseForCWD's cache-aware counterpart:
+// byte-for-byte the same decision tree (see shouldParseForCWD's doc
+// comment), but each of the two underlying I/O primitives — headCWD and
+// tailFinalCWD — is looked up through cwdIdx when cwdIdx is non-nil,
+// instead of always re-reading the file. Both primitives are pure functions
+// of a file's content (they take no matcher), so a cached result is exactly
+// what fresh I/O would return for an unchanged file, regardless of which
+// matcher originally populated the cache entry — reusing them changes
+// nothing about the decision itself, only how the two inputs are obtained.
+// cwdIdx == nil reproduces shouldParseForCWD's plain (always-live-I/O)
+// behavior exactly.
+func shouldParseForCWDIndexed(path string, cwdMatch func(string) bool, cwdIdx *CWDIndex) bool {
+	if cwdIdx == nil {
+		cwd, ok := headCWD(path)
+		if !ok {
+			return true // can't tell from the head — parse it
+		}
+		if cwdMatch(cwd) {
+			return true
+		}
+		tail, found := tailFinalCWD(path)
+		if !found {
+			return true // tail window didn't contain a turn_context — parse it
+		}
+		return cwdMatch(tail)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return true // can't stat — conservative parse, same as headCWD's own "can't open" -> not ok -> true
+	}
+	mtime, size := info.ModTime(), info.Size()
+
+	cwd, ok := cwdIdx.headCWDIndexed(path, mtime, size)
+	if !ok {
+		return true
+	}
+	if cwdMatch(cwd) {
+		return true
+	}
+	tail, found := cwdIdx.tailFinalCWDIndexed(path, mtime, size)
+	if !found {
+		return true
+	}
+	return cwdMatch(tail)
 }
 
 type turnContextPayload struct {
