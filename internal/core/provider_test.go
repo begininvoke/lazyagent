@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -355,4 +356,107 @@ func writeOpenCodeFamilyFixtureDB(t *testing.T, dbPath, dirA, dirB string) {
 	}
 	insert("ses_dir_a", dirA, 1700000001000)
 	insert("ses_dir_b", dirB, 1700000002000)
+}
+
+// --- DiscoverMatchingStream ---
+
+// collectStream runs DiscoverMatchingStream, gathers every emitted batch
+// (protected by a mutex, since emit is called concurrently from the
+// discovery goroutines) and blocks until done closes or a timeout elapses,
+// then returns the batches in emission order plus their count.
+func collectStream(t *testing.T, p SessionProvider, cwdMatch func(string) bool) (batches [][]*model.Session) {
+	t.Helper()
+	var mu sync.Mutex
+	done := DiscoverMatchingStream(p, cwdMatch, func(sessions []*model.Session) {
+		mu.Lock()
+		defer mu.Unlock()
+		batches = append(batches, sessions)
+	})
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("DiscoverMatchingStream: done never closed")
+	}
+	return batches
+}
+
+func TestDiscoverMatchingStream_PerMemberEmission(t *testing.T) {
+	p1 := fakeProvider{sessions: []*model.Session{{SessionID: "s1"}}}
+	p2 := fakeProvider{sessions: []*model.Session{{SessionID: "s2"}, {SessionID: "s3"}}}
+	mp := MultiProvider{Providers: []SessionProvider{p1, p2}}
+
+	batches := collectStream(t, mp, func(string) bool { return true })
+	if len(batches) != 2 {
+		t.Fatalf("got %d batches, want 2 (one per member)", len(batches))
+	}
+	ids := make(map[string]bool)
+	for _, batch := range batches {
+		for _, s := range batch {
+			ids[s.SessionID] = true
+		}
+	}
+	if !ids["s1"] || !ids["s2"] || !ids["s3"] {
+		t.Fatalf("batches = %#v, want s1, s2, s3 all present", batches)
+	}
+}
+
+func TestDiscoverMatchingStream_FailingMemberEmitsNothing(t *testing.T) {
+	failing := fakeProvider{err: errTest}
+	working := fakeProvider{sessions: []*model.Session{{SessionID: "s1"}}}
+	mp := MultiProvider{Providers: []SessionProvider{failing, working}}
+
+	batches := collectStream(t, mp, func(string) bool { return true })
+	if len(batches) != 1 {
+		t.Fatalf("got %d batches, want 1 (the failing member emits nothing)", len(batches))
+	}
+	if len(batches[0]) != 1 || batches[0][0].SessionID != "s1" {
+		t.Fatalf("batches = %#v, want [[s1]]", batches)
+	}
+}
+
+func TestDiscoverMatchingStream_SingleProviderNonMulti(t *testing.T) {
+	p := &dirScopedFakeProvider{sessions: []*model.Session{{SessionID: "scoped"}}}
+
+	batches := collectStream(t, p, func(string) bool { return true })
+	if len(batches) != 1 {
+		t.Fatalf("got %d batches, want 1 (a non-multi provider is one member)", len(batches))
+	}
+	if len(batches[0]) != 1 || batches[0][0].SessionID != "scoped" {
+		t.Fatalf("batches = %#v, want [[scoped]]", batches)
+	}
+	if !p.receivedMatcher {
+		t.Error("expected the single member to receive the matcher (dir-scoped fast path reused)")
+	}
+}
+
+func TestDiscoverMatchingStream_EmptyMultiProviderClosesDoneImmediately(t *testing.T) {
+	mp := MultiProvider{}
+
+	batches := collectStream(t, mp, func(string) bool { return true })
+	if len(batches) != 0 {
+		t.Fatalf("got %d batches, want 0 (no members)", len(batches))
+	}
+}
+
+func TestDiscoverMatchingStream_DoneNotClosedBeforeEmitReturns(t *testing.T) {
+	// A slow member must not let done close before its emit has actually
+	// been delivered -- done is only closed after every member's goroutine
+	// (which calls emit synchronously before returning) has finished.
+	slow := fakeProvider{sessions: []*model.Session{{SessionID: "slow"}}}
+	fast := fakeProvider{sessions: []*model.Session{{SessionID: "fast"}}}
+	mp := MultiProvider{Providers: []SessionProvider{slow, fast}}
+
+	var mu sync.Mutex
+	var emitted int
+	done := DiscoverMatchingStream(mp, func(string) bool { return true }, func(sessions []*model.Session) {
+		mu.Lock()
+		emitted++
+		mu.Unlock()
+	})
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if emitted != 2 {
+		t.Fatalf("emitted = %d, want 2 emits to have happened by the time done closed", emitted)
+	}
 }

@@ -516,6 +516,56 @@ func discoverMatchingOne(p SessionProvider, cwdMatch func(string) bool) ([]*mode
 	return p.DiscoverSessions()
 }
 
+// DiscoverMatchingStream discovers sessions like DiscoverMatching but
+// delivers each provider member's results as they complete via emit
+// (called from the discovery goroutines; the caller must make emit safe for
+// concurrent use — see sync.Mutex or an equivalent). done is closed once
+// every member has finished (after its goroutine's emit call, if any, has
+// already returned). Best-effort like MultiProvider: a failing member emits
+// nothing, but still counts toward done closing.
+//
+// Granularity matches DiscoverMatching's fan-out (see streamMembers): a
+// MultiProvider's Providers are its members (zero members, and an
+// immediately-closed done, for an empty MultiProvider); any other provider
+// is a single member. Each member's fast-path-vs-plain decision reuses
+// discoverMatchingOne, the same function DiscoverMatching itself uses, so
+// there is one implementation of that decision.
+func DiscoverMatchingStream(p SessionProvider, cwdMatch func(string) bool, emit func([]*model.Session)) (done <-chan struct{}) {
+	doneCh := make(chan struct{})
+	members := streamMembers(p)
+	if len(members) == 0 {
+		close(doneCh)
+		return doneCh
+	}
+	var wg sync.WaitGroup
+	for _, member := range members {
+		wg.Add(1)
+		go func(prov SessionProvider) {
+			defer wg.Done()
+			sessions, err := discoverMatchingOne(prov, cwdMatch)
+			if err == nil {
+				emit(sessions)
+			}
+		}(member)
+	}
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+	return doneCh
+}
+
+// streamMembers returns p's independent discovery members for
+// DiscoverMatchingStream: a MultiProvider's Providers slice (possibly
+// empty), or a single-element slice containing p itself for any other
+// provider.
+func streamMembers(p SessionProvider) []SessionProvider {
+	if mp, ok := p.(MultiProvider); ok {
+		return mp.Providers
+	}
+	return []SessionProvider{p}
+}
+
 func discoverMatchingMulti(mp MultiProvider, cwdMatch func(string) bool) ([]*model.Session, error) {
 	if len(mp.Providers) <= 1 {
 		// Fast path: no need for goroutines.
