@@ -74,15 +74,27 @@ func matchesDir(cwd string, variants []string) bool {
 	return false
 }
 
-// FilterByDir returns the sessions whose CWD is dir or a subdirectory of it,
-// excluding sidechains, sorted by LastActivity descending.
-func FilterByDir(sessions []*model.Session, dir string) ([]*model.Session, error) {
-	variants, err := targetVariants(dir)
-	if err != nil {
-		return nil, err
+// bySessionRecency orders sessions by LastActivity descending, breaking ties
+// by SessionID ascending. This is the single source of ordering truth
+// shared by FilterByDir's sort and the picker's incremental stream merge
+// (see mergeSessions in picker.go) — one comparator, so a session's rank
+// relative to its neighbors never depends on which code path placed it.
+func bySessionRecency(a, b *model.Session) int {
+	if c := b.LastActivity.Compare(a.LastActivity); c != 0 {
+		return c
 	}
+	return strings.Compare(a.SessionID, b.SessionID)
+}
+
+// filterBatch returns the sessions in batch whose CWD falls under one of
+// variants (see targetVariants), excluding sidechains. It is FilterByDir's
+// per-session filtering rule factored out so the picker's streaming path can
+// apply the exact same rule to each arriving batch without recomputing
+// variants (a symlink-resolving, syscall-touching step) on every call — see
+// runPicker in picker.go.
+func filterBatch(batch []*model.Session, variants []string) []*model.Session {
 	var out []*model.Session
-	for _, s := range sessions {
+	for _, s := range batch {
 		if s.IsSidechain {
 			continue
 		}
@@ -90,11 +102,17 @@ func FilterByDir(sessions []*model.Session, dir string) ([]*model.Session, error
 			out = append(out, s)
 		}
 	}
-	slices.SortStableFunc(out, func(a, b *model.Session) int {
-		if c := b.LastActivity.Compare(a.LastActivity); c != 0 {
-			return c
-		}
-		return strings.Compare(a.SessionID, b.SessionID)
-	})
+	return out
+}
+
+// FilterByDir returns the sessions whose CWD is dir or a subdirectory of it,
+// excluding sidechains, sorted by LastActivity descending.
+func FilterByDir(sessions []*model.Session, dir string) ([]*model.Session, error) {
+	variants, err := targetVariants(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := filterBatch(sessions, variants)
+	slices.SortStableFunc(out, bySessionRecency)
 	return out, nil
 }

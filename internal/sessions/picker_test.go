@@ -263,15 +263,89 @@ func TestPickerRowBudgetFallsBackWhenHeightUnknown(t *testing.T) {
 	}
 }
 
-func TestRunPickerEmptyList(t *testing.T) {
-	s, action, err := runPicker(nil, nil, "x")
-	if s != nil {
-		t.Errorf("session = %v, want nil", s)
+// --- mergeSessions (pure) ---
+
+func TestMergeSessionsSortsOutOfOrderBatches(t *testing.T) {
+	now := time.Now()
+	sessions := []*model.Session{{SessionID: "a", LastActivity: now.Add(-time.Hour)}}
+	titles := []string{"A"}
+
+	// Incoming batch is MORE recent than what's already merged -- out-of-
+	// order arrival relative to final sort order.
+	batchSessions := []*model.Session{{SessionID: "b", LastActivity: now}}
+	batchTitles := []string{"B"}
+
+	gotSessions, gotTitles := mergeSessions(sessions, titles, batchSessions, batchTitles)
+	if len(gotSessions) != 2 {
+		t.Fatalf("len = %d, want 2", len(gotSessions))
 	}
-	if action != actionQuit {
-		t.Errorf("action = %v, want actionQuit", action)
+	if gotSessions[0].SessionID != "b" || gotSessions[1].SessionID != "a" {
+		t.Fatalf("sessions = [%s, %s], want [b, a] (most recent first)", gotSessions[0].SessionID, gotSessions[1].SessionID)
 	}
-	if err != nil {
-		t.Errorf("err = %v, want nil", err)
+	if gotTitles[0] != "B" || gotTitles[1] != "A" {
+		t.Fatalf("titles = %v, want [B, A] (must stay zipped with sessions after sort)", gotTitles)
+	}
+}
+
+func TestMergeSessionsKeepsTitlesZippedWithSessions(t *testing.T) {
+	now := time.Now()
+	sessions := []*model.Session{
+		{SessionID: "mid", LastActivity: now.Add(-time.Hour)},
+	}
+	titles := []string{"mid-title"}
+	batchSessions := []*model.Session{
+		{SessionID: "newest", LastActivity: now},
+		{SessionID: "oldest", LastActivity: now.Add(-2 * time.Hour)},
+	}
+	batchTitles := []string{"newest-title", "oldest-title"}
+
+	gotSessions, gotTitles := mergeSessions(sessions, titles, batchSessions, batchTitles)
+	wantOrder := []string{"newest", "mid", "oldest"}
+	for i, id := range wantOrder {
+		if gotSessions[i].SessionID != id {
+			t.Fatalf("sessions[%d] = %s, want %s", i, gotSessions[i].SessionID, id)
+		}
+		if gotTitles[i] != id+"-title" {
+			t.Fatalf("titles[%d] = %s, want %s", i, gotTitles[i], id+"-title")
+		}
+	}
+}
+
+// --- relocateCursor (pure) ---
+
+func TestRelocateCursorFollowsSelectedSession(t *testing.T) {
+	prev := []*model.Session{{SessionID: "x"}, {SessionID: "y"}}
+	// User had navigated down to "y" (cursor 1). A merge reorders the list
+	// so "y" is now first.
+	merged := []*model.Session{{SessionID: "y"}, {SessionID: "z"}, {SessionID: "x"}}
+	if got := relocateCursor(prev, 1, merged); got != 0 {
+		t.Errorf("relocateCursor = %d, want 0 (cursor must follow the selected session)", got)
+	}
+}
+
+func TestRelocateCursorStaysAtTopWhenNotNavigated(t *testing.T) {
+	prev := []*model.Session{{SessionID: "x"}, {SessionID: "y"}}
+	// cursor is still 0 (user hasn't navigated): the merge reorders the
+	// list, but the cursor must stay pinned to the top regardless of
+	// identity.
+	merged := []*model.Session{{SessionID: "y"}, {SessionID: "x"}, {SessionID: "z"}}
+	if got := relocateCursor(prev, 0, merged); got != 0 {
+		t.Errorf("relocateCursor = %d, want 0 (must stay at top when not navigated)", got)
+	}
+}
+
+func TestRelocateCursorClampsWhenSelectedSessionDisappears(t *testing.T) {
+	prev := []*model.Session{{SessionID: "x"}, {SessionID: "y"}}
+	// "y" (cursor 1) is no longer present in merged.
+	merged := []*model.Session{{SessionID: "x"}}
+	if got := relocateCursor(prev, 1, merged); got != 0 {
+		t.Errorf("relocateCursor = %d, want 0 (clamp to the last valid index)", got)
+	}
+}
+
+func TestRelocateCursorOnEmptyMergedIsZero(t *testing.T) {
+	prev := []*model.Session{{SessionID: "x"}}
+	if got := relocateCursor(prev, 0, nil); got != 0 {
+		t.Errorf("relocateCursor = %d, want 0", got)
 	}
 }

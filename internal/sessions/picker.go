@@ -3,6 +3,7 @@ package sessions
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -157,6 +158,69 @@ func visibleRange(cursor, total, height int) (start, end int) {
 		}
 	}
 	return start, end
+}
+
+// mergeSessions merges an incoming discovery batch (batchSessions/
+// batchTitles, parallel slices) into the already-accumulated sessions/
+// titles (also parallel), returning a new pair of parallel slices sorted by
+// bySessionRecency — the same ordering rule FilterByDir uses, so the merged
+// list is deterministic at any point in the stream regardless of the order
+// batches arrive in. Titles travel alongside their session through the sort
+// so the two slices never desync.
+func mergeSessions(sessions []*model.Session, titles []string, batchSessions []*model.Session, batchTitles []string) ([]*model.Session, []string) {
+	type row struct {
+		session *model.Session
+		title   string
+	}
+	rows := make([]row, 0, len(sessions)+len(batchSessions))
+	for i, s := range sessions {
+		rows = append(rows, row{s, titles[i]})
+	}
+	for i, s := range batchSessions {
+		rows = append(rows, row{s, batchTitles[i]})
+	}
+	slices.SortStableFunc(rows, func(a, b row) int {
+		return bySessionRecency(a.session, b.session)
+	})
+	mergedSessions := make([]*model.Session, len(rows))
+	mergedTitles := make([]string, len(rows))
+	for i, r := range rows {
+		mergedSessions[i] = r.session
+		mergedTitles[i] = r.title
+	}
+	return mergedSessions, mergedTitles
+}
+
+// relocateCursor computes where the cursor should land in merged given
+// where it was before the merge (prevCursor into prevSessions).
+//
+// If the user hasn't navigated away from the top row yet (prevCursor <= 0),
+// the cursor stays pinned to the top: there's no meaningful selection to
+// preserve, so we don't try to "follow" whichever session happened to be
+// first. Otherwise the previously selected session's SessionID is looked up
+// in merged and the cursor follows it to its new index; if that session is
+// no longer present, the cursor clamps to the nearest valid index.
+func relocateCursor(prevSessions []*model.Session, prevCursor int, merged []*model.Session) int {
+	if len(merged) == 0 {
+		return 0
+	}
+	if prevCursor <= 0 || prevCursor >= len(prevSessions) {
+		return 0
+	}
+	selectedID := prevSessions[prevCursor].SessionID
+	for i, s := range merged {
+		if s.SessionID == selectedID {
+			return i
+		}
+	}
+	// The previously selected session disappeared: clamp to the nearest
+	// valid index (sessions are only ever added by this feature's merges,
+	// so this branch is defensive rather than something that happens in
+	// practice today).
+	if prevCursor >= len(merged) {
+		return len(merged) - 1
+	}
+	return prevCursor
 }
 
 func (m pickerModel) View() string {
