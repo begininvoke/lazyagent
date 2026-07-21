@@ -304,6 +304,69 @@ func TestReload_PatternChangeAppliesOnNextReload_DirScopedPushdown(t *testing.T)
 	}
 }
 
+// TestUpdateActivities_AppliesExcludePushdown proves the periodic
+// re-discovery path in UpdateActivities (used for providers with
+// RefreshInterval > 0, e.g. opencode/kilo/codex) applies the same
+// discovery-time pushdown as Reload -- not just at startup. Without the
+// fix, mixed setups where a watcher-based provider (e.g. claude) keeps the
+// Reload-driven 30s ticker from ever firing would see UpdateActivities'
+// ~3s polling loop re-discover unfiltered indefinitely.
+func TestUpdateActivities_AppliesExcludePushdown(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	now := time.Now()
+	p := &filteringDirScopedProvider{
+		sessions: []*model.Session{
+			{SessionID: "keep", CWD: "/home/user/project", LastActivity: now},
+			{SessionID: "heavy", CWD: "/home/user/.claude-mem/observer-sessions/x", LastActivity: now},
+		},
+		interval: time.Millisecond,
+	}
+	mgr := NewSessionManager(60, p)
+	mgr.SetExcludeCWDSubstrings([]string{".claude-mem/observer-sessions"})
+
+	// First call: m.sessions is empty, so needsRefresh is true regardless of
+	// the interval/lastPollDiscover -- this exercises UpdateActivities'
+	// periodic-refresh discovery branch on a cold start.
+	if !mgr.UpdateActivities() {
+		t.Fatal("expected UpdateActivities to report a change on first discovery")
+	}
+	if !p.receivedMatcher {
+		t.Error("UpdateActivities' periodic re-discovery must go through the dir-scoped pushdown path (DiscoverSessionsMatching), not plain DiscoverSessions")
+	}
+	raw := mgr.Sessions()
+	if len(raw) != 1 || raw[0].SessionID != "keep" {
+		t.Fatalf("Sessions() = %#v, want only 'keep' (pushdown applied by UpdateActivities)", raw)
+	}
+}
+
+// TestUpdateActivities_NoExcludePatterns_UsesPlainDiscoverSessions mirrors
+// TestReload_NoExcludePatterns_UsesPlainDiscoverSessions for
+// UpdateActivities' periodic re-discovery path: with no patterns set, it
+// must not invoke the dir-scoped fast path at all.
+func TestUpdateActivities_NoExcludePatterns_UsesPlainDiscoverSessions(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	p := &dirScopedFakeProvider{
+		unfiltered: []*model.Session{{SessionID: "plain-path", LastActivity: time.Now()}},
+		sessions:   []*model.Session{{SessionID: "fast-path", LastActivity: time.Now()}},
+		interval:   time.Millisecond,
+	}
+	mgr := NewSessionManager(60, p)
+	// No SetExcludeCWDSubstrings call -- patterns are nil/empty.
+	if !mgr.UpdateActivities() {
+		t.Fatal("expected UpdateActivities to report a change on first discovery")
+	}
+
+	if p.receivedMatcher {
+		t.Error("UpdateActivities with no exclude patterns must not invoke the dir-scoped fast path (DiscoverMatching)")
+	}
+	got := mgr.Sessions()
+	if len(got) != 1 || got[0].SessionID != "plain-path" {
+		t.Fatalf("Sessions() = %#v, want the plain DiscoverSessions() result (zero pushdown when no patterns)", got)
+	}
+}
+
 // TestReload_ExcludePushdown_EquivalentToViewFilter is the manager-level
 // equivalence property test: for any pattern set, the visible sessions
 // (post view-filter) must be identical whether or not discovery-time
@@ -368,6 +431,27 @@ func TestReload_ExcludePushdown_EquivalentToViewFilter(t *testing.T) {
 			if !reflect.DeepEqual(actual, want) {
 				t.Fatalf("patterns=%v: pushdown-visible=%v, view-filter-only-visible=%v (must be identical)", patterns, actual, want)
 			}
+
+			// Same equivalence, but driven through UpdateActivities' periodic
+			// re-discovery path instead of Reload -- cheap to add since it
+			// reuses the same fixtures and the same "want" baseline: only the
+			// providers' RefreshInterval needs to be positive (dirScoped2's 1ms)
+			// so UpdateActivities' needsRefresh gate re-discovers at all, and
+			// the manager's first call always re-discovers (m.sessions starts
+			// empty) regardless of interval/lastPollDiscover timing.
+			dirScoped2 := &filteringDirScopedProvider{sessions: cloneSessions(dirScopedSessions), interval: time.Millisecond}
+			plain2 := fakeProvider{sessions: cloneSessions(plainSessions)}
+			mp2 := MultiProvider{Providers: []SessionProvider{dirScoped2, plain2}}
+
+			actualMgr2 := NewSessionManager(60, mp2)
+			actualMgr2.SetExcludeCWDSubstrings(patterns)
+			if !actualMgr2.UpdateActivities() {
+				t.Fatalf("expected UpdateActivities to report a change on first discovery (patterns=%v)", patterns)
+			}
+			actualUA := sessionIDSet(actualMgr2.VisibleSessions())
+			if !reflect.DeepEqual(actualUA, want) {
+				t.Fatalf("patterns=%v: UpdateActivities-pushdown-visible=%v, view-filter-only-visible=%v (must be identical)", patterns, actualUA, want)
+			}
 		})
 	}
 }
@@ -376,16 +460,24 @@ func TestReload_ExcludePushdown_EquivalentToViewFilter(t *testing.T) {
 // DiscoverSessionsMatching genuinely applies cwdMatch to its session list
 // (unlike dirScopedFakeProvider in provider_test.go, which returns a fixed
 // canned result regardless of the matcher it receives). Used to exercise
-// the real discovery-time pushdown behavior.
+// the real discovery-time pushdown behavior. interval configures
+// RefreshInterval() so it can also exercise UpdateActivities' periodic
+// re-discovery path; receivedMatcher/plainCalls record which discovery
+// method was actually invoked.
 type filteringDirScopedProvider struct {
-	sessions []*model.Session
+	sessions        []*model.Session
+	interval        time.Duration
+	receivedMatcher bool
+	plainCalls      int
 }
 
 func (p *filteringDirScopedProvider) DiscoverSessions() ([]*model.Session, error) {
+	p.plainCalls++
 	return p.sessions, nil
 }
 
 func (p *filteringDirScopedProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
+	p.receivedMatcher = true
 	var out []*model.Session
 	for _, s := range p.sessions {
 		if cwdMatch(s.CWD) {
@@ -396,7 +488,7 @@ func (p *filteringDirScopedProvider) DiscoverSessionsMatching(cwdMatch func(stri
 }
 
 func (p *filteringDirScopedProvider) UseWatcher() bool               { return false }
-func (p *filteringDirScopedProvider) RefreshInterval() time.Duration { return 0 }
+func (p *filteringDirScopedProvider) RefreshInterval() time.Duration { return p.interval }
 func (p *filteringDirScopedProvider) WatchDirs() []string            { return nil }
 
 // cloneSessions returns a shallow copy of the slice (not the pointed-to

@@ -225,16 +225,21 @@ func (m *SessionManager) WatcherEvents() <-chan struct{} {
 	return nil
 }
 
-// Reload discovers sessions via the provider and updates activity states.
-// When cache persistence is enabled (EnableCachePersistence), this is also
-// where the persisted cache gets loaded (once, before the first discovery)
-// and saved (see loadPersistedCacheOnce / savePersistedCacheIfDue).
+// discoverHonoringExclusions discovers sessions via m.provider, applying the
+// exclude_cwd_substrings pushdown when patterns are configured, or the
+// provider's plain DiscoverSessions() when they aren't. This is the single
+// implementation of "discover, honoring exclusions" shared by every
+// re-discovery path — Reload (first load, watcher events) and
+// UpdateActivities (periodic re-discovery for providers with
+// RefreshInterval > 0, e.g. opencode/kilo/codex) — so the pushdown applies
+// uniformly no matter which path triggers a given discovery, not just the
+// first one.
 //
 // When exclude_cwd_substrings patterns are configured, discovery itself is
 // scoped via DiscoverMatching(m.provider, excludeCWDPredicate(patterns)):
 // dir-scoped providers (DirScopedProvider) skip parsing excluded sessions
 // entirely instead of discovering-then-hiding them at the view layer. With
-// no patterns set, Reload calls the provider's plain DiscoverSessions(),
+// no patterns set, this calls the provider's plain DiscoverSessions(),
 // exactly as before this pushdown existed — zero behavior change for the
 // common case. Either way, the view-level filter (filterSessionsLocked)
 // still re-applies the same exclusion: DiscoverMatching's contract leaves
@@ -242,24 +247,32 @@ func (m *SessionManager) WatcherEvents() <-chan struct{} {
 // the only thing guaranteeing exclusion for those.
 //
 // Runtime pattern changes: SetExcludeCWDSubstrings can be called at any
-// time, and Reload re-reads m.excludeCWDSubstrings fresh on every call, so
-// the very next Reload() automatically discovers under the new patterns —
-// no extra plumbing is needed. (As of this change, no caller actually
-// changes patterns after startup; see the report for that investigation.)
-func (m *SessionManager) Reload() error {
-	m.loadPersistedCacheOnce()
-
+// time, and this re-reads m.excludeCWDSubstrings fresh on every call, so
+// the very next discovery — via either Reload() or UpdateActivities() —
+// automatically applies the new patterns, no extra plumbing needed. (As of
+// this change, no caller actually changes patterns after startup; see the
+// report for that investigation.)
+func (m *SessionManager) discoverHonoringExclusions() ([]*model.Session, error) {
 	m.mu.RLock()
 	patterns := m.excludeCWDSubstrings
 	m.mu.RUnlock()
 
-	var sessions []*model.Session
-	var err error
 	if len(patterns) == 0 {
-		sessions, err = m.provider.DiscoverSessions()
-	} else {
-		sessions, err = DiscoverMatching(m.provider, excludeCWDPredicate(patterns))
+		return m.provider.DiscoverSessions()
 	}
+	return DiscoverMatching(m.provider, excludeCWDPredicate(patterns))
+}
+
+// Reload discovers sessions via the provider and updates activity states.
+// When cache persistence is enabled (EnableCachePersistence), this is also
+// where the persisted cache gets loaded (once, before the first discovery)
+// and saved (see loadPersistedCacheOnce / savePersistedCacheIfDue). See
+// discoverHonoringExclusions for how the exclude_cwd_substrings pushdown is
+// applied.
+func (m *SessionManager) Reload() error {
+	m.loadPersistedCacheOnce()
+
+	sessions, err := m.discoverHonoringExclusions()
 	if err != nil {
 		return err
 	}
@@ -276,7 +289,10 @@ func (m *SessionManager) Reload() error {
 
 // UpdateActivities refreshes activity states without reloading from disk.
 // Returns true if any activity state changed.
-// If the provider specifies a RefreshInterval, sessions are re-discovered periodically.
+// If the provider specifies a RefreshInterval, sessions are re-discovered
+// periodically — via discoverHonoringExclusions, same as Reload, so the
+// exclude_cwd_substrings pushdown applies to this periodic re-discovery
+// too, not just the first one.
 // Also refreshes session names from disk if modified externally.
 func (m *SessionManager) UpdateActivities() bool {
 	namesChanged := m.names.Refresh()
@@ -286,7 +302,7 @@ func (m *SessionManager) UpdateActivities() bool {
 		needsRefresh := len(m.sessions) == 0 || now.Sub(m.lastPollDiscover) > interval
 		m.mu.RUnlock()
 		if needsRefresh {
-			sessions, err := m.provider.DiscoverSessions()
+			sessions, err := m.discoverHonoringExclusions()
 			if err == nil {
 				m.mu.Lock()
 				m.sessions = sessions
