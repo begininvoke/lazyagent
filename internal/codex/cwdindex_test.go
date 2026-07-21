@@ -388,3 +388,205 @@ func sessionPaths(sessions []*model.Session) map[string]bool {
 	}
 	return m
 }
+
+// assertSameSessionSet fails t if cold and got don't contain the exact same
+// set of JSONLPaths.
+func assertSameSessionSet(t *testing.T, label string, cold, got []*model.Session) {
+	t.Helper()
+	coldPaths := sessionPaths(cold)
+	gotPaths := sessionPaths(got)
+	if len(coldPaths) != len(gotPaths) {
+		t.Errorf("%s: session count = %d, want %d", label, len(gotPaths), len(coldPaths))
+	}
+	for p := range coldPaths {
+		if !gotPaths[p] {
+			t.Errorf("%s: missing %s (present in cold discovery)", label, p)
+		}
+	}
+	for p := range gotPaths {
+		if !coldPaths[p] {
+			t.Errorf("%s: unexpected extra %s (absent from cold discovery)", label, p)
+		}
+	}
+}
+
+// TestDiscoverSessionsFilteredIndexed_ComprehensiveEquivalence is the
+// brief's mandated end-to-end equivalence property test, covering every
+// required fixture-tree scenario in one pass: discovery using a
+// persisted-and-reloaded SessionCache + CWDIndex must match cold discovery
+// for unchanged files, an appended file whose final cwd changes (the
+// cwd-index's core codex-specific safety requirement -- the stale entry
+// must be invalidated by the size change and re-scanned), a
+// truncated/replaced file with the same mtime but a different size, a
+// truncated/replaced file with a different mtime, a deleted file, a
+// corrupted persisted cache/index JSON, and a wrong-formatVersion persisted
+// cache/index JSON.
+func TestDiscoverSessionsFilteredIndexed_ComprehensiveEquivalence(t *testing.T) {
+	match := func(cwd string) bool { return cwd == "/tmp/match" }
+
+	dir := t.TempDir()
+	indexPath := filepath.Join(t.TempDir(), "session_index.jsonl")
+	paths := map[string]string{
+		"unchanged_match":    writeRolloutFile(t, dir, 1, "sess-unchanged-match-000000000000", "/tmp/match"),
+		"unchanged_nonmatch": writeRolloutFile(t, dir, 2, "sess-unchanged-nonmatch-00000000000", "/tmp/other"),
+		"appended": writeRolloutFileRaw(t, dir, 3, "sess-appended-0000-0000-000000000000", []string{
+			`{"timestamp":"2026-03-03T11:00:00.000Z","type":"session_meta","payload":{"id":"sess-appended","cwd":"/tmp/other-a"}}`,
+			`{"timestamp":"2026-03-03T11:00:01.000Z","type":"turn_context","payload":{"cwd":"/tmp/other-b"}}`,
+		}),
+		"truncated_same_mtime": writeRolloutFile(t, dir, 4, "sess-trunc-same-0000-0000000000000", "/tmp/other"),
+		"truncated_diff_mtime": writeRolloutFile(t, dir, 5, "sess-trunc-diff-0000-0000000000000", "/tmp/other"),
+		"deleted":              writeRolloutFile(t, dir, 6, "sess-deleted-0000-0000-000000000000", "/tmp/other"),
+	}
+
+	// Run 1 (cold): populate both caches over the ORIGINAL fixture tree,
+	// then persist them.
+	cache := model.NewSessionCache()
+	cwdIdx := NewCWDIndex()
+	if _, err := discoverSessionsFromDir(dir, indexPath, cache, match, cwdIdx); err != nil {
+		t.Fatalf("run1: %v", err)
+	}
+	cacheDir := t.TempDir()
+	discoveryPath := filepath.Join(cacheDir, "discovery-codex.json")
+	cwdIndexPath := filepath.Join(cacheDir, "cwdindex-codex.json")
+	if err := cache.SaveTo(discoveryPath); err != nil {
+		t.Fatalf("SaveTo cache: %v", err)
+	}
+	if err := cwdIdx.SaveTo(cwdIndexPath); err != nil {
+		t.Fatalf("SaveTo cwdIdx: %v", err)
+	}
+
+	// Mutate the fixture tree between runs, one mutation per scenario.
+	f, err := os.OpenFile(paths["appended"], os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(`{"timestamp":"2026-03-03T11:00:02.000Z","type":"turn_context","payload":{"cwd":"/tmp/match"}}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	infoSame, err := os.Stat(paths["truncated_same_mtime"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	origMtime := infoSame.ModTime()
+	if err := os.WriteFile(paths["truncated_same_mtime"], []byte(`{"timestamp":"2026-03-04T11:00:00.000Z","type":"session_meta","payload":{"id":"sess-trunc-same","cwd":"/tmp/match"}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(paths["truncated_same_mtime"], origMtime, origMtime); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(paths["truncated_diff_mtime"], []byte(`{"timestamp":"2026-03-05T11:00:00.000Z","type":"session_meta","payload":{"id":"sess-trunc-diff","cwd":"/tmp/match"}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Remove(paths["deleted"]); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cold baseline: a completely fresh discovery over the mutated tree.
+	cold, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), match, nil)
+	if err != nil {
+		t.Fatalf("cold run: %v", err)
+	}
+
+	// Warm: reload both persisted caches (from the ORIGINAL, pre-mutation
+	// state) and rerun over the mutated tree.
+	reloadedCache := model.NewSessionCache()
+	if err := reloadedCache.LoadFrom(discoveryPath); err != nil {
+		t.Fatalf("LoadFrom cache: %v", err)
+	}
+	reloadedIdx := NewCWDIndex()
+	if err := reloadedIdx.LoadFrom(cwdIndexPath); err != nil {
+		t.Fatalf("LoadFrom cwdIdx: %v", err)
+	}
+	warm, err := discoverSessionsFromDir(dir, indexPath, reloadedCache, match, reloadedIdx)
+	if err != nil {
+		t.Fatalf("warm run: %v", err)
+	}
+
+	assertSameSessionSet(t, "warm-vs-cold after mutations", cold, warm)
+
+	warmPaths := sessionPaths(warm)
+	if !warmPaths[paths["appended"]] {
+		t.Errorf("appended file (final cwd changed to match) missing from warm results -- the stale non-matching cwd-index entry must be invalidated by the size change and re-scanned")
+	}
+	if !warmPaths[paths["truncated_same_mtime"]] {
+		t.Errorf("truncated (same mtime, different size) file missing from warm results")
+	}
+	if !warmPaths[paths["truncated_diff_mtime"]] {
+		t.Errorf("truncated (different mtime) file missing from warm results")
+	}
+	if warmPaths[paths["deleted"]] {
+		t.Errorf("deleted file unexpectedly present in warm results")
+	}
+
+	// A corrupted or version-mismatched persisted file (cache or cwd index)
+	// must behave exactly like starting fully cold -- never error, never
+	// leak stale data -- verified against the same mutated-tree cold
+	// baseline computed above.
+	corruptionCases := []struct {
+		name string
+		path string
+	}{
+		{"corrupted_cache_json", discoveryPath},
+		{"corrupted_cwdindex_json", cwdIndexPath},
+	}
+	for _, tc := range corruptionCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(tc.path, []byte("{not valid json"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c := model.NewSessionCache()
+			idx := NewCWDIndex()
+			var loadErr error
+			if tc.path == discoveryPath {
+				loadErr = c.LoadFrom(discoveryPath)
+			} else {
+				loadErr = idx.LoadFrom(cwdIndexPath)
+			}
+			if loadErr == nil {
+				t.Fatal("LoadFrom corrupted JSON: want error, got nil")
+			}
+			got, err := discoverSessionsFromDir(dir, indexPath, c, match, idx)
+			if err != nil {
+				t.Fatalf("discovery: %v", err)
+			}
+			assertSameSessionSet(t, tc.name, cold, got)
+		})
+	}
+
+	versionCases := []struct {
+		name string
+		path string
+	}{
+		{"wrong_format_version_cache", discoveryPath},
+		{"wrong_format_version_cwdindex", cwdIndexPath},
+	}
+	for _, tc := range versionCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(tc.path, []byte(`{"formatVersion":999,"entries":{}}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c := model.NewSessionCache()
+			idx := NewCWDIndex()
+			var loadErr error
+			if tc.path == discoveryPath {
+				loadErr = c.LoadFrom(discoveryPath)
+			} else {
+				loadErr = idx.LoadFrom(cwdIndexPath)
+			}
+			if loadErr == nil {
+				t.Fatal("LoadFrom wrong format version: want error, got nil")
+			}
+			got, err := discoverSessionsFromDir(dir, indexPath, c, match, idx)
+			if err != nil {
+				t.Fatalf("discovery: %v", err)
+			}
+			assertSameSessionSet(t, tc.name, cold, got)
+		})
+	}
+}

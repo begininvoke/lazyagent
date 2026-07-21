@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/diskcache"
@@ -66,6 +67,39 @@ func (c *SessionCache) SaveTo(path string) error {
 // per-entry decode) is silently skipped rather than merged as a nil
 // session, which would otherwise crash the very first GetIncremental/Clone
 // call that reached it.
+//
+// Each entry is also checked, right now, for the one specific way a
+// persisted-and-reloaded entry can be unsafe in a way an in-process one
+// never is: if the file it names currently has the SAME mtime as recorded
+// but a DIFFERENT size, the entry is dropped rather than merged, so a fresh
+// parse happens for that file this run instead of silently serving stale
+// content. GetIncremental's own full-hit check trusts mtime alone (by
+// design -- some providers that always fully re-parse rather than resume
+// incrementally deliberately store a placeholder size and rely on exactly
+// that trust, see e.g. internal/grok), which is safe within a single
+// process: nothing can rewrite a file between two GetIncremental calls with
+// its mtime coincidentally restored to its old value in between. That
+// assumption doesn't hold across separate CLI invocations: a tool that
+// rewrites a file while deliberately preserving its mtime (cp -p, some
+// sync/backup tools) between two runs would otherwise load in an entry
+// whose mtime matches but whose content doesn't, and GetIncremental would
+// then serve it forever as a "full hit" without ever re-reading the file.
+// Every other combination -- mtime differs (whether the file grew, for a
+// legitimate incremental resume, or shrank), or the file is gone entirely
+// -- is left for GetIncremental's existing logic to handle exactly as it
+// would for an in-process entry; only this one specific, provably-stale
+// combination is filtered here, precisely where persistence introduces it,
+// without touching GetIncremental's contract that other callers depend on.
+//
+// The check only applies when the recorded size is non-zero. A stored size
+// of 0 is grok's (and any similar always-fully-reparse provider's)
+// deliberate placeholder -- see internal/grok's cache.Put call -- used
+// purely to force a full re-parse on the NEXT mtime change; on an unchanged
+// mtime it relies on GetIncremental's mtime-only trust exactly like this
+// check does for any other provider, so treating "size 0 vs real file size"
+// as evidence of staleness here would wrongly drop every one of that
+// provider's entries and silently defeat its persistence, even though
+// nothing has actually changed.
 func (c *SessionCache) LoadFrom(path string) error {
 	var snapshot persistedSessionCache
 	if err := diskcache.ReadJSON(path, &snapshot); err != nil {
@@ -80,6 +114,11 @@ func (c *SessionCache) LoadFrom(path string) error {
 	for k, e := range snapshot.Entries {
 		if e.Session == nil {
 			continue
+		}
+		if e.Size != 0 {
+			if info, err := os.Stat(k); err == nil && info.ModTime().Equal(e.MTime) && info.Size() != e.Size {
+				continue
+			}
 		}
 		c.entries[k] = sessionCacheEntry{mtime: e.MTime, size: e.Size, session: e.Session}
 	}
