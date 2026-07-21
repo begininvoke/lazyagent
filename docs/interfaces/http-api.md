@@ -200,6 +200,7 @@ List all visible sessions within the configured [time window](../reference/confi
 |-----------|--------|-------------|
 | `search`  | string | Filter by project path (case-insensitive substring match) |
 | `filter`  | string | Filter by activity kind (e.g. `thinking`, `writing`, `idle`) |
+| `dir`     | string | Filter to sessions whose CWD is this directory or a subdirectory of it — the same matching `lazyagent sessions` uses. Must be an **absolute path** (there's no meaningful "current directory" for a remote client). The directory does not need to exist on the machine running the server. |
 
 **Response: `200 OK`**
 
@@ -222,6 +223,19 @@ List all visible sessions within the configured [time window](../reference/confi
 ```
 
 Possible `activity` values: `idle`, `waiting`, `thinking`, `compacting`, `reading`, `writing`, `running`, `searching`, `browsing`, `spawning`. See [Activity states](../concepts/activity-states.md) for meanings.
+
+**Example — sessions under one project:**
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:7421/api/sessions?dir=/Users/me/projects/myapp"
+```
+
+**Response: `400 Bad Request`** — `dir` is not an absolute path:
+
+```json
+{ "error": "dir must be an absolute path" }
+```
 
 ### `GET /api/sessions/{id}`
 

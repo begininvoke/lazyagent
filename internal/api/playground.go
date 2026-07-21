@@ -82,8 +82,8 @@ const playgroundHTML = `<!DOCTYPE html>
 <div class="endpoint locked" data-locked="1" onclick="fetchEndpoint('/api/sessions')">
   <span class="method get">GET</span>
   <span class="path">/api/sessions</span>
-  <span class="path" style="color:#6c7086">?search=&amp;filter=</span>
-  <div class="desc">List all visible sessions (filterable by search query and activity type)</div>
+  <span class="path" style="color:#6c7086">?search=&amp;filter=&amp;dir=</span>
+  <div class="desc">List all visible sessions (filterable by search query, activity type, and directory)</div>
 </div>
 
 <div class="endpoint locked" data-locked="1" onclick="fetchEndpoint('/api/sessions/{id}')">
