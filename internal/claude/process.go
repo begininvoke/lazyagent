@@ -1,6 +1,8 @@
 package claude
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -102,6 +104,28 @@ func ProjectDirForCWD(cwd string) string {
 // DiscoverSessions scans Claude projects directories for JSONL session files.
 // Every JSONL file is a separate session. Uses caches to skip unchanged files.
 func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache, configDirs []string) ([]*model.Session, error) {
+	return DiscoverSessionsFiltered(cache, desktopCache, configDirs, nil)
+}
+
+// DiscoverSessionsFiltered scans Claude projects directories like
+// DiscoverSessions, but skips fully parsing files whose cwd is known — with
+// certainty — not to match cwdMatch. session.CWD is first-cwd-wins (see
+// scanEntries in jsonl.go: it's set from the first entry that carries a
+// non-empty "cwd" field and never overwritten afterward), so a bounded
+// forward scan of a file's head (headCWD) that finds that same first
+// non-empty cwd IS the value a full parse would assign — a positive,
+// non-matching result is a confident skip, with no tail-scan fallback needed
+// (unlike codex's turn_context, which is last-wins and can drift over the
+// file). A file is skipped ONLY when headCWD positively resolves a
+// non-matching cwd; whenever the outcome is uncertain (unreadable, no cwd
+// field within the bounded window, etc.) the file is parsed anyway, and
+// every parsed session's *actual* cwd is checked against cwdMatch before
+// being returned — so a session is never silently dropped, only ever parsed
+// unnecessarily in the worst case.
+//
+// cwdMatch may be nil, in which case every session matches (equivalent to
+// DiscoverSessions).
+func DiscoverSessionsFiltered(cache *model.SessionCache, desktopCache *DesktopCache, configDirs []string, cwdMatch func(string) bool) ([]*model.Session, error) {
 	projectsDirs := ClaudeProjectsDirs(configDirs)
 	if len(projectsDirs) == 0 {
 		return nil, fmt.Errorf("could not find any Claude projects directories")
@@ -112,11 +136,14 @@ func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache, con
 	seen := make(map[string]struct{})
 	var sessions []*model.Session
 	for _, projectsDir := range projectsDirs {
-		sessions = discoverInDir(projectsDir, cache, wtCache, seen, sessions)
+		sessions = discoverInDir(projectsDir, cache, wtCache, seen, sessions, cwdMatch)
 	}
 	cache.Prune(seen)
 
-	// Enrich with Claude Desktop metadata.
+	// Enrich with Claude Desktop metadata. Desktop sessions are a separate,
+	// small source (never prefiltered) — this only annotates whichever
+	// sessions cwdMatch already let through above, so it stays correct
+	// regardless of how cwdMatch filtered the list.
 	desktopMeta := loadDesktopMetadata(desktopCache)
 	for _, session := range sessions {
 		if meta, ok := desktopMeta[session.SessionID]; ok {
@@ -132,11 +159,11 @@ func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache, con
 
 // parseJob holds the input for a single JSONL file parse operation.
 type parseJob struct {
-	jsonlFile  string
-	dirName    string // project directory name for CWD fallback
-	cached     *model.Session
-	offset     int64
-	mtime      time.Time
+	jsonlFile string
+	dirName   string // project directory name for CWD fallback
+	cached    *model.Session
+	offset    int64
+	mtime     time.Time
 }
 
 // parseResult holds the output of a single JSONL file parse operation.
@@ -150,7 +177,7 @@ type parseResult struct {
 // discoverInDir scans a single projects directory for JSONL session files
 // and appends discovered sessions to the provided slice.
 // Files that need parsing (cache miss or incremental update) are parsed in parallel.
-func discoverInDir(projectsDir string, cache *model.SessionCache, wtCache map[string]wtInfo, seen map[string]struct{}, sessions []*model.Session) []*model.Session {
+func discoverInDir(projectsDir string, cache *model.SessionCache, wtCache map[string]wtInfo, seen map[string]struct{}, sessions []*model.Session, cwdMatch func(string) bool) []*model.Session {
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
 		return sessions // Directory may not exist; skip it
@@ -173,10 +200,32 @@ func discoverInDir(projectsDir string, cache *model.SessionCache, wtCache map[st
 			cached, offset, mtime := cache.GetIncremental(jsonlFile)
 
 			if cached != nil && offset == 0 {
-				// Full cache hit — no parsing needed.
+				// Full cache hit — cached.CWD is the value a previous parse
+				// (full or incremental — either way, fully caught up to
+				// this file's current content) assigned: first-cwd-wins, or
+				// the decodeDirName fallback (see phase 2 below). Either
+				// way it's stable and final, so it's safe to filter on
+				// directly without touching the file.
+				if cwdMatch != nil && !cwdMatch(cached.CWD) {
+					continue
+				}
 				sessions = append(sessions, cached)
 				continue
 			}
+
+			if cwdMatch != nil && cached == nil {
+				// A genuine first-time full parse (no cached data at all): try
+				// to rule the file out before committing to the expensive parse.
+				// Incremental jobs (cached != nil, offset > 0) are deliberately
+				// NOT prefiltered here — their appended bytes are cheap to parse
+				// regardless (only new lines are read), and the uniform
+				// post-parse filter below is the single source of truth for
+				// whether they're included.
+				if !shouldParseForCWD(jsonlFile, cwdMatch) {
+					continue
+				}
+			}
+
 			jobs = append(jobs, parseJob{
 				jsonlFile: jsonlFile,
 				dirName:   projectEntry.Name(),
@@ -253,7 +302,16 @@ func discoverInDir(projectsDir string, cache *model.SessionCache, wtCache map[st
 			continue
 		}
 		enrichWorktree(r.session, wtCache)
+		// Always cache the fully parsed result, regardless of this call's
+		// matcher — the cache is shared across queries.
 		cache.Put(r.jsonlFile, r.mtime, r.newOffset, r.session)
+		// Uniform post-parse filter: the head-scan prefilter above is purely
+		// a skip optimization, so the parsed session's actual CWD (not
+		// whatever the prefilter guessed) is the single source of truth for
+		// whether it's returned.
+		if cwdMatch != nil && !cwdMatch(r.session.CWD) {
+			continue
+		}
 		sessions = append(sessions, r.session)
 	}
 	return sessions
@@ -274,4 +332,72 @@ func decodeDirName(name string) string {
 	// Reverse of ProjectDirForCWD: dashes → slashes, prepend /
 	// This is a best-effort heuristic
 	return "/" + strings.ReplaceAll(name, "-", "/")
+}
+
+// maxHeadScanBytes and maxHeadScanLines bound how much of a claude session
+// JSONL file headCWD will read before giving up, so a pathological file
+// (huge lines, or many lines with no cwd field) can't force reading large
+// amounts of data into memory or make the prefilter itself expensive.
+const (
+	maxHeadScanBytes = 64 * 1024
+	maxHeadScanLines = 25
+)
+
+// headCWD reads forward from the start of a claude session JSONL file,
+// looking for the first entry that carries a non-empty top-level "cwd"
+// field, stopping as soon as one is found or the bounded window
+// (maxHeadScanBytes / maxHeadScanLines, whichever is hit first) is
+// exhausted. Because session.CWD is first-cwd-wins (see scanEntries in
+// jsonl.go), this is exactly the cwd a full parse would assign to the
+// session — so a result found here is not a heuristic, it's the actual
+// answer, obtained without paying for the rest of the file.
+//
+// ok is false whenever no cwd could be determined within the bounded window
+// (missing file, empty file, the window closed before any entry supplied a
+// cwd) — callers must treat that as "unknown, don't filter it out" rather
+// than "no match", since the real cwd might still appear later in the file.
+func headCWD(path string) (cwd string, ok bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+
+	var bytesRead, lines int
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		lines++
+		bytesRead += len(line) + 1 // +1 for the stripped newline
+
+		var e struct {
+			CWD string `json:"cwd"`
+		}
+		if json.Unmarshal(line, &e) == nil && e.CWD != "" {
+			return e.CWD, true
+		}
+
+		if lines >= maxHeadScanLines || bytesRead >= maxHeadScanBytes {
+			return "", false
+		}
+	}
+	return "", false
+}
+
+// shouldParseForCWD reports whether a session file might still end up
+// matching cwdMatch and should therefore be parsed. It returns false —
+// "skip, don't parse" — ONLY when headCWD positively resolves a cwd (the
+// same value a full parse would assign to session.CWD, since claude is
+// first-cwd-wins) and cwdMatch rejects it. Whenever headCWD can't determine
+// a cwd within its bounded window, this conservatively returns true, so a
+// session is never skipped without certainty; the actual parsed cwd is
+// still checked afterward by the caller's uniform post-parse filter.
+func shouldParseForCWD(path string, cwdMatch func(string) bool) bool {
+	cwd, ok := headCWD(path)
+	if !ok {
+		return true // can't tell within the window — parse it
+	}
+	return cwdMatch(cwd)
 }
