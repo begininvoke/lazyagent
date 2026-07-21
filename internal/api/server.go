@@ -134,6 +134,14 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	defer s.manager.Close()
 
+	// Deliberately synchronous (core.SessionManager.Reload, not the
+	// progressive ReloadStreaming the TUI/GUI use for their first load):
+	// API clients expect complete data as soon as the server starts
+	// accepting requests, not a snapshot that's still growing. A warm
+	// persisted cache (EnableCachePersistence above) already makes even
+	// this first reload fast in the common case, so there's little to gain
+	// from streaming it and a real cost (partial results reachable over
+	// HTTP) to avoid.
 	if err := s.manager.Reload(); err != nil {
 		log.Printf("Warning: initial reload failed: %v", err)
 	}

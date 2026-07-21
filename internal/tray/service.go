@@ -67,8 +67,15 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 		return err
 	}
 
-	// Initial load
-	_ = s.manager.Reload()
+	// Progressive first load: runs in the background (core.SessionManager.
+	// ReloadStreaming) so ServiceStartup returns immediately instead of
+	// blocking GUI/tray startup on the slowest provider. Each batch calls
+	// emitUpdate, so the frontend's existing "sessions:updated" listener
+	// (App.svelte) re-fetches via GetSessions and the list grows in place —
+	// no frontend change needed, since GetSessions already just returns
+	// whatever's currently in the manager. Subsequent reloads (watchLoop
+	// below) stay synchronous.
+	go s.manager.ReloadStreaming(s.emitUpdate)
 
 	// Background goroutine: watch for file changes + periodic refresh
 	go s.watchLoop()
