@@ -1,6 +1,8 @@
 package core
 
 import (
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -21,6 +23,7 @@ type LiveProvider struct {
 	cache        *model.SessionCache
 	desktopCache *claude.DesktopCache
 	claudeDirs   []string
+	cwdIdx       *claude.CWDIndex
 }
 
 // NewLiveProvider creates a LiveProvider with mtime-based caches.
@@ -31,10 +34,14 @@ func NewLiveProvider(claudeDirs []string) *LiveProvider {
 		cache:        model.NewSessionCache(),
 		desktopCache: claude.NewDesktopCache(),
 		claudeDirs:   claudeDirs,
+		cwdIdx:       claude.NewCWDIndex(),
 	}
 }
 
-var _ DirScopedProvider = (*LiveProvider)(nil)
+var (
+	_ DirScopedProvider = (*LiveProvider)(nil)
+	_ CachePersister    = (*LiveProvider)(nil)
+)
 
 func (p *LiveProvider) DiscoverSessions() ([]*model.Session, error) {
 	return claude.DiscoverSessions(p.cache, p.desktopCache, p.claudeDirs)
@@ -43,7 +50,24 @@ func (p *LiveProvider) DiscoverSessions() ([]*model.Session, error) {
 // DiscoverSessionsMatching implements DirScopedProvider: it scopes discovery
 // to files whose cwd matches cwdMatch, skipping full parses of the rest.
 func (p *LiveProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
-	return claude.DiscoverSessionsFiltered(p.cache, p.desktopCache, p.claudeDirs, cwdMatch)
+	return claude.DiscoverSessionsFilteredIndexed(p.cache, p.desktopCache, p.claudeDirs, cwdMatch, p.cwdIdx)
+}
+
+// LoadCaches implements CachePersister.
+func (p *LiveProvider) LoadCaches(dir string) error {
+	err1 := p.cache.LoadFrom(filepath.Join(dir, "discovery-claude.json"))
+	err2 := p.cwdIdx.LoadFrom(filepath.Join(dir, "cwdindex-claude.json"))
+	return firstErr(err1, err2)
+}
+
+// SaveCaches implements CachePersister.
+func (p *LiveProvider) SaveCaches(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	err1 := p.cache.SaveTo(filepath.Join(dir, "discovery-claude.json"))
+	err2 := p.cwdIdx.SaveTo(filepath.Join(dir, "cwdindex-claude.json"))
+	return firstErr(err1, err2)
 }
 
 func (p *LiveProvider) UseWatcher() bool               { return true }
@@ -66,8 +90,23 @@ func NewPiProvider() *PiProvider {
 	return &PiProvider{cache: model.NewSessionCache()}
 }
 
+var _ CachePersister = (*PiProvider)(nil)
+
 func (p *PiProvider) DiscoverSessions() ([]*model.Session, error) {
 	return pi.DiscoverSessions(p.cache)
+}
+
+// LoadCaches implements CachePersister.
+func (p *PiProvider) LoadCaches(dir string) error {
+	return p.cache.LoadFrom(filepath.Join(dir, "discovery-pi.json"))
+}
+
+// SaveCaches implements CachePersister.
+func (p *PiProvider) SaveCaches(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return p.cache.SaveTo(filepath.Join(dir, "discovery-pi.json"))
 }
 
 func (p *PiProvider) UseWatcher() bool               { return true }
@@ -170,14 +209,18 @@ type DirScopedProvider interface {
 
 // CodexProvider discovers Codex CLI sessions from JSONL transcripts.
 type CodexProvider struct {
-	cache *model.SessionCache
+	cache  *model.SessionCache
+	cwdIdx *codex.CWDIndex
 }
 
-var _ DirScopedProvider = (*CodexProvider)(nil)
+var (
+	_ DirScopedProvider = (*CodexProvider)(nil)
+	_ CachePersister    = (*CodexProvider)(nil)
+)
 
 // NewCodexProvider creates a CodexProvider.
 func NewCodexProvider() *CodexProvider {
-	return &CodexProvider{cache: model.NewSessionCache()}
+	return &CodexProvider{cache: model.NewSessionCache(), cwdIdx: codex.NewCWDIndex()}
 }
 
 func (p *CodexProvider) DiscoverSessions() ([]*model.Session, error) {
@@ -187,7 +230,24 @@ func (p *CodexProvider) DiscoverSessions() ([]*model.Session, error) {
 // DiscoverSessionsMatching implements DirScopedProvider: it scopes discovery
 // to files whose cwd matches cwdMatch, skipping full parses of the rest.
 func (p *CodexProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
-	return codex.DiscoverSessionsFiltered(p.cache, cwdMatch)
+	return codex.DiscoverSessionsFilteredIndexed(p.cache, cwdMatch, p.cwdIdx)
+}
+
+// LoadCaches implements CachePersister.
+func (p *CodexProvider) LoadCaches(dir string) error {
+	err1 := p.cache.LoadFrom(filepath.Join(dir, "discovery-codex.json"))
+	err2 := p.cwdIdx.LoadFrom(filepath.Join(dir, "cwdindex-codex.json"))
+	return firstErr(err1, err2)
+}
+
+// SaveCaches implements CachePersister.
+func (p *CodexProvider) SaveCaches(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	err1 := p.cache.SaveTo(filepath.Join(dir, "discovery-codex.json"))
+	err2 := p.cwdIdx.SaveTo(filepath.Join(dir, "cwdindex-codex.json"))
+	return firstErr(err1, err2)
 }
 
 func (p *CodexProvider) UseWatcher() bool               { return false }
@@ -209,8 +269,23 @@ func NewAmpProvider() *AmpProvider {
 	return &AmpProvider{cache: model.NewSessionCache()}
 }
 
+var _ CachePersister = (*AmpProvider)(nil)
+
 func (p *AmpProvider) DiscoverSessions() ([]*model.Session, error) {
 	return amp.DiscoverSessions(p.cache)
+}
+
+// LoadCaches implements CachePersister.
+func (p *AmpProvider) LoadCaches(dir string) error {
+	return p.cache.LoadFrom(filepath.Join(dir, "discovery-amp.json"))
+}
+
+// SaveCaches implements CachePersister.
+func (p *AmpProvider) SaveCaches(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return p.cache.SaveTo(filepath.Join(dir, "discovery-amp.json"))
 }
 
 func (p *AmpProvider) UseWatcher() bool               { return false }
@@ -232,8 +307,23 @@ func NewGrokProvider() *GrokProvider {
 	return &GrokProvider{cache: model.NewSessionCache()}
 }
 
+var _ CachePersister = (*GrokProvider)(nil)
+
 func (p *GrokProvider) DiscoverSessions() ([]*model.Session, error) {
 	return grok.DiscoverSessions(p.cache)
+}
+
+// LoadCaches implements CachePersister.
+func (p *GrokProvider) LoadCaches(dir string) error {
+	return p.cache.LoadFrom(filepath.Join(dir, "discovery-grok.json"))
+}
+
+// SaveCaches implements CachePersister.
+func (p *GrokProvider) SaveCaches(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return p.cache.SaveTo(filepath.Join(dir, "discovery-grok.json"))
 }
 
 func (p *GrokProvider) UseWatcher() bool               { return true }
@@ -250,8 +340,23 @@ func NewKimiProvider() *KimiProvider {
 	return &KimiProvider{cache: model.NewSessionCache()}
 }
 
+var _ CachePersister = (*KimiProvider)(nil)
+
 func (p *KimiProvider) DiscoverSessions() ([]*model.Session, error) {
 	return kimi.DiscoverSessions(p.cache)
+}
+
+// LoadCaches implements CachePersister.
+func (p *KimiProvider) LoadCaches(dir string) error {
+	return p.cache.LoadFrom(filepath.Join(dir, "discovery-kimi.json"))
+}
+
+// SaveCaches implements CachePersister.
+func (p *KimiProvider) SaveCaches(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return p.cache.SaveTo(filepath.Join(dir, "discovery-kimi.json"))
 }
 
 func (p *KimiProvider) UseWatcher() bool               { return true }
