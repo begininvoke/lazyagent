@@ -26,11 +26,16 @@ const cwdIndexFormatVersion = 1
 // size change, for uniformity with codex's index and as a defensive
 // safety net (see shouldParseForCWD's doc comment).
 //
-// Only files whose cwd conclusively does NOT match a query ever populate
-// this index — see discoverInDir's cwdMatch != nil && cached == nil guard,
-// the only place it's consulted. Files that get parsed end up in
-// model.SessionCache instead, whose persisted full-hit fast path already
-// avoids re-reading them.
+// An entry is populated for every file that reaches the prefilter check at
+// all — see discoverInDir's cwdMatch != nil && cached == nil guard, the
+// only place it's consulted — regardless of whether that file ends up
+// skipped or parsed (shouldParseForCWDIndexed always resolves headCWD
+// before deciding either way). The index's ongoing value is concentrated in
+// the skipped files, though: a parsed file also lands in model.SessionCache,
+// whose persisted full-hit fast path takes over for it on every later run
+// without ever consulting this index again, whereas a skipped file never
+// enters SessionCache at all and so keeps needing this index's answer on
+// every run.
 type CWDIndex struct {
 	mu      sync.Mutex
 	entries map[string]cwdIndexEntry
@@ -47,6 +52,22 @@ type cwdIndexEntry struct {
 // NewCWDIndex creates an empty CWDIndex.
 func NewCWDIndex() *CWDIndex {
 	return &CWDIndex{entries: make(map[string]cwdIndexEntry)}
+}
+
+// Prune removes index entries for files no longer present in the seen set,
+// mirroring model.SessionCache.Prune. Without this, a session file removed
+// from ~/.claude/projects between runs would leave its entry in the index
+// forever, since nothing else ever visits that path again to overwrite or
+// expire it. discoverInDir already builds the seen set for cache.Prune; the
+// same set is reused here.
+func (idx *CWDIndex) Prune(seen map[string]struct{}) {
+	idx.mu.Lock()
+	for k := range idx.entries {
+		if _, ok := seen[k]; !ok {
+			delete(idx.entries, k)
+		}
+	}
+	idx.mu.Unlock()
 }
 
 // headCWDIndexed returns the same (cwd, ok) headCWD(path) would for path's

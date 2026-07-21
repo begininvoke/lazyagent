@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -320,6 +321,57 @@ func TestCWDIndex_LoadFrom_WrongFormatVersion(t *testing.T) {
 	}
 }
 
+// TestCWDIndex_PruneRemovesDeletedFileEntries covers a full discovery+save
+// cycle: a file that gets skipped (non-matching cwd) populates a cwd-index
+// entry; once that file is deleted from the rollout tree, the next
+// discovery pass must prune its now-stale entry so a save afterward doesn't
+// persist it forever (codex rotates/prunes old sessions, so this isn't a
+// hypothetical -- without pruning, the index would grow unboundedly with
+// entries for files that no longer exist).
+func TestCWDIndex_PruneRemovesDeletedFileEntries(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(t.TempDir(), "session_index.jsonl")
+	cwdIndexPath := filepath.Join(t.TempDir(), "cwdindex-codex.json")
+	match := func(cwd string) bool { return cwd == "/tmp/match" }
+
+	pathToDelete := writeRolloutFile(t, dir, 1, "sess-prune-0000-0000-000000000000", "/tmp/other")
+
+	cwdIdx := NewCWDIndex()
+	if _, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), match, cwdIdx); err != nil {
+		t.Fatalf("run1: %v", err)
+	}
+	if err := cwdIdx.SaveTo(cwdIndexPath); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+
+	if err := os.Remove(pathToDelete); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := NewCWDIndex()
+	if err := reloaded.LoadFrom(cwdIndexPath); err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if _, ok := reloaded.entries[pathToDelete]; !ok {
+		t.Fatal("expected the reloaded index to still have an entry for the (now deleted) file before this run's discovery prunes it")
+	}
+
+	if _, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), match, reloaded); err != nil {
+		t.Fatalf("run2 (over the mutated tree, file deleted): %v", err)
+	}
+	if err := reloaded.SaveTo(cwdIndexPath); err != nil {
+		t.Fatalf("SaveTo after prune: %v", err)
+	}
+
+	final := NewCWDIndex()
+	if err := final.LoadFrom(cwdIndexPath); err != nil {
+		t.Fatalf("LoadFrom final: %v", err)
+	}
+	if _, ok := final.entries[pathToDelete]; ok {
+		t.Fatal("expected the deleted file's entry to be pruned from the persisted index after the discovery+save cycle")
+	}
+}
+
 // --- discovery-level equivalence with a persisted+reloaded CWDIndex ---
 
 // TestDiscoverSessionsFilteredIndexed_PersistedIndexEquivalentToCold is the
@@ -389,24 +441,120 @@ func sessionPaths(sessions []*model.Session) map[string]bool {
 	return m
 }
 
-// assertSameSessionSet fails t if cold and got don't contain the exact same
-// set of JSONLPaths.
-func assertSameSessionSet(t *testing.T, label string, cold, got []*model.Session) {
+// errorfer is the minimal subset of *testing.T that sessionDigest and
+// assertSameSessionSet need. It exists (instead of taking *testing.T
+// directly) so TestAssertSameSessionSet_CatchesStaleContentAtSamePath can
+// pass a non-*testing.T fake that records a failure without that failure
+// propagating to the test currently running assertSameSessionSet's own
+// test — testing.TB can't be used for this, since it has an unexported
+// method that only the standard library's *testing.T/B/F can implement.
+// Every real call site passes a plain *testing.T, which satisfies this
+// smaller interface implicitly.
+type errorfer interface {
+	Helper()
+	Errorf(format string, args ...any)
+	Fatalf(format string, args ...any)
+}
+
+// sessionDigest renders s as JSON for content comparison. Session has no
+// fields populated from wall-clock time (every timestamp on it comes from
+// parsed JSONL content via time.Parse, never time.Now()), so there are no
+// legitimately-nondeterministic fields to normalize before comparing two
+// independently-produced sessions for the same file — a byte-different
+// digest here always means a genuine content difference, not incidental
+// representation noise (e.g. time.Time's internal monotonic-reading
+// representation, which reflect.DeepEqual is sensitive to but JSON
+// marshaling normalizes away, since it only ever encodes the RFC3339Nano
+// wall-clock value).
+func sessionDigest(t errorfer, s *model.Session) string {
 	t.Helper()
-	coldPaths := sessionPaths(cold)
-	gotPaths := sessionPaths(got)
-	if len(coldPaths) != len(gotPaths) {
-		t.Errorf("%s: session count = %d, want %d", label, len(gotPaths), len(coldPaths))
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("marshal session for digest: %v", err)
 	}
-	for p := range coldPaths {
-		if !gotPaths[p] {
+	return string(data)
+}
+
+// assertSameSessionSet fails t if cold and got don't contain sessions with
+// the exact same JSONLPaths AND, for each shared path, byte-identical
+// content. A path-only comparison would pass a stale-content-same-path
+// regression (a persisted entry served for a file whose content actually
+// changed) undetected, since both sides would agree on which files are
+// present without ever checking what was returned for them.
+func assertSameSessionSet(t errorfer, label string, cold, got []*model.Session) {
+	t.Helper()
+	coldByPath := make(map[string]*model.Session, len(cold))
+	for _, s := range cold {
+		coldByPath[s.JSONLPath] = s
+	}
+	gotByPath := make(map[string]*model.Session, len(got))
+	for _, s := range got {
+		gotByPath[s.JSONLPath] = s
+	}
+	if len(coldByPath) != len(gotByPath) {
+		t.Errorf("%s: session count = %d, want %d", label, len(gotByPath), len(coldByPath))
+	}
+	for p, cs := range coldByPath {
+		gs, ok := gotByPath[p]
+		if !ok {
 			t.Errorf("%s: missing %s (present in cold discovery)", label, p)
+			continue
+		}
+		if wantDigest, gotDigest := sessionDigest(t, cs), sessionDigest(t, gs); wantDigest != gotDigest {
+			t.Errorf("%s: session content for %s differs from cold discovery\ncold: %s\ngot:  %s", label, p, wantDigest, gotDigest)
 		}
 	}
-	for p := range gotPaths {
-		if !coldPaths[p] {
+	for p := range gotByPath {
+		if _, ok := coldByPath[p]; !ok {
 			t.Errorf("%s: unexpected extra %s (absent from cold discovery)", label, p)
 		}
+	}
+}
+
+// fakeErrorfer records whether Errorf/Fatalf was called, without failing
+// the test actually running -- used only to verify that assertSameSessionSet
+// itself reports a failure for a given input, since a real *testing.T's
+// Errorf would otherwise mark the enclosing test (and, via t.Run's
+// propagation, any parent) failed regardless of what's checked afterward.
+type fakeErrorfer struct {
+	failed bool
+}
+
+func (f *fakeErrorfer) Helper()                           {}
+func (f *fakeErrorfer) Errorf(format string, args ...any) { f.failed = true }
+func (f *fakeErrorfer) Fatalf(format string, args ...any) { f.failed = true }
+
+// TestAssertSameSessionSet_CatchesStaleContentAtSamePath proves the content
+// check added to assertSameSessionSet actually earns its keep: a
+// same-path-but-different-content regression (the exact bug class df89efa
+// fixed -- a stale cached session served for a file whose real content
+// changed, without necessarily changing which files are present at all) is
+// invisible to a JSONLPath-set-only comparison, since both sides agree on
+// which paths are present. It manufactures two sessions at the identical
+// path with different field values directly (not via real discovery) so
+// this is deterministic and independent of any particular fixture mutation
+// happening to also change match status.
+func TestAssertSameSessionSet_CatchesStaleContentAtSamePath(t *testing.T) {
+	cold := []*model.Session{
+		{JSONLPath: "/tmp/x.jsonl", SessionID: "s1", CWD: "/tmp/match", TotalMessages: 5},
+	}
+	stale := []*model.Session{
+		{JSONLPath: "/tmp/x.jsonl", SessionID: "s1-STALE", CWD: "/tmp/match", TotalMessages: 1},
+	}
+
+	fake := &fakeErrorfer{}
+	assertSameSessionSet(fake, "simulated", cold, stale)
+	if !fake.failed {
+		t.Fatal("assertSameSessionSet did not detect a same-path, different-content regression -- the content-digest check added to it is not actually catching this bug class")
+	}
+
+	// Sanity check the other direction too: identical content at the same
+	// path must NOT be flagged, so the fake and the check itself are both
+	// wired correctly (not just always reporting failed).
+	fakeOK := &fakeErrorfer{}
+	assertSameSessionSet(fakeOK, "simulated", cold, cold)
+	if fakeOK.failed {
+		t.Fatal("assertSameSessionSet flagged identical content as a mismatch")
 	}
 }
 

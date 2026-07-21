@@ -150,6 +150,9 @@ func DiscoverSessionsFilteredIndexed(cache *model.SessionCache, desktopCache *De
 		sessions = discoverInDir(projectsDir, cache, wtCache, seen, sessions, cwdMatch, cwdIdx)
 	}
 	cache.Prune(seen)
+	if cwdIdx != nil {
+		cwdIdx.Prune(seen)
+	}
 
 	// Enrich with Claude Desktop metadata. Desktop sessions are a separate,
 	// small source (never prefiltered) — this only annotates whichever

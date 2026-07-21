@@ -221,6 +221,9 @@ func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.Session
 	}
 
 	cache.Prune(seen)
+	if cwdIdx != nil {
+		cwdIdx.Prune(seen)
+	}
 	return sessions, nil
 }
 
