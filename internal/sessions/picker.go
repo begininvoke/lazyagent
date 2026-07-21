@@ -21,7 +21,23 @@ const (
 	actionQuit pickerAction = iota
 	actionOpen
 	actionCopy
+	// actionEmpty fires when the discovery stream finishes with zero
+	// sessions total — distinct from actionQuit (an explicit user quit)
+	// so Run can print the "No sessions found" message only in this case.
+	actionEmpty
 )
+
+// sessionBatchMsg carries one discovery member's already dir-filtered
+// results (sessions/titles, parallel slices) as they arrive from the
+// streaming discovery goroutine. See runPicker.
+type sessionBatchMsg struct {
+	sessions []*model.Session
+	titles   []string
+}
+
+// streamDoneMsg signals that every discovery member has finished (the
+// DiscoverMatchingStream done channel closed). See runPicker.
+type streamDoneMsg struct{}
 
 // agentColors maps agent keys to identity colors. The keys shared with the
 // prune/compact selectors reuse their palette; the rest stay in the family.
@@ -55,6 +71,17 @@ type pickerModel struct {
 	dirLabel string
 	now      time.Time
 	height   int // terminal height from the last tea.WindowSizeMsg; 0 = unknown
+
+	// Streaming discovery state (see sessionBatchMsg/streamDoneMsg). loading
+	// is true until the discovery stream's done message arrives; total is
+	// the number of discovery members expected (memberCount), doneCount the
+	// number that have delivered a batch so far, bounded by total. A member
+	// that fails contributes no batch at all (best-effort), so doneCount can
+	// stay below total even after loading flips false -- the footer just
+	// switches away from the progress text at that point regardless.
+	loading   bool
+	doneCount int
+	total     int
 }
 
 // defaultVisibleRows is the row budget View falls back to when the terminal
@@ -77,6 +104,36 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyMsg:
 		return m.updateKey(msg)
+	case sessionBatchMsg:
+		return m.applyBatch(msg), nil
+	case streamDoneMsg:
+		return m.applyStreamDone()
+	}
+	return m, nil
+}
+
+// applyBatch merges one discovery member's batch into the accumulated
+// list, keeps the cursor on whatever session it was tracking (see
+// relocateCursor), and advances the loading progress counter.
+func (m pickerModel) applyBatch(msg sessionBatchMsg) pickerModel {
+	prevSessions, prevCursor := m.sessions, m.cursor
+	m.sessions, m.titles = mergeSessions(m.sessions, m.titles, msg.sessions, msg.titles)
+	m.cursor = relocateCursor(prevSessions, prevCursor, m.sessions)
+	if m.doneCount < m.total {
+		m.doneCount++
+	}
+	return m
+}
+
+// applyStreamDone reacts to every discovery member having finished: if
+// nothing was ever found, the picker quits itself with actionEmpty so Run
+// can print the "No sessions found" message; otherwise it just switches the
+// footer out of its loading state.
+func (m pickerModel) applyStreamDone() (tea.Model, tea.Cmd) {
+	m.loading = false
+	if len(m.sessions) == 0 {
+		m.action = actionEmpty
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -94,6 +151,11 @@ func (m pickerModel) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.status = ""
 	case "enter":
+		// During loading the list can still be empty (no batch has arrived
+		// yet): nothing to act on, so no-op rather than index out of range.
+		if len(m.sessions) == 0 {
+			return m, nil
+		}
 		s := m.sessions[m.cursor]
 		switch {
 		case core.ResumeArgv(s.Agent, s.SessionID) != nil:
@@ -107,6 +169,9 @@ func (m pickerModel) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("no resume available for %s sessions", s.Agent)
 		}
 	case "c":
+		if len(m.sessions) == 0 {
+			return m, nil
+		}
 		s := m.sessions[m.cursor]
 		if core.ResumeCommand(s.Agent, s.SessionID) != "" {
 			m.action = actionCopy
@@ -270,11 +335,21 @@ func (m pickerModel) View() string {
 
 	title := chatops.StyleTableHeader.Render(fmt.Sprintf("Sessions in %s (%d)", m.dirLabel, total))
 	box := stylePickerBox.Render(title + "\n\n" + strings.Join(rows, "\n"))
-	footer := chatops.StyleFooter.Render("  ↑/↓ move · enter open · c copy resume cmd · q quit")
+	footer := chatops.StyleFooter.Render(m.footerText())
 	if m.status != "" {
 		footer += "\n" + styleStatus.Render("  "+m.status)
 	}
 	return box + "\n" + footer + "\n"
+}
+
+// footerText is the footer line's content: a loading indicator with
+// progress while the discovery stream is still running, the normal
+// keybinding hint once it's done.
+func (m pickerModel) footerText() string {
+	if m.loading {
+		return fmt.Sprintf("  loading agents… (%d/%d)", m.doneCount, m.total)
+	}
+	return "  ↑/↓ move · enter open · c copy resume cmd · q quit"
 }
 
 func agentColor(agent string) lipgloss.Color {

@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -347,5 +348,154 @@ func TestRelocateCursorOnEmptyMergedIsZero(t *testing.T) {
 	prev := []*model.Session{{SessionID: "x"}}
 	if got := relocateCursor(prev, 0, nil); got != 0 {
 		t.Errorf("relocateCursor = %d, want 0", got)
+	}
+}
+
+// --- Update-driven stream transitions ---
+
+func TestPickerBatchMsgAppendsAndResorts(t *testing.T) {
+	now := time.Now()
+	m := pickerModel{loading: true, total: 2}
+
+	next, cmd := m.Update(sessionBatchMsg{
+		sessions: []*model.Session{{SessionID: "a", LastActivity: now.Add(-time.Hour)}},
+		titles:   []string{"A"},
+	})
+	m = next.(pickerModel)
+	if cmd != nil {
+		t.Fatal("a batch message must not quit the program")
+	}
+	if len(m.sessions) != 1 || m.sessions[0].SessionID != "a" {
+		t.Fatalf("sessions = %#v, want [a]", m.sessions)
+	}
+	if m.doneCount != 1 {
+		t.Fatalf("doneCount = %d, want 1", m.doneCount)
+	}
+	if !m.loading {
+		t.Fatal("model must still be loading before a streamDoneMsg arrives")
+	}
+
+	// A second, more recent batch: the merged list must end up sorted even
+	// though it arrived after the older one.
+	next, _ = m.Update(sessionBatchMsg{
+		sessions: []*model.Session{{SessionID: "b", LastActivity: now}},
+		titles:   []string{"B"},
+	})
+	m = next.(pickerModel)
+	if len(m.sessions) != 2 || m.sessions[0].SessionID != "b" || m.sessions[1].SessionID != "a" {
+		t.Fatalf("sessions = %#v, want [b, a]", m.sessions)
+	}
+	if m.doneCount != 2 {
+		t.Fatalf("doneCount = %d, want 2", m.doneCount)
+	}
+}
+
+func TestPickerBatchMsgDoneCountNeverExceedsTotal(t *testing.T) {
+	m := pickerModel{loading: true, total: 1}
+	next, _ := m.Update(sessionBatchMsg{sessions: []*model.Session{{SessionID: "a"}}, titles: []string{"A"}})
+	m = next.(pickerModel)
+	next, _ = m.Update(sessionBatchMsg{sessions: []*model.Session{{SessionID: "b"}}, titles: []string{"B"}})
+	m = next.(pickerModel)
+	if m.doneCount != 1 {
+		t.Fatalf("doneCount = %d, want 1 (bounded by total)", m.doneCount)
+	}
+}
+
+func TestPickerStreamDoneWithZeroSessionsQuitsWithEmptyAction(t *testing.T) {
+	m := pickerModel{loading: true, total: 1}
+	next, cmd := m.Update(streamDoneMsg{})
+	m = next.(pickerModel)
+	if m.action != actionEmpty {
+		t.Fatalf("action = %v, want actionEmpty", m.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected tea.Quit when the stream finishes with zero sessions")
+	}
+	if m.loading {
+		t.Fatal("loading must be false once the stream is done")
+	}
+}
+
+func TestPickerStreamDoneSwitchesFooterWhenNonEmpty(t *testing.T) {
+	m := pickerModel{
+		loading:  true,
+		total:    1,
+		sessions: []*model.Session{{Agent: "claude", SessionID: "a"}},
+		titles:   []string{"one"},
+	}
+	next, cmd := m.Update(streamDoneMsg{})
+	m = next.(pickerModel)
+	if cmd != nil {
+		t.Fatal("a non-empty completion must not quit the program")
+	}
+	if m.loading {
+		t.Fatal("loading must be false once the stream is done")
+	}
+	if m.action == actionEmpty {
+		t.Fatal("action must not be actionEmpty when sessions were found")
+	}
+	if strings.Contains(m.View(), "loading agents") {
+		t.Error("footer must switch away from the loading text once done")
+	}
+}
+
+func TestPickerLoadingFooterShowsProgress(t *testing.T) {
+	m := pickerModel{loading: true, total: 3, doneCount: 1}
+	view := m.View()
+	if !strings.Contains(view, "loading agents… (1/3)") {
+		t.Errorf("View() = %q, want it to contain the loading progress footer", view)
+	}
+}
+
+func TestPickerEnterDuringLoadingActsOnCurrentRow(t *testing.T) {
+	m := pickerModel{
+		loading:  true,
+		total:    2,
+		sessions: []*model.Session{{Agent: "claude", SessionID: "a"}},
+		titles:   []string{"one"},
+	}
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(pickerModel)
+	if m.action != actionOpen {
+		t.Fatalf("action = %v, want actionOpen", m.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected tea.Quit after opening a row while still loading")
+	}
+}
+
+func TestPickerQuitDuringLoadingWorks(t *testing.T) {
+	m := pickerModel{loading: true, total: 2}
+	next, cmd := m.Update(keyRune('q'))
+	m = next.(pickerModel)
+	if m.action != actionQuit {
+		t.Fatalf("action = %v, want actionQuit (explicit quit, not actionEmpty)", m.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected tea.Quit")
+	}
+}
+
+func TestPickerEnterOnEmptyListDuringLoadingIsNoop(t *testing.T) {
+	m := pickerModel{loading: true, total: 2}
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(pickerModel)
+	if cmd != nil {
+		t.Fatal("enter on an empty (still loading) list must not quit")
+	}
+	if m.action != actionQuit {
+		t.Fatalf("action = %v, want the zero value actionQuit (no-op)", m.action)
+	}
+}
+
+func TestPickerCKeyOnEmptyListDuringLoadingIsNoop(t *testing.T) {
+	m := pickerModel{loading: true, total: 2}
+	next, cmd := m.Update(keyRune('c'))
+	m = next.(pickerModel)
+	if cmd != nil {
+		t.Fatal("c on an empty (still loading) list must not quit")
+	}
+	if m.action != actionQuit {
+		t.Fatalf("action = %v, want the zero value actionQuit (no-op)", m.action)
 	}
 }
