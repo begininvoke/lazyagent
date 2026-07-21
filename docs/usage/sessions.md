@@ -70,6 +70,32 @@ copied to the clipboard instead; Grok has no resume command.
 ]
 ```
 
+## Performance
+
+### Progressive picker
+
+When you run `lazyagent sessions`, the picker opens immediately and results stream in as each agent's discovery completes. A footer displays `loading agents… (done/total)` during discovery. Once all agents finish, the footer switches to the normal keybinding hint. If discovery finishes with zero sessions, the command prints "No sessions found in …" and exits.
+
+### Discovery cache
+
+The sessions command maintains persistent discovery caches under your system cache directory:
+
+- **macOS**: `~/Library/Caches/lazyagent/`
+- **Linux**: `~/.cache/lazyagent/`
+- **Other**: per-platform defaults from `$XDG_CACHE_HOME` or equivalent
+
+Cache files follow the pattern `discovery-<agent>.json` and `cwdindex-<agent>.json` (for example, `discovery-claude.json` and `cwdindex-claude.json` for Claude Code). Files are created with permission `0600`; the directory has `0700`.
+
+Cache contents are **advisory**: deleting the cache directory is always safe and won't break anything. On the next run, `lazyagent sessions` simply re-scans the session data and rebuilds the cache.
+
+Repeat runs typically complete in tens of milliseconds when caches are warm; only sessions from files that changed on disk are re-read.
+
+**Privacy note**: cache files may contain short transcript snippets (for example, the first message text for session preview). If you delete your entire cache directory, you also remove these cached snippets from disk.
+
+### Directory-scoped optimization
+
+The listing is optimized to discover sessions for the target directory without reading other directories' data, which speeds up results when your codebase spans multiple large directory hierarchies.
+
 ## Exit codes
 
 | Code | Meaning |
