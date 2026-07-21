@@ -476,11 +476,18 @@ func (p *filteringDirScopedProvider) DiscoverSessions() ([]*model.Session, error
 	return p.sessions, nil
 }
 
+// DiscoverSessionsMatching honors the same "cwdMatch may be nil, in which
+// case every session matches" contract every real DirScopedProvider
+// implementation documents (claude, codex, opencode, kilo) -- needed since
+// SessionManager.ReloadStreaming's per-member fan-out (unlike Reload, which
+// bypasses DiscoverMatching entirely when there are no exclude patterns)
+// always calls DiscoverSessionsMatching, passing a literal nil matcher for
+// "no patterns configured" rather than skipping the call.
 func (p *filteringDirScopedProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
 	p.receivedMatcher = true
 	var out []*model.Session
 	for _, s := range p.sessions {
-		if cwdMatch(s.CWD) {
+		if cwdMatch == nil || cwdMatch(s.CWD) {
 			out = append(out, s)
 		}
 	}

@@ -58,6 +58,15 @@ type SessionManager struct {
 	lastPollDiscover     time.Time
 	excludeCWDSubstrings []string
 
+	// streamInFlight is the guard for the progressive-first-load /
+	// steady-state interplay: true for the duration of a ReloadStreaming
+	// call (set before DiscoverMatchingStream starts, cleared after it and
+	// the completion save finish), false the rest of the time. Reload and
+	// UpdateActivities' periodic re-discovery both check it and back off
+	// rather than racing a stream's own accumulating per-batch merges --
+	// see their doc comments for exactly how each responds.
+	streamInFlight bool
+
 	// Persisted discovery cache (opt-in, see EnableCachePersistence). All
 	// guarded by mu like everything else above; the actual Load/Save disk
 	// I/O always happens outside the lock (see loadPersistedCacheOnce /
@@ -253,14 +262,42 @@ func (m *SessionManager) WatcherEvents() <-chan struct{} {
 // this change, no caller actually changes patterns after startup; see the
 // report for that investigation.)
 func (m *SessionManager) discoverHonoringExclusions() ([]*model.Session, error) {
+	matcher := m.exclusionMatcher()
+	if matcher == nil {
+		return m.provider.DiscoverSessions()
+	}
+	return DiscoverMatching(m.provider, matcher)
+}
+
+// exclusionMatcher returns the cwdMatch predicate for the
+// exclude_cwd_substrings pushdown: nil when no patterns are configured, or
+// excludeCWDPredicate(patterns) otherwise. This is the single place that
+// decides the predicate -- discoverHonoringExclusions (used by Reload and
+// UpdateActivities' periodic re-discovery) and ReloadStreaming (the
+// progressive first load) both call it, so the pushdown can never diverge
+// between the synchronous and streaming discovery paths.
+//
+// nil is a deliberate, meaningful value here, not merely "no filtering
+// needed": discoverHonoringExclusions treats it as "skip DiscoverMatching's
+// dir-scoped fast-path machinery entirely and call the provider's plain,
+// unscoped DiscoverSessions()" -- the exact zero-diff behavior Reload had
+// before the exclusion pushdown existed. ReloadStreaming, whose per-member
+// fan-out has no such top-level bypass (DiscoverMatchingStream always
+// dispatches through discoverMatchingOne per member), instead passes the
+// nil straight through to DiscoverMatchingStream: every DirScopedProvider
+// implementation in this codebase (claude, codex, opencode, kilo) documents
+// "cwdMatch may be nil, in which case every session matches", so a nil
+// matcher is output-equivalent to the plain-DiscoverSessions() bypass
+// either way -- just reached via a different call path, since streaming's
+// architecture requires going through the per-member dispatch regardless.
+func (m *SessionManager) exclusionMatcher() func(cwd string) bool {
 	m.mu.RLock()
 	patterns := m.excludeCWDSubstrings
 	m.mu.RUnlock()
-
 	if len(patterns) == 0 {
-		return m.provider.DiscoverSessions()
+		return nil
 	}
-	return DiscoverMatching(m.provider, excludeCWDPredicate(patterns))
+	return excludeCWDPredicate(patterns)
 }
 
 // Reload discovers sessions via the provider and updates activity states.
@@ -269,7 +306,32 @@ func (m *SessionManager) discoverHonoringExclusions() ([]*model.Session, error) 
 // and saved (see loadPersistedCacheOnce / savePersistedCacheIfDue). See
 // discoverHonoringExclusions for how the exclude_cwd_substrings pushdown is
 // applied.
+//
+// While the manager's progressive first load (ReloadStreaming) is still in
+// flight (streamInFlight), Reload is a no-op that returns nil immediately
+// instead of running a second, independent discovery concurrently with the
+// stream's own accumulating per-batch merges. This absorbs watcher/
+// ticker-driven Reload calls that land mid-stream: the TUI's
+// fileWatchMsg/tickMsg handlers and the tray/API's watchLoop all call
+// Reload unconditionally on every watcher event or fallback tick, with no
+// way to know a stream is running. The stream is already the freshest full
+// discovery in progress, and letting a concurrent Reload replace m.sessions
+// mid-stream would either lose sessions a later batch alone would have
+// merged in, or -- since ReloadStreaming's batches are appended, not
+// replaced -- let a later batch duplicate sessions Reload's own complete
+// discovery already included. Absorbing the call is the simplest sound
+// rule: nothing is lost, since the event that triggered it isn't
+// discarded either (callers still re-arm their watcher for the next real
+// event), and the in-flight stream's own completion is guaranteed to
+// reflect at least as much as that Reload would have.
 func (m *SessionManager) Reload() error {
+	m.mu.RLock()
+	streaming := m.streamInFlight
+	m.mu.RUnlock()
+	if streaming {
+		return nil
+	}
+
 	m.loadPersistedCacheOnce()
 
 	sessions, err := m.discoverHonoringExclusions()
@@ -287,6 +349,76 @@ func (m *SessionManager) Reload() error {
 	return nil
 }
 
+// ReloadStreaming performs the manager's progressive FIRST load: instead of
+// waiting for every provider to finish (the barrier
+// MultiProvider.DiscoverSessions imposes) before showing anything, each
+// provider member's sessions are merged into the snapshot -- and onUpdate
+// (if non-nil) is called -- as soon as that member completes, via
+// core.DiscoverMatchingStream. It blocks until every member has finished;
+// callers that want progressive rendering run it in their own goroutine
+// (see internal/ui's streaming glue and internal/tray's ServiceStartup) and
+// use onUpdate to notify themselves a new batch landed. onUpdate is always
+// called with m.mu NOT held, so it's safe for onUpdate to call back into the
+// manager (Sessions(), VisibleSessions(), etc.) without deadlocking; it may
+// also be called concurrently by more than one member's goroutine, so it
+// must itself be safe for concurrent use.
+//
+// Uses exclusionMatcher -- the SAME predicate-selection logic
+// discoverHonoringExclusions uses -- so the exclude_cwd_substrings pushdown
+// applies identically on the streaming path.
+//
+// Intended to be called exactly once, as the very first load, before any
+// Reload(). While it runs, streamInFlight is true: Reload() and
+// UpdateActivities' periodic re-discovery both back off (see their doc
+// comments) rather than racing this call's per-batch merges.
+//
+// Persistence (when EnableCachePersistence was called): the persisted cache
+// is loaded once before discovery starts, exactly like Reload's first call
+// (loadPersistedCacheOnce is idempotent, so whichever of Reload/
+// ReloadStreaming runs first "wins" the load). On completion, the cache is
+// saved exactly once -- never per batch -- via savePersistedCacheIfDue,
+// regardless of whether any member actually found sessions:
+// DiscoverMatchingStream has no error channel (best-effort per member, by
+// design, same as MultiProvider.DiscoverSessions), so "every member failed"
+// is indistinguishable from "every member genuinely found nothing" at this
+// level. Unlike Reload (which skips the save entirely on a hard discovery
+// error), ReloadStreaming therefore always saves on completion, since
+// "the stream finished" -- not "discovery succeeded" -- is its completion
+// signal. If every member fails or emits nothing, the manager simply ends
+// with an empty snapshot: the same observable outcome Reload's own error
+// path already produces via empty views today, and the resulting save is
+// advisory and harmless (see CachePersister) -- no new error surface is
+// introduced.
+func (m *SessionManager) ReloadStreaming(onUpdate func()) {
+	m.loadPersistedCacheOnce()
+
+	matcher := m.exclusionMatcher()
+
+	m.mu.Lock()
+	m.streamInFlight = true
+	m.mu.Unlock()
+
+	done := DiscoverMatchingStream(m.provider, matcher, func(batch []*model.Session) {
+		m.mu.Lock()
+		m.sessions = append(m.sessions, batch...)
+		m.tracker.Update(m.sessions, time.Now())
+		SortSessions(m.sessions)
+		m.lastPollDiscover = time.Now()
+		m.mu.Unlock()
+
+		if onUpdate != nil {
+			onUpdate()
+		}
+	})
+	<-done
+
+	m.mu.Lock()
+	m.streamInFlight = false
+	m.mu.Unlock()
+
+	m.savePersistedCacheIfDue()
+}
+
 // UpdateActivities refreshes activity states without reloading from disk.
 // Returns true if any activity state changed.
 // If the provider specifies a RefreshInterval, sessions are re-discovered
@@ -294,14 +426,26 @@ func (m *SessionManager) Reload() error {
 // exclude_cwd_substrings pushdown applies to this periodic re-discovery
 // too, not just the first one.
 // Also refreshes session names from disk if modified externally.
+//
+// While a progressive first load is in flight (streamInFlight -- see
+// ReloadStreaming), the periodic re-discovery branch below is skipped: a
+// 3s poll firing mid-stream must not replace the accumulating snapshot with
+// a full (or worse, partial-provider, since the poll could itself land
+// between two of the stream's own batches) re-discovery. The activity-only
+// recomputation further down (tracker.Update against whatever's currently
+// in m.sessions) still runs regardless -- it only reads the existing lock-
+// guarded snapshot, so it's safe to run concurrently with the stream's own
+// merges and keeps activity states from going stale for sessions that have
+// already streamed in.
 func (m *SessionManager) UpdateActivities() bool {
 	namesChanged := m.names.Refresh()
 	if interval := m.provider.RefreshInterval(); interval > 0 {
 		now := time.Now()
 		m.mu.RLock()
+		streaming := m.streamInFlight
 		needsRefresh := len(m.sessions) == 0 || now.Sub(m.lastPollDiscover) > interval
 		m.mu.RUnlock()
-		if needsRefresh {
+		if needsRefresh && !streaming {
 			sessions, err := m.discoverHonoringExclusions()
 			if err == nil {
 				m.mu.Lock()
