@@ -126,6 +126,17 @@ func DiscoverSessions(cache *model.SessionCache, desktopCache *DesktopCache, con
 // cwdMatch may be nil, in which case every session matches (equivalent to
 // DiscoverSessions).
 func DiscoverSessionsFiltered(cache *model.SessionCache, desktopCache *DesktopCache, configDirs []string, cwdMatch func(string) bool) ([]*model.Session, error) {
+	return DiscoverSessionsFilteredIndexed(cache, desktopCache, configDirs, cwdMatch, nil)
+}
+
+// DiscoverSessionsFilteredIndexed is DiscoverSessionsFiltered plus a
+// CWDIndex: cwdIdx (may be nil, equivalent to DiscoverSessionsFiltered)
+// lets the head-scan prefilter reuse previously-determined results — from
+// earlier in this process or reloaded from a persisted index written by a
+// previous run — for files whose (mtime, size) haven't changed, avoiding
+// the head-scan I/O entirely for files that keep getting skipped run after
+// run.
+func DiscoverSessionsFilteredIndexed(cache *model.SessionCache, desktopCache *DesktopCache, configDirs []string, cwdMatch func(string) bool, cwdIdx *CWDIndex) ([]*model.Session, error) {
 	projectsDirs := ClaudeProjectsDirs(configDirs)
 	if len(projectsDirs) == 0 {
 		return nil, fmt.Errorf("could not find any Claude projects directories")
@@ -136,7 +147,7 @@ func DiscoverSessionsFiltered(cache *model.SessionCache, desktopCache *DesktopCa
 	seen := make(map[string]struct{})
 	var sessions []*model.Session
 	for _, projectsDir := range projectsDirs {
-		sessions = discoverInDir(projectsDir, cache, wtCache, seen, sessions, cwdMatch)
+		sessions = discoverInDir(projectsDir, cache, wtCache, seen, sessions, cwdMatch, cwdIdx)
 	}
 	cache.Prune(seen)
 
@@ -177,7 +188,7 @@ type parseResult struct {
 // discoverInDir scans a single projects directory for JSONL session files
 // and appends discovered sessions to the provided slice.
 // Files that need parsing (cache miss or incremental update) are parsed in parallel.
-func discoverInDir(projectsDir string, cache *model.SessionCache, wtCache map[string]wtInfo, seen map[string]struct{}, sessions []*model.Session, cwdMatch func(string) bool) []*model.Session {
+func discoverInDir(projectsDir string, cache *model.SessionCache, wtCache map[string]wtInfo, seen map[string]struct{}, sessions []*model.Session, cwdMatch func(string) bool, cwdIdx *CWDIndex) []*model.Session {
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
 		return sessions // Directory may not exist; skip it
@@ -221,7 +232,7 @@ func discoverInDir(projectsDir string, cache *model.SessionCache, wtCache map[st
 				// regardless (only new lines are read), and the uniform
 				// post-parse filter below is the single source of truth for
 				// whether they're included.
-				if !shouldParseForCWD(jsonlFile, cwdMatch) {
+				if !shouldParseForCWDIndexed(jsonlFile, cwdMatch, cwdIdx) {
 					continue
 				}
 			}
@@ -404,10 +415,38 @@ func headCWD(path string) (cwd string, ok bool) {
 // a cwd within its bounded window, this conservatively returns true, so a
 // session is never skipped without certainty; the actual parsed cwd is
 // still checked afterward by the caller's uniform post-parse filter.
+//
+// This is shouldParseForCWDIndexed with a nil index (always live I/O) — see
+// that function for the cache-aware version used by discovery once a
+// CWDIndex is available.
 func shouldParseForCWD(path string, cwdMatch func(string) bool) bool {
-	cwd, ok := headCWD(path)
+	return shouldParseForCWDIndexed(path, cwdMatch, nil)
+}
+
+// shouldParseForCWDIndexed is shouldParseForCWD's cache-aware counterpart:
+// the identical decision (see shouldParseForCWD's doc comment), but headCWD
+// is looked up through cwdIdx when cwdIdx is non-nil, instead of always
+// re-reading the file. headCWD is a pure function of a file's content (it
+// takes no matcher), so a cached result is exactly what fresh I/O would
+// return for an unchanged file, regardless of which matcher originally
+// populated the cache entry. cwdIdx == nil reproduces shouldParseForCWD's
+// plain (always-live-I/O) behavior exactly.
+func shouldParseForCWDIndexed(path string, cwdMatch func(string) bool, cwdIdx *CWDIndex) bool {
+	if cwdIdx == nil {
+		cwd, ok := headCWD(path)
+		if !ok {
+			return true // can't tell within the window — parse it
+		}
+		return cwdMatch(cwd)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return true // can't stat — conservative parse, same as headCWD's own "can't open" -> not ok -> true
+	}
+	cwd, ok := cwdIdx.headCWDIndexed(path, info.ModTime(), info.Size())
 	if !ok {
-		return true // can't tell within the window — parse it
+		return true
 	}
 	return cwdMatch(cwd)
 }
