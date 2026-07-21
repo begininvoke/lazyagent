@@ -1,6 +1,8 @@
 package core
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -193,6 +195,227 @@ func TestFilterSessionsLocked_MultipleExcludePatterns(t *testing.T) {
 	if len(visible) > 0 && visible[0].SessionID != "normal" {
 		t.Errorf("expected 'normal' session, got %q", visible[0].SessionID)
 	}
+}
+
+// TestExcludedByCWD_MatchesViewFilterSemantics is the shared-helper test:
+// excludedByCWD is the single implementation both the view-level filter
+// (filterSessionsLocked) and the discovery-pushdown predicate
+// (excludeCWDPredicate, used by Reload) call, so this table is authoritative
+// for "is this CWD excluded" everywhere in the manager.
+func TestExcludedByCWD_MatchesViewFilterSemantics(t *testing.T) {
+	tests := []struct {
+		name     string
+		cwd      string
+		patterns []string
+		want     bool
+	}{
+		{"no patterns", "/home/user/project", nil, false},
+		{"empty patterns slice", "/home/user/project", []string{}, false},
+		{"single empty-string pattern never matches", "/home/user/project", []string{""}, false},
+		{"substring in middle matches", "/home/user/.claude-mem/observer-sessions/x", []string{".claude-mem/observer-sessions"}, true},
+		{"substring at start matches", "/tmp/scratch/build", []string{"/tmp/scratch"}, true},
+		{"substring at end matches", "/home/user/project/tmp", []string{"/tmp"}, true},
+		{"no substring match", "/home/user/project", []string{".claude-mem/observer-sessions"}, false},
+		{"case sensitive: differently-cased pattern does not match", "/home/user/Project", []string{"/home/user/project"}, false},
+		{"case sensitive: matching case matches", "/home/user/Project", []string{"/home/user/Project"}, true},
+		{"multiple patterns: first matches", "/tmp/scratch/build", []string{"/tmp/scratch", ".claude-mem"}, true},
+		{"multiple patterns: second matches", "/home/user/.claude-mem/x", []string{"/tmp/scratch", ".claude-mem"}, true},
+		{"multiple patterns: none match", "/home/user/other", []string{"/tmp/scratch", ".claude-mem"}, false},
+		{"empty pattern among real ones is ignored", "/home/user/project", []string{"", "/tmp/scratch"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := excludedByCWD(tt.cwd, tt.patterns); got != tt.want {
+				t.Errorf("excludedByCWD(%q, %v) = %v, want %v", tt.cwd, tt.patterns, got, tt.want)
+			}
+			// excludeCWDPredicate is Reload's discovery-time pushdown predicate
+			// (it returns true = "keep"). It must always be the exact logical
+			// negation of excludedByCWD, since it is built directly from it —
+			// this is what guarantees the pushdown predicate can never cause a
+			// dir-scoped provider to skip a session the view layer would show.
+			predicate := excludeCWDPredicate(tt.patterns)
+			if got := predicate(tt.cwd); got != !tt.want {
+				t.Errorf("excludeCWDPredicate(%v)(%q) = %v, want %v (negation of excludedByCWD)", tt.patterns, tt.cwd, got, !tt.want)
+			}
+		})
+	}
+}
+
+// TestReload_NoExcludePatterns_UsesPlainDiscoverSessions proves the "zero
+// behavior change when no exclude patterns are configured" binding
+// constraint at the mechanism level: with no patterns set, Reload must not
+// go through DiscoverMatching's dir-scoped fast path at all -- it must call
+// the provider's plain DiscoverSessions(), exactly like before this change.
+func TestReload_NoExcludePatterns_UsesPlainDiscoverSessions(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	p := &dirScopedFakeProvider{
+		unfiltered: []*model.Session{{SessionID: "plain-path", LastActivity: time.Now()}},
+		sessions:   []*model.Session{{SessionID: "fast-path", LastActivity: time.Now()}},
+	}
+	mgr := NewSessionManager(60, p)
+	// No SetExcludeCWDSubstrings call -- patterns are nil/empty.
+	if err := mgr.Reload(); err != nil {
+		t.Fatalf("Reload failed: %v", err)
+	}
+
+	if p.receivedMatcher {
+		t.Error("Reload with no exclude patterns must not invoke the dir-scoped fast path (DiscoverMatching)")
+	}
+	got := mgr.Sessions()
+	if len(got) != 1 || got[0].SessionID != "plain-path" {
+		t.Fatalf("Sessions() = %#v, want the plain DiscoverSessions() result (zero pushdown when no patterns)", got)
+	}
+}
+
+// TestReload_PatternChangeAppliesOnNextReload_DirScopedPushdown documents
+// and tests the mechanism relied on for "runtime pattern changes": Reload()
+// re-reads m.excludeCWDSubstrings on every call, so calling
+// SetExcludeCWDSubstrings followed by Reload() picks up the new patterns
+// with no extra plumbing. It also proves the exclusion now happens at
+// discovery time for a dir-scoped provider: even Sessions() (the "raw",
+// unfiltered accessor) shrinks once the pattern is set and a Reload runs --
+// not just VisibleSessions()/QuerySessions().
+func TestReload_PatternChangeAppliesOnNextReload_DirScopedPushdown(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	now := time.Now()
+	p := &filteringDirScopedProvider{sessions: []*model.Session{
+		{SessionID: "keep", CWD: "/home/user/project", LastActivity: now},
+		{SessionID: "heavy", CWD: "/home/user/.claude-mem/observer-sessions/x", LastActivity: now},
+	}}
+	mgr := NewSessionManager(60, p)
+
+	if err := mgr.Reload(); err != nil {
+		t.Fatalf("Reload 1 failed: %v", err)
+	}
+	if len(mgr.Sessions()) != 2 {
+		t.Fatalf("before exclusion: Sessions() = %d, want 2 (raw discovery unfiltered)", len(mgr.Sessions()))
+	}
+
+	mgr.SetExcludeCWDSubstrings([]string{".claude-mem/observer-sessions"})
+	if err := mgr.Reload(); err != nil {
+		t.Fatalf("Reload 2 failed: %v", err)
+	}
+
+	raw := mgr.Sessions()
+	if len(raw) != 1 || raw[0].SessionID != "keep" {
+		t.Fatalf("after SetExcludeCWDSubstrings + Reload: Sessions() = %#v, want only 'keep' (pushdown applied at discovery time)", raw)
+	}
+}
+
+// TestReload_ExcludePushdown_EquivalentToViewFilter is the manager-level
+// equivalence property test: for any pattern set, the visible sessions
+// (post view-filter) must be identical whether or not discovery-time
+// pushdown happened. It uses a fixture provider mix -- one DirScopedProvider
+// stub (which genuinely filters using cwdMatch, unlike dirScopedFakeProvider
+// in provider_test.go) and one plain stub (which DiscoverMatching cannot
+// pre-filter at all) -- to exercise both of DiscoverMatching's code paths at
+// once.
+func TestReload_ExcludePushdown_EquivalentToViewFilter(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	now := time.Now()
+	dirScopedSessions := []*model.Session{
+		{SessionID: "ds-keep", CWD: "/home/user/project", LastActivity: now},
+		{SessionID: "ds-excluded", CWD: "/home/user/.claude-mem/observer-sessions/x", LastActivity: now},
+	}
+	plainSessions := []*model.Session{
+		{SessionID: "plain-keep", CWD: "/home/user/other-project", LastActivity: now},
+		{SessionID: "plain-excluded", CWD: "/tmp/scratch/build", LastActivity: now},
+	}
+
+	patternSets := [][]string{
+		nil,
+		{},
+		{".claude-mem/observer-sessions"},
+		{"/tmp/scratch"},
+		{".claude-mem/observer-sessions", "/tmp/scratch"},
+		{"no-match-anywhere"},
+	}
+
+	for _, patterns := range patternSets {
+		t.Run(strings.Join(patterns, "+"), func(t *testing.T) {
+			// Actual: real pushdown, via a MultiProvider mixing a dir-scoped
+			// member (fast-path filtering happens at discovery) and a plain
+			// member (DiscoverMatching falls back to unfiltered discovery
+			// for it, per its documented contract).
+			dirScoped := &filteringDirScopedProvider{sessions: cloneSessions(dirScopedSessions)}
+			plain := fakeProvider{sessions: cloneSessions(plainSessions)}
+			mp := MultiProvider{Providers: []SessionProvider{dirScoped, plain}}
+
+			actualMgr := NewSessionManager(60, mp)
+			actualMgr.SetExcludeCWDSubstrings(patterns)
+			if err := actualMgr.Reload(); err != nil {
+				t.Fatalf("actual Reload failed: %v", err)
+			}
+			actual := sessionIDSet(actualMgr.VisibleSessions())
+
+			// Expected: no pushdown possible at all (plain provider only,
+			// wrapping the exact same full session set) -- so the view
+			// filter alone determines what's visible. If pushdown changed
+			// the outcome, this would diverge from actual.
+			var all []*model.Session
+			all = append(all, cloneSessions(dirScopedSessions)...)
+			all = append(all, cloneSessions(plainSessions)...)
+			wantMgr := NewSessionManager(60, fakeProvider{sessions: all})
+			wantMgr.SetExcludeCWDSubstrings(patterns)
+			if err := wantMgr.Reload(); err != nil {
+				t.Fatalf("want Reload failed: %v", err)
+			}
+			want := sessionIDSet(wantMgr.VisibleSessions())
+
+			if !reflect.DeepEqual(actual, want) {
+				t.Fatalf("patterns=%v: pushdown-visible=%v, view-filter-only-visible=%v (must be identical)", patterns, actual, want)
+			}
+		})
+	}
+}
+
+// filteringDirScopedProvider is a DirScopedProvider stub whose
+// DiscoverSessionsMatching genuinely applies cwdMatch to its session list
+// (unlike dirScopedFakeProvider in provider_test.go, which returns a fixed
+// canned result regardless of the matcher it receives). Used to exercise
+// the real discovery-time pushdown behavior.
+type filteringDirScopedProvider struct {
+	sessions []*model.Session
+}
+
+func (p *filteringDirScopedProvider) DiscoverSessions() ([]*model.Session, error) {
+	return p.sessions, nil
+}
+
+func (p *filteringDirScopedProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
+	var out []*model.Session
+	for _, s := range p.sessions {
+		if cwdMatch(s.CWD) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+func (p *filteringDirScopedProvider) UseWatcher() bool               { return false }
+func (p *filteringDirScopedProvider) RefreshInterval() time.Duration { return 0 }
+func (p *filteringDirScopedProvider) WatchDirs() []string            { return nil }
+
+// cloneSessions returns a shallow copy of the slice (not the pointed-to
+// Session structs) so each subtest's providers own an independent slice
+// header, even though sessions are shared read-only fixtures.
+func cloneSessions(sessions []*model.Session) []*model.Session {
+	out := make([]*model.Session, len(sessions))
+	copy(out, sessions)
+	return out
+}
+
+// sessionIDSet returns the set of session IDs present in sessions, for
+// order-independent comparison.
+func sessionIDSet(sessions []*model.Session) map[string]bool {
+	set := make(map[string]bool, len(sessions))
+	for _, s := range sessions {
+		set[s.SessionID] = true
+	}
+	return set
 }
 
 func TestSessionManager_SetEventBus_PropagatesToTracker(t *testing.T) {

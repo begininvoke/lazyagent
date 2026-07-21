@@ -229,10 +229,37 @@ func (m *SessionManager) WatcherEvents() <-chan struct{} {
 // When cache persistence is enabled (EnableCachePersistence), this is also
 // where the persisted cache gets loaded (once, before the first discovery)
 // and saved (see loadPersistedCacheOnce / savePersistedCacheIfDue).
+//
+// When exclude_cwd_substrings patterns are configured, discovery itself is
+// scoped via DiscoverMatching(m.provider, excludeCWDPredicate(patterns)):
+// dir-scoped providers (DirScopedProvider) skip parsing excluded sessions
+// entirely instead of discovering-then-hiding them at the view layer. With
+// no patterns set, Reload calls the provider's plain DiscoverSessions(),
+// exactly as before this pushdown existed — zero behavior change for the
+// common case. Either way, the view-level filter (filterSessionsLocked)
+// still re-applies the same exclusion: DiscoverMatching's contract leaves
+// non-dir-scoped providers' results unfiltered, so the view filter remains
+// the only thing guaranteeing exclusion for those.
+//
+// Runtime pattern changes: SetExcludeCWDSubstrings can be called at any
+// time, and Reload re-reads m.excludeCWDSubstrings fresh on every call, so
+// the very next Reload() automatically discovers under the new patterns —
+// no extra plumbing is needed. (As of this change, no caller actually
+// changes patterns after startup; see the report for that investigation.)
 func (m *SessionManager) Reload() error {
 	m.loadPersistedCacheOnce()
 
-	sessions, err := m.provider.DiscoverSessions()
+	m.mu.RLock()
+	patterns := m.excludeCWDSubstrings
+	m.mu.RUnlock()
+
+	var sessions []*model.Session
+	var err error
+	if len(patterns) == 0 {
+		sessions, err = m.provider.DiscoverSessions()
+	} else {
+		sessions, err = DiscoverMatching(m.provider, excludeCWDPredicate(patterns))
+	}
 	if err != nil {
 		return err
 	}
@@ -352,6 +379,35 @@ func (m *SessionManager) QuerySessions(search string, filter ActivityKind) []*mo
 	return m.filterSessionsLocked(search, filter)
 }
 
+// excludedByCWD reports whether cwd matches any of patterns, using
+// case-sensitive substring containment (strings.Contains). An empty-string
+// pattern never matches anything (otherwise it would match every CWD).
+//
+// This is the single implementation of exclude_cwd_substrings matching
+// semantics: both the view-level filter (filterSessionsLocked) and the
+// discovery-time pushdown predicate (excludeCWDPredicate, used by Reload)
+// call it, so the two layers can never disagree about what's excluded.
+func excludedByCWD(cwd string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if pattern != "" && strings.Contains(cwd, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// excludeCWDPredicate returns a DiscoverMatching cwdMatch predicate — it
+// returns true to KEEP a cwd — that keeps exactly the CWDs excludedByCWD
+// would not exclude. Because it's built directly from excludedByCWD, it can
+// only ever match what the view-level filter would keep: a dir-scoped
+// provider can never be made to skip, via this predicate, a session the
+// view filter would have shown.
+func excludeCWDPredicate(patterns []string) func(cwd string) bool {
+	return func(cwd string) bool {
+		return !excludedByCWD(cwd, patterns)
+	}
+}
+
 // filterSessionsLocked applies time window, activity, and search filters.
 // Must be called with m.mu held (at least RLock).
 func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind) []*model.Session {
@@ -359,15 +415,13 @@ func (m *SessionManager) filterSessionsLocked(search string, filter ActivityKind
 	lowerQuery := strings.ToLower(search)
 	var visible []*model.Session
 	for _, s := range m.sessions {
-		// CWD-based exclusion: skip sessions whose CWD contains any excluded substring.
-		excluded := false
-		for _, pattern := range m.excludeCWDSubstrings {
-			if pattern != "" && strings.Contains(s.CWD, pattern) {
-				excluded = true
-				break
-			}
-		}
-		if excluded {
+		// CWD-based exclusion: skip sessions whose CWD contains any excluded
+		// substring. Defense in depth: Reload already pushes this same
+		// exclusion into discovery for dir-scoped providers (see
+		// excludeCWDPredicate), but this check must stay here too since
+		// DiscoverMatching leaves non-dir-scoped providers' results
+		// unfiltered.
+		if excludedByCWD(s.CWD, m.excludeCWDSubstrings) {
 			continue
 		}
 		if s.IsSidechain || !s.LastActivity.After(cutoff) {
