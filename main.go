@@ -247,7 +247,15 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			tea.WithMouseCellMotion(),
 		)
 
-		if _, err := p.Run(); err != nil {
+		finalModel, err := p.Run()
+		// Close stops the file watcher and, if the discovery cache was
+		// persisted (EnableCachePersistence in ui.NewModel), flushes it one
+		// last time if dirty — the TUI's only shutdown hook, run regardless
+		// of how p.Run() returned.
+		if tm, ok := finalModel.(ui.Model); ok {
+			tm.Manager().Close()
+		}
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}

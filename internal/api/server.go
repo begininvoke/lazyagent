@@ -14,6 +14,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/sessions"
 )
 
 // DefaultPort is the preferred port. If busy, the server tries sequential ports.
@@ -55,6 +56,9 @@ func New(host string, provider core.SessionProvider, bearerToken, authSalt strin
 	cfg := core.LoadConfig()
 	manager := core.NewSessionManager(cfg.WindowMinutes, provider)
 	manager.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
+	if dir, ok := sessions.ResolveCacheDir(); ok {
+		manager.EnableCachePersistence(dir)
+	}
 	if bus != nil {
 		manager.SetEventBus(bus)
 	}
@@ -128,7 +132,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := s.manager.StartWatcher(); err != nil {
 		log.Printf("Warning: file watcher unavailable: %v", err)
 	}
-	defer s.manager.StopWatcher()
+	defer s.manager.Close()
 
 	if err := s.manager.Reload(); err != nil {
 		log.Printf("Warning: initial reload failed: %v", err)

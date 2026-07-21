@@ -16,6 +16,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/sessions"
 	"github.com/illegalstudio/lazyagent/internal/version"
 	"github.com/illegalstudio/lazyagent/internal/webhook"
 	"github.com/pkg/browser"
@@ -52,6 +53,9 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 	}
 	s.manager = core.NewSessionManager(cfg.WindowMinutes, provider)
 	s.manager.SetExcludeCWDSubstrings(cfg.ExcludeCWDSubstrings)
+	if dir, ok := sessions.ResolveCacheDir(); ok {
+		s.manager.EnableCachePersistence(dir)
+	}
 	if len(cfg.ValidWebhooks()) > 0 {
 		bus := core.NewEventBus()
 		s.manager.SetEventBus(bus)
@@ -83,7 +87,7 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 
 // ServiceShutdown is called by Wails when the app stops.
 func (s *SessionService) ServiceShutdown() error {
-	s.manager.StopWatcher()
+	s.manager.Close()
 	return nil
 }
 

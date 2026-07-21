@@ -14,6 +14,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/limits"
 	"github.com/illegalstudio/lazyagent/internal/model"
+	"github.com/illegalstudio/lazyagent/internal/sessions"
 	"github.com/illegalstudio/lazyagent/internal/version"
 )
 
@@ -150,6 +151,9 @@ func NewModel(provider core.SessionProvider, bus *core.EventBus) Model {
 	if bus != nil {
 		mgr.SetEventBus(bus)
 	}
+	if dir, ok := sessions.ResolveCacheDir(); ok {
+		mgr.EnableCachePersistence(dir)
+	}
 	_ = mgr.StartWatcher()
 	return Model{
 		theme:     t,
@@ -158,6 +162,13 @@ func NewModel(provider core.SessionProvider, bus *core.EventBus) Model {
 		loading:   true,
 		manager:   mgr,
 	}
+}
+
+// Manager returns the underlying SessionManager so callers (main.go) can run
+// shutdown logic — e.g. Close(), which flushes the persisted discovery cache
+// if EnableCachePersistence was used — after the bubbletea program exits.
+func (m Model) Manager() *core.SessionManager {
+	return m.manager
 }
 
 func checkUpdateCmd() tea.Cmd {
