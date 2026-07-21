@@ -76,9 +76,14 @@ Flags:
 
 	// Persistence is advisory and best-effort: when the user cache
 	// directory can't be resolved, discovery just runs cold, exactly as
-	// before this existed. Only the sessions subcommand wires this up (the
-	// TUI/GUI/API keep their in-memory-only behavior).
-	cacheDir, hasCacheDir := resolveCacheDir()
+	// before this existed. This subcommand wires Load/Save explicitly
+	// (below and around the picker) rather than through
+	// core.SessionManager.EnableCachePersistence -- the mechanism the
+	// long-lived surfaces (TUI/GUI/API) use -- because it needs save points
+	// tied to this command's own control flow (e.g. skipping the save when
+	// the interactive picker exits before its background discovery stream
+	// finishes; see runInteractive).
+	cacheDir, hasCacheDir := ResolveCacheDir()
 	if hasCacheDir {
 		core.LoadProviderCaches(provider, cacheDir)
 	}

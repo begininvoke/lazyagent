@@ -10,13 +10,18 @@ import (
 // the real environment's cache directory.
 var userCacheDir = os.UserCacheDir
 
-// resolveCacheDir returns the directory `lazyagent sessions` should persist
-// its discovery caches under (os.UserCacheDir()/lazyagent, e.g.
+// ResolveCacheDir returns the directory lazyagent should persist its
+// discovery caches under (os.UserCacheDir()/lazyagent, e.g.
 // ~/Library/Caches/lazyagent on macOS) and whether persistence is available
 // at all. When UserCacheDir fails or returns an empty string, ok is false
 // and the caller must run without persistence -- discovery itself is never
 // affected, only whether its caches get saved/reused across runs.
-func resolveCacheDir() (dir string, ok bool) {
+//
+// Exported so the long-lived surfaces (TUI, GUI/tray, API server) resolve
+// the cache directory the exact same way the `sessions` subcommand does,
+// without duplicating the logic -- see core.SessionManager.
+// EnableCachePersistence, which they pass this to.
+func ResolveCacheDir() (dir string, ok bool) {
 	base, err := userCacheDir()
 	if err != nil || base == "" {
 		return "", false

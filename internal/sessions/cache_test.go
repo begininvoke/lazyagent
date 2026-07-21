@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// --- resolveCacheDir ---
+// --- ResolveCacheDir ---
 
 func TestResolveCacheDir_Success(t *testing.T) {
 	base := t.TempDir()
@@ -17,9 +17,9 @@ func TestResolveCacheDir_Success(t *testing.T) {
 	userCacheDir = func() (string, error) { return base, nil }
 	defer func() { userCacheDir = orig }()
 
-	dir, ok := resolveCacheDir()
+	dir, ok := ResolveCacheDir()
 	if !ok {
-		t.Fatal("resolveCacheDir ok = false, want true")
+		t.Fatal("ResolveCacheDir ok = false, want true")
 	}
 	want := filepath.Join(base, "lazyagent")
 	if dir != want {
@@ -32,9 +32,9 @@ func TestResolveCacheDir_UserCacheDirFailure(t *testing.T) {
 	userCacheDir = func() (string, error) { return "", errors.New("no cache dir on this platform") }
 	defer func() { userCacheDir = orig }()
 
-	dir, ok := resolveCacheDir()
+	dir, ok := ResolveCacheDir()
 	if ok {
-		t.Fatalf("resolveCacheDir ok = true, want false; dir = %q", dir)
+		t.Fatalf("ResolveCacheDir ok = true, want false; dir = %q", dir)
 	}
 	if dir != "" {
 		t.Fatalf("dir = %q, want empty", dir)
@@ -46,8 +46,8 @@ func TestResolveCacheDir_EmptyStringIsFailure(t *testing.T) {
 	userCacheDir = func() (string, error) { return "", nil }
 	defer func() { userCacheDir = orig }()
 
-	if _, ok := resolveCacheDir(); ok {
-		t.Fatal("resolveCacheDir ok = true, want false for an empty (but non-error) UserCacheDir result")
+	if _, ok := ResolveCacheDir(); ok {
+		t.Fatal("ResolveCacheDir ok = true, want false for an empty (but non-error) UserCacheDir result")
 	}
 }
 
