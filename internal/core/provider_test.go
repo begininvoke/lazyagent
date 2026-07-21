@@ -414,6 +414,25 @@ func TestDiscoverMatchingStream_FailingMemberEmitsNothing(t *testing.T) {
 	}
 }
 
+// TestDiscoverMatchingStream_SingleFailingProviderEmitsNothingButCloses
+// covers the non-multi counterpart to
+// TestDiscoverMatchingStream_FailingMemberEmitsNothing: a single provider
+// (not wrapped in a MultiProvider) that errors is exactly one member, and
+// that member failing must behave the same way a failing member of a
+// larger fan-out does -- no emit, but done still closes. This is the
+// scenario behind the picker's accepted divergence for a single
+// misconfigured provider in interactive mode (see internal/sessions.Run):
+// since DiscoverMatchingStream has no error channel by design, this failure
+// is indistinguishable from "found nothing" to any caller.
+func TestDiscoverMatchingStream_SingleFailingProviderEmitsNothingButCloses(t *testing.T) {
+	p := fakeProvider{err: errTest}
+
+	batches := collectStream(t, p, func(string) bool { return true })
+	if len(batches) != 0 {
+		t.Fatalf("got %d batches, want 0 (the single failing provider emits nothing)", len(batches))
+	}
+}
+
 func TestDiscoverMatchingStream_SingleProviderNonMulti(t *testing.T) {
 	p := &dirScopedFakeProvider{sessions: []*model.Session{{SessionID: "scoped"}}}
 
@@ -439,12 +458,15 @@ func TestDiscoverMatchingStream_EmptyMultiProviderClosesDoneImmediately(t *testi
 }
 
 func TestDiscoverMatchingStream_DoneNotClosedBeforeEmitReturns(t *testing.T) {
-	// A slow member must not let done close before its emit has actually
-	// been delivered -- done is only closed after every member's goroutine
-	// (which calls emit synchronously before returning) has finished.
-	slow := fakeProvider{sessions: []*model.Session{{SessionID: "slow"}}}
-	fast := fakeProvider{sessions: []*model.Session{{SessionID: "fast"}}}
-	mp := MultiProvider{Providers: []SessionProvider{slow, fast}}
+	// Neither member here is actually slow (fakeProvider returns
+	// instantly) -- what this asserts is the ordering guarantee itself:
+	// done must not close before every member's emit call has actually
+	// been delivered, since it's only closed after every member's
+	// goroutine (which calls emit synchronously before returning) has
+	// finished, regardless of how long any given member takes in practice.
+	memberA := fakeProvider{sessions: []*model.Session{{SessionID: "a"}}}
+	memberB := fakeProvider{sessions: []*model.Session{{SessionID: "b"}}}
+	mp := MultiProvider{Providers: []SessionProvider{memberA, memberB}}
 
 	var mu sync.Mutex
 	var emitted int

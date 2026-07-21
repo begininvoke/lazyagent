@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
@@ -629,5 +630,35 @@ func TestPickerStreamDoneFreezesAfterDecision(t *testing.T) {
 	}
 	if m.action != actionQuit {
 		t.Fatalf("action must stay actionQuit, got %v (must not flip to actionEmpty)", m.action)
+	}
+}
+
+// --- memberCount (pure) ---
+
+// noopProvider is a minimal core.SessionProvider that does nothing; used
+// only to stand in as a "single, non-multi" provider for memberCount.
+type noopProvider struct{}
+
+func (noopProvider) DiscoverSessions() ([]*model.Session, error) { return nil, nil }
+func (noopProvider) UseWatcher() bool                            { return false }
+func (noopProvider) RefreshInterval() time.Duration              { return 0 }
+func (noopProvider) WatchDirs() []string                         { return nil }
+
+func TestMemberCountSingleNonMultiProviderIsOne(t *testing.T) {
+	if got := memberCount(noopProvider{}); got != 1 {
+		t.Errorf("memberCount(noopProvider{}) = %d, want 1", got)
+	}
+}
+
+func TestMemberCountMultiProviderIsProviderCount(t *testing.T) {
+	mp := core.MultiProvider{Providers: []core.SessionProvider{noopProvider{}, noopProvider{}, noopProvider{}}}
+	if got := memberCount(mp); got != 3 {
+		t.Errorf("memberCount(3-provider MultiProvider) = %d, want 3", got)
+	}
+}
+
+func TestMemberCountEmptyMultiProviderIsZero(t *testing.T) {
+	if got := memberCount(core.MultiProvider{}); got != 0 {
+		t.Errorf("memberCount(empty MultiProvider) = %d, want 0", got)
 	}
 }

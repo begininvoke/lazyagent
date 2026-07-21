@@ -98,6 +98,15 @@ Flags:
 	// complete, byte-identical list, and without a TTY there is no
 	// progressive rendering to benefit from, so both of those keep using
 	// the plain blocking flow below unchanged.
+	//
+	// Accepted divergence from that blocking flow: core.DiscoverMatchingStream
+	// has no error channel (best-effort by design, the same swallow
+	// semantics MultiProvider's fan-out already has in the default "all"
+	// mode), so here a single misconfigured provider's hard error is
+	// indistinguishable from "found nothing" -- it surfaces as an empty
+	// listing (exit 0) rather than the sharp "Error: ..." + exit 1 that
+	// --json and the no-TTY fallback below still give. Signed off as
+	// acceptable specifically for the interactive path.
 	if !*jsonOut && isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stderr.Fd()) {
 		return runInteractive(provider, match, dir, names, hasCacheDir, cacheDir)
 	}
