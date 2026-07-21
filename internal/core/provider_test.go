@@ -1,10 +1,14 @@
 package core
 
 import (
+	"database/sql"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/model"
+	_ "modernc.org/sqlite"
 )
 
 // fakeProvider is a test helper that returns pre-configured sessions.
@@ -234,4 +238,121 @@ func TestDiscoverMatching_MultiProviderFanOut(t *testing.T) {
 	if len(sessions) != 2 {
 		t.Fatalf("got %d sessions, want 2 (failing member contributes nothing)", len(sessions))
 	}
+}
+
+// TestOpenCodeProvider_DiscoverSessionsMatching_FiltersByDirectory is a
+// wiring test proving core.OpenCodeProvider.DiscoverSessionsMatching is
+// reachable through the DirScopedProvider interface end-to-end (down
+// through internal/opencode into internal/opencodefamily) and that it
+// actually filters by directory.
+func TestOpenCodeProvider_DiscoverSessionsMatching_FiltersByDirectory(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OPENCODE_DATA_DIR", dir)
+	writeOpenCodeFamilyFixtureDB(t, filepath.Join(dir, "opencode.db"), "/tmp/core-opencode-a", "/tmp/core-opencode-b")
+
+	p := NewOpenCodeProvider()
+	var dsp DirScopedProvider = p
+	sessions, err := dsp.DiscoverSessionsMatching(func(cwd string) bool { return cwd == "/tmp/core-opencode-a" })
+	if err != nil {
+		t.Fatalf("DiscoverSessionsMatching() error = %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].CWD != "/tmp/core-opencode-a" {
+		t.Fatalf("sessions = %#v, want one session in /tmp/core-opencode-a", sessions)
+	}
+
+	all, err := p.DiscoverSessions()
+	if err != nil {
+		t.Fatalf("DiscoverSessions() error = %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("len(all) = %d, want 2 (unfiltered discovery must still return everything)", len(all))
+	}
+}
+
+// TestKiloProvider_DiscoverSessionsMatching_FiltersByDirectory mirrors
+// TestOpenCodeProvider_DiscoverSessionsMatching_FiltersByDirectory for
+// core.KiloProvider, which wraps the same opencodefamily engine.
+func TestKiloProvider_DiscoverSessionsMatching_FiltersByDirectory(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("KILO_DATA_DIR", dir)
+	writeOpenCodeFamilyFixtureDB(t, filepath.Join(dir, "kilo.db"), "/tmp/core-kilo-a", "/tmp/core-kilo-b")
+
+	p := NewKiloProvider()
+	var dsp DirScopedProvider = p
+	sessions, err := dsp.DiscoverSessionsMatching(func(cwd string) bool { return cwd == "/tmp/core-kilo-a" })
+	if err != nil {
+		t.Fatalf("DiscoverSessionsMatching() error = %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].CWD != "/tmp/core-kilo-a" {
+		t.Fatalf("sessions = %#v, want one session in /tmp/core-kilo-a", sessions)
+	}
+
+	all, err := p.DiscoverSessions()
+	if err != nil {
+		t.Fatalf("DiscoverSessions() error = %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("len(all) = %d, want 2 (unfiltered discovery must still return everything)", len(all))
+	}
+}
+
+// writeOpenCodeFamilyFixtureDB creates two sessions, one in each of dirA and
+// dirB, using the minimal OpenCode-family schema (session/message/part).
+func writeOpenCodeFamilyFixtureDB(t *testing.T, dbPath, dirA, dirB string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	stmts := []string{
+		`CREATE TABLE session (
+			id text PRIMARY KEY,
+			project_id text NOT NULL,
+			parent_id text,
+			directory text NOT NULL,
+			title text NOT NULL,
+			version text NOT NULL,
+			time_created integer NOT NULL,
+			time_updated integer NOT NULL,
+			time_compacting integer,
+			time_archived integer
+		)`,
+		`CREATE TABLE message (
+			id text PRIMARY KEY,
+			session_id text NOT NULL,
+			time_created integer NOT NULL,
+			time_updated integer NOT NULL,
+			data text NOT NULL
+		)`,
+		`CREATE TABLE part (
+			id text PRIMARY KEY,
+			message_id text NOT NULL,
+			session_id text NOT NULL,
+			time_created integer NOT NULL,
+			time_updated integer NOT NULL,
+			data text NOT NULL
+		)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("exec %q: %v", stmt, err)
+		}
+	}
+
+	insert := func(id, directory string, timeUpdated int64) {
+		if _, err := db.Exec(
+			`INSERT INTO session (id, project_id, parent_id, directory, title, version, time_created, time_updated, time_compacting, time_archived)
+			 VALUES (?, ?, NULL, ?, ?, '1.0.0', 1700000000000, ?, NULL, NULL)`,
+			id, id+"_proj", directory, id, timeUpdated,
+		); err != nil {
+			t.Fatalf("insert session %s: %v", id, err)
+		}
+	}
+	insert("ses_dir_a", dirA, 1700000001000)
+	insert("ses_dir_b", dirB, 1700000002000)
 }

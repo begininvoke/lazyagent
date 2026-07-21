@@ -79,6 +79,8 @@ type OpenCodeProvider struct {
 	cache *opencode.SessionCache
 }
 
+var _ DirScopedProvider = (*OpenCodeProvider)(nil)
+
 // NewOpenCodeProvider creates an OpenCodeProvider.
 func NewOpenCodeProvider() *OpenCodeProvider {
 	return &OpenCodeProvider{cache: opencode.NewSessionCache()}
@@ -86,6 +88,13 @@ func NewOpenCodeProvider() *OpenCodeProvider {
 
 func (p *OpenCodeProvider) DiscoverSessions() ([]*model.Session, error) {
 	return opencode.DiscoverSessions(p.cache)
+}
+
+// DiscoverSessionsMatching implements DirScopedProvider: it scopes discovery
+// to sessions whose directory matches cwdMatch, skipping message loads for
+// the rest (see opencodefamily.DiscoverSessionsForFiltered).
+func (p *OpenCodeProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
+	return opencode.DiscoverSessionsFiltered(p.cache, cwdMatch)
 }
 
 func (p *OpenCodeProvider) UseWatcher() bool               { return false }
@@ -102,6 +111,8 @@ type KiloProvider struct {
 	cache *kilo.SessionCache
 }
 
+var _ DirScopedProvider = (*KiloProvider)(nil)
+
 // NewKiloProvider creates a KiloProvider.
 func NewKiloProvider() *KiloProvider {
 	return &KiloProvider{cache: kilo.NewSessionCache()}
@@ -109,6 +120,13 @@ func NewKiloProvider() *KiloProvider {
 
 func (p *KiloProvider) DiscoverSessions() ([]*model.Session, error) {
 	return kilo.DiscoverSessions(p.cache)
+}
+
+// DiscoverSessionsMatching implements DirScopedProvider: it scopes discovery
+// to sessions whose directory matches cwdMatch, skipping message loads for
+// the rest (see opencodefamily.DiscoverSessionsForFiltered).
+func (p *KiloProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
+	return kilo.DiscoverSessionsFiltered(p.cache, cwdMatch)
 }
 
 func (p *KiloProvider) UseWatcher() bool               { return false }
