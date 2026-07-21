@@ -3,75 +3,29 @@
 package sessions
 
 import (
-	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/model"
 )
 
-// resolveSymlink returns the symlink-resolved, cleaned form of cleaned, and
-// whether that differs from cleaned (i.e. there was actually something to
-// resolve). Both targetVariants and matchesDir need this same clean+resolve
-// step, just applied to different paths.
-func resolveSymlink(cleaned string) (resolved string, ok bool) {
-	r, err := filepath.EvalSymlinks(cleaned)
-	if err != nil {
-		return "", false
-	}
-	r = filepath.Clean(r)
-	if r == cleaned {
-		return "", false
-	}
-	return r, true
-}
-
 // targetVariants normalizes dir for matching: the cleaned absolute path
 // plus, when it differs, the symlink-resolved form — so /tmp also matches
-// sessions recorded under /private/tmp on macOS.
+// sessions recorded under /private/tmp on macOS. Thin wrapper delegating to
+// core.DirMatchVariants, the single shared implementation of this path
+// arithmetic (see task 15: the API's GET /api/sessions?dir= filter uses the
+// same function directly).
 func targetVariants(dir string) ([]string, error) {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return nil, err
-	}
-	abs = filepath.Clean(abs)
-	variants := []string{abs}
-	if resolved, ok := resolveSymlink(abs); ok {
-		variants = append(variants, resolved)
-	}
-	return variants, nil
-}
-
-// matchesVariants reports whether cwd equals a variant or lies beneath one
-// (prefix on a path boundary: /foo/bar must not match /foo/barbaz).
-func matchesVariants(cwd string, variants []string) bool {
-	for _, v := range variants {
-		if cwd == v || strings.HasPrefix(cwd, v+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
+	return core.DirMatchVariants(dir)
 }
 
 // matchesDir reports whether a session's recorded cwd falls under one of the
-// target variants. The spec matches on the cleaned, *unresolved* recorded
-// CWD first: a session recorded under a symlinked subdirectory of the target
-// (e.g. <target>/sub-link -> somewhere else entirely) must still match,
-// because the recorded path itself is what lies under the target. Only when
-// that fails do we fall back to resolving symlinks in cwd, which is what
-// lets e.g. /tmp-recorded sessions match a /private/tmp target on macOS.
+// target variants. Thin wrapper delegating to core.CWDMatchesDir — see that
+// function's doc comment for the matching semantics (unresolved-then-
+// resolved cwd matching against target variants).
 func matchesDir(cwd string, variants []string) bool {
-	if cwd == "" {
-		return false
-	}
-	cwd = filepath.Clean(cwd)
-	if matchesVariants(cwd, variants) {
-		return true
-	}
-	if resolved, ok := resolveSymlink(cwd); ok {
-		return matchesVariants(resolved, variants)
-	}
-	return false
+	return core.CWDMatchesDir(cwd, variants)
 }
 
 // bySessionRecency orders sessions by LastActivity descending, breaking ties
