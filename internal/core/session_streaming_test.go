@@ -387,3 +387,55 @@ func TestReload_RunsNormallyAfterStreamCompletes(t *testing.T) {
 		t.Fatalf("Sessions() after post-stream Reload = %d, want 2 (streamInFlight must be cleared once the stream finishes)", len(got))
 	}
 }
+
+// TestClose_DuringInFlightStream_DoesNotSaveAndDoesNotRace documents and
+// pins "shutdown save behavior unchanged" for the specific new scenario
+// ReloadStreaming introduces: the TUI never joins the goroutine running
+// ReloadStreaming (see internal/ui's startStreamingLoadCmd -- the same
+// pattern Task 11's picker uses for its own background discovery
+// goroutine), so a user quitting mid-stream reaches Close() while
+// ReloadStreaming is genuinely still running concurrently in another
+// goroutine.
+//
+// Close() itself is untouched by this task (per the brief) -- it still only
+// saves when persistDirty is true, and ReloadStreaming's single
+// savePersistedCacheIfDue call happens after <-done, so persistDirty is
+// never set during the stream. An early quit therefore reaches Close()
+// before that call ever ran: no save happens for this run at all (not even
+// a partial one) -- the previous run's persisted cache, if any, is simply
+// left on disk untouched. That is safe and lossless (advisory cache, see
+// CachePersister), just not a speed win for the aborted run; this test
+// exists to pin that exact behavior and, under -race, prove Close() reading
+// persistEnabled/persistDirty concurrently with ReloadStreaming's own
+// locked mutations is race-free.
+func TestClose_DuringInFlightStream_DoesNotSaveAndDoesNotRace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	p := newBlockingProvider([]*model.Session{{SessionID: "s1", LastActivity: time.Now()}}, 0)
+	mgr := NewSessionManager(60, p)
+	mgr.EnableCachePersistence(t.TempDir())
+
+	streamDone := make(chan struct{})
+	go func() {
+		mgr.ReloadStreaming(nil)
+		close(streamDone)
+	}()
+
+	select {
+	case <-p.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("blockingProvider.DiscoverSessions was never entered")
+	}
+
+	// Simulate the TUI's shutdown path: p.Run() has returned (the user
+	// quit) and main.go calls Manager().Close() immediately, with no
+	// guarantee the background ReloadStreaming goroutine has finished.
+	mgr.Close()
+
+	close(p.release)
+	select {
+	case <-streamDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ReloadStreaming did not complete after release")
+	}
+}
