@@ -352,6 +352,18 @@ const (
 // session — so a result found here is not a heuristic, it's the actual
 // answer, obtained without paying for the rest of the file.
 //
+// Each line is unmarshaled into the same jsonlEntry type scanEntries uses,
+// with the same "any unmarshal error skips this line" rule (jsonl.go's
+// scanEntries: `if err := json.Unmarshal(...); err != nil { continue }`,
+// checked before the cwd assignment). This matters: encoding/json fills in
+// whatever fields it can from a JSON object before reporting a type
+// mismatch on an unrelated field (e.g. a string where jsonlEntry.CostUSD
+// expects a float64), so a smaller/different struct that happens not to
+// declare that field would silently accept a line scanEntries would have
+// skipped — producing a cwd headCWD is confident about but a full parse
+// would never have used. Reusing jsonlEntry verbatim makes the two decoders
+// equivalent by construction, not by claim.
+//
 // ok is false whenever no cwd could be determined within the bounded window
 // (missing file, empty file, the window closed before any entry supplied a
 // cwd) — callers must treat that as "unknown, don't filter it out" rather
@@ -372,10 +384,8 @@ func headCWD(path string) (cwd string, ok bool) {
 		lines++
 		bytesRead += len(line) + 1 // +1 for the stripped newline
 
-		var e struct {
-			CWD string `json:"cwd"`
-		}
-		if json.Unmarshal(line, &e) == nil && e.CWD != "" {
+		var e jsonlEntry
+		if err := json.Unmarshal(line, &e); err == nil && e.CWD != "" {
 			return e.CWD, true
 		}
 
