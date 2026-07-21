@@ -67,15 +67,24 @@ func (s *SessionService) ServiceStartup(ctx context.Context, options application
 		return err
 	}
 
-	// Progressive first load: runs in the background (core.SessionManager.
-	// ReloadStreaming) so ServiceStartup returns immediately instead of
-	// blocking GUI/tray startup on the slowest provider. Each batch calls
-	// emitUpdate, so the frontend's existing "sessions:updated" listener
-	// (App.svelte) re-fetches via GetSessions and the list grows in place —
-	// no frontend change needed, since GetSessions already just returns
-	// whatever's currently in the manager. Subsequent reloads (watchLoop
-	// below) stay synchronous.
-	go s.manager.ReloadStreaming(s.emitUpdate)
+	// Progressive first load: BeginReloadStreaming synchronously marks the
+	// stream as in-flight (core.SessionManager's streamInFlight guard)
+	// BEFORE watchLoop starts below -- watchLoop's ticker/event cases call
+	// Reload/UpdateActivities unconditionally on every tick or file event,
+	// so this ordering is what actually prevents a race: a bare
+	// `go s.manager.ReloadStreaming(...)` followed immediately by
+	// `go s.watchLoop()` could not otherwise guarantee the guard is active
+	// before watchLoop's first tick or an already-queued watcher event (the
+	// watcher was started above, so its channel can already have one
+	// buffered) gets processed. The actual (potentially slow) discovery
+	// work still runs in the background so ServiceStartup returns
+	// immediately. Each batch calls emitUpdate, so the frontend's existing
+	// "sessions:updated" listener (App.svelte) re-fetches via GetSessions
+	// and the list grows in place — no frontend change needed, since
+	// GetSessions already just returns whatever's currently in the
+	// manager. Subsequent reloads (watchLoop below) stay synchronous.
+	run := s.manager.BeginReloadStreaming()
+	go run(s.emitUpdate)
 
 	// Background goroutine: watch for file changes + periodic refresh
 	go s.watchLoop()

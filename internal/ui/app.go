@@ -194,7 +194,19 @@ func (m Model) Init() tea.Cmd {
 	// provider member completes instead of waiting for the slowest one.
 	// Subsequent reloads (below, watcher/tick-driven) stay synchronous via
 	// makeLoadCmd/Reload -- they're incremental-fast already.
-	cmds := []tea.Cmd{startStreamingLoadCmd(m.manager), renderTickCmd(), checkUpdateCmd()}
+	//
+	// BeginReloadStreaming is called synchronously, right here, BEFORE any
+	// Cmd in this batch is dispatched -- including watchCmd, whose channel
+	// can already have a queued event waiting (StartWatcher ran earlier, in
+	// NewModel). That ordering is what actually guarantees
+	// core.SessionManager's streamInFlight guard is active before a watcher
+	// event or the first tick could otherwise race the stream's own
+	// startup; deferring the flag-set into a goroutine spawned by one of
+	// these Cmds would not give the same guarantee (Go makes no promise a
+	// spawned goroutine's first statement runs before a sibling Cmd's
+	// does). See BeginReloadStreaming's doc for the full reasoning.
+	run := m.manager.BeginReloadStreaming()
+	cmds := []tea.Cmd{runStreamingLoadCmd(run), renderTickCmd(), checkUpdateCmd()}
 	if events := m.manager.WatcherEvents(); events != nil {
 		cmds = append(cmds, watchCmd(events))
 	} else {

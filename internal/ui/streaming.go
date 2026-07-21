@@ -2,16 +2,15 @@ package ui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/illegalstudio/lazyagent/internal/core"
 )
 
 // streamStartedMsg carries the update/done channels a just-launched
-// progressive-first-load goroutine will signal on. core.SessionManager.
-// ReloadStreaming itself has no channel of its own to expose (it just calls
-// onUpdate, like watchCmd's events channel is owned by the watcher) -- these
-// channels are created once, here, for the whole stream, and must be
-// threaded back into the model via Update so later batch/done messages can
-// keep waiting on them.
+// progressive-first-load goroutine will signal on. core.SessionManager's
+// streaming reload itself has no channel of its own to expose (it just
+// calls onUpdate, like watchCmd's events channel is owned by the watcher)
+// -- these channels are created once, here, for the whole stream, and must
+// be threaded back into the model via Update so later batch/done messages
+// can keep waiting on them.
 type streamStartedMsg struct {
 	updates <-chan struct{}
 	done    <-chan struct{}
@@ -28,18 +27,25 @@ type streamBatchMsg struct{}
 // completed).
 type streamDoneMsg struct{}
 
-// startStreamingLoadCmd starts the manager's progressive first load
-// (core.SessionManager.ReloadStreaming) in a background goroutine and
+// runStreamingLoadCmd starts the actual streaming discovery work (run, from
+// core.SessionManager.BeginReloadStreaming) in a background goroutine and
 // returns a tea.Cmd that reports back once it has: the actual discovery
 // work happens off of bubbletea's own command-runner goroutine so batches
 // can be delivered as they arrive, rather than bubbletea only learning
 // about the load once the whole thing finishes.
-func startStreamingLoadCmd(mgr *core.SessionManager) tea.Cmd {
+//
+// run must come from BeginReloadStreaming, called synchronously by the
+// caller (Init, below) BEFORE this Cmd -- or any other Cmd in the same
+// batch, including watchCmd -- is dispatched. That ordering is what
+// actually guards against a watcher event or poll tick racing the stream's
+// startup (see BeginReloadStreaming's doc): this function only owns
+// delivering batches progressively, not the guard itself.
+func runStreamingLoadCmd(run func(onUpdate func())) tea.Cmd {
 	return func() tea.Msg {
 		updates := make(chan struct{}, 1) // buffered: coalesce bursts, onUpdate must never block
 		done := make(chan struct{})
 		go func() {
-			mgr.ReloadStreaming(func() {
+			run(func() {
 				select {
 				case updates <- struct{}{}:
 				default:

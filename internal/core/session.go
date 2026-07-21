@@ -59,13 +59,33 @@ type SessionManager struct {
 	excludeCWDSubstrings []string
 
 	// streamInFlight is the guard for the progressive-first-load /
-	// steady-state interplay: true for the duration of a ReloadStreaming
-	// call (set before DiscoverMatchingStream starts, cleared after it and
-	// the completion save finish), false the rest of the time. Reload and
-	// UpdateActivities' periodic re-discovery both check it and back off
-	// rather than racing a stream's own accumulating per-batch merges --
-	// see their doc comments for exactly how each responds.
+	// steady-state interplay: true for the duration of a streaming reload,
+	// false the rest of the time. Set synchronously by BeginReloadStreaming,
+	// before ANY of the streaming reload's own work begins -- not merely
+	// "before DiscoverMatchingStream starts": loadPersistedCacheOnce (a
+	// multi-MB JSON parse when a persisted cache exists) runs first and can
+	// easily take longer than a watcher event or a 1s ticker takes to fire,
+	// so the flag must already be true before that step, or a Reload/
+	// UpdateActivities call landing during it would pass the guard, run its
+	// own full discovery, and race the stream's own per-batch appends into
+	// duplicate SessionIDs. Cleared once DiscoverMatchingStream's done
+	// channel closes, before any catch-up Reload (see pendingReload) or the
+	// completion save. Reload and UpdateActivities' periodic re-discovery
+	// both check it and back off rather than racing the stream's own
+	// accumulating per-batch merges -- see their doc comments for exactly
+	// how each responds.
 	streamInFlight bool
+
+	// pendingReload latches a Reload() call that Reload absorbed while
+	// streamInFlight was true (see Reload's doc comment): set under the
+	// same lock as the absorb check, cleared and acted on once the stream
+	// completes (see runReloadStreaming), which runs exactly one catch-up
+	// Reload if this was ever set. Without this, a watcher-triggered Reload
+	// for an all-watcher-provider setup with no periodic RefreshInterval
+	// (e.g. claude/pi/grok/kimi) that lands mid-stream would be silently
+	// lost until some future, unrelated watcher event -- which might never
+	// come for that exact change.
+	pendingReload bool
 
 	// Persisted discovery cache (opt-in, see EnableCachePersistence). All
 	// guarded by mu like everything else above; the actual Load/Save disk
@@ -307,30 +327,32 @@ func (m *SessionManager) exclusionMatcher() func(cwd string) bool {
 // discoverHonoringExclusions for how the exclude_cwd_substrings pushdown is
 // applied.
 //
-// While the manager's progressive first load (ReloadStreaming) is still in
-// flight (streamInFlight), Reload is a no-op that returns nil immediately
-// instead of running a second, independent discovery concurrently with the
-// stream's own accumulating per-batch merges. This absorbs watcher/
-// ticker-driven Reload calls that land mid-stream: the TUI's
+// While the manager's progressive first load is still in flight
+// (streamInFlight), Reload is a no-op that returns nil immediately instead
+// of running a second, independent discovery concurrently with the
+// stream's own accumulating per-batch merges, and latches pendingReload so
+// the call isn't lost (see runReloadStreaming's catch-up). This absorbs
+// watcher/ticker-driven Reload calls that land mid-stream: the TUI's
 // fileWatchMsg/tickMsg handlers and the tray/API's watchLoop all call
 // Reload unconditionally on every watcher event or fallback tick, with no
 // way to know a stream is running. The stream is already the freshest full
 // discovery in progress, and letting a concurrent Reload replace m.sessions
 // mid-stream would either lose sessions a later batch alone would have
-// merged in, or -- since ReloadStreaming's batches are appended, not
-// replaced -- let a later batch duplicate sessions Reload's own complete
-// discovery already included. Absorbing the call is the simplest sound
-// rule: nothing is lost, since the event that triggered it isn't
-// discarded either (callers still re-arm their watcher for the next real
-// event), and the in-flight stream's own completion is guaranteed to
-// reflect at least as much as that Reload would have.
+// merged in, or -- since the stream's batches are appended, not replaced --
+// let a later batch duplicate sessions Reload's own complete discovery
+// already included. Absorbing the call (rather than blocking until the
+// stream finishes, or queueing it to run concurrently anyway) is the
+// simplest rule that's provably safe under concurrency; pendingReload is
+// what keeps "absorbed" from also meaning "silently dropped forever" for a
+// provider with no periodic RefreshInterval to naturally retry on.
 func (m *SessionManager) Reload() error {
-	m.mu.RLock()
-	streaming := m.streamInFlight
-	m.mu.RUnlock()
-	if streaming {
+	m.mu.Lock()
+	if m.streamInFlight {
+		m.pendingReload = true
+		m.mu.Unlock()
 		return nil
 	}
+	m.mu.Unlock()
 
 	m.loadPersistedCacheOnce()
 
@@ -349,54 +371,91 @@ func (m *SessionManager) Reload() error {
 	return nil
 }
 
+// BeginReloadStreaming synchronously marks the manager's progressive first
+// load as in-flight (streamInFlight -- see the field doc) and returns a
+// func that performs the actual streaming discovery; the caller must run
+// that func (typically in its own goroutine, for progressive rendering) to
+// perform the load, passing the onUpdate callback ReloadStreaming's doc
+// describes.
+//
+// This split exists because a caller that does
+// `go mgr.ReloadStreaming(onUpdate)` and then immediately starts a watcher
+// or poll loop cannot guarantee streamInFlight is already true by the time
+// that loop's first event/tick fires: Go makes no promise a spawned
+// goroutine's first statement runs before the spawning goroutine's next
+// one, and even if it did, ReloadStreaming's own first real step
+// (loadPersistedCacheOnce) can easily take longer than a 1s ticker or an
+// already-queued watcher event needs to fire anyway. Both real production
+// callers (internal/ui's Init, internal/tray's ServiceStartup) call
+// BeginReloadStreaming synchronously -- before starting anything else that
+// could race a Reload/UpdateActivities call -- and only run the returned
+// func in a goroutine; see their doc comments for how each wires this up.
+func (m *SessionManager) BeginReloadStreaming() (run func(onUpdate func())) {
+	m.mu.Lock()
+	m.streamInFlight = true
+	m.mu.Unlock()
+	return m.runReloadStreaming
+}
+
 // ReloadStreaming performs the manager's progressive FIRST load: instead of
 // waiting for every provider to finish (the barrier
 // MultiProvider.DiscoverSessions imposes) before showing anything, each
 // provider member's sessions are merged into the snapshot -- and onUpdate
 // (if non-nil) is called -- as soon as that member completes, via
-// core.DiscoverMatchingStream. It blocks until every member has finished;
-// callers that want progressive rendering run it in their own goroutine
-// (see internal/ui's streaming glue and internal/tray's ServiceStartup) and
-// use onUpdate to notify themselves a new batch landed. onUpdate is always
-// called with m.mu NOT held, so it's safe for onUpdate to call back into the
-// manager (Sessions(), VisibleSessions(), etc.) without deadlocking; it may
-// also be called concurrently by more than one member's goroutine, so it
-// must itself be safe for concurrent use.
+// core.DiscoverMatchingStream. It blocks until every member has finished
+// (and, if a Reload was absorbed while it ran, until the resulting
+// catch-up Reload finishes too -- see runReloadStreaming). onUpdate is
+// always called with m.mu NOT held, so it's safe for onUpdate to call back
+// into the manager (Sessions(), VisibleSessions(), etc.) without
+// deadlocking; it may also be called concurrently by more than one
+// member's goroutine, so it must itself be safe for concurrent use.
+//
+// This is exactly BeginReloadStreaming immediately followed by running the
+// returned func in the current goroutine -- a convenience for callers
+// (including most tests) that don't need streamInFlight to be guaranteed
+// true before they do anything else concurrently. See BeginReloadStreaming
+// when that ordering matters, which it does for both real production
+// callers.
 //
 // Uses exclusionMatcher -- the SAME predicate-selection logic
 // discoverHonoringExclusions uses -- so the exclude_cwd_substrings pushdown
 // applies identically on the streaming path.
 //
 // Intended to be called exactly once, as the very first load, before any
-// Reload(). While it runs, streamInFlight is true: Reload() and
-// UpdateActivities' periodic re-discovery both back off (see their doc
-// comments) rather than racing this call's per-batch merges.
+// Reload().
 //
 // Persistence (when EnableCachePersistence was called): the persisted cache
 // is loaded once before discovery starts, exactly like Reload's first call
 // (loadPersistedCacheOnce is idempotent, so whichever of Reload/
 // ReloadStreaming runs first "wins" the load). On completion, the cache is
-// saved exactly once -- never per batch -- via savePersistedCacheIfDue,
-// regardless of whether any member actually found sessions:
-// DiscoverMatchingStream has no error channel (best-effort per member, by
-// design, same as MultiProvider.DiscoverSessions), so "every member failed"
-// is indistinguishable from "every member genuinely found nothing" at this
-// level. Unlike Reload (which skips the save entirely on a hard discovery
-// error), ReloadStreaming therefore always saves on completion, since
-// "the stream finished" -- not "discovery succeeded" -- is its completion
-// signal. If every member fails or emits nothing, the manager simply ends
-// with an empty snapshot: the same observable outcome Reload's own error
-// path already produces via empty views today, and the resulting save is
-// advisory and harmless (see CachePersister) -- no new error surface is
-// introduced.
+// normally saved exactly once -- never per batch -- via
+// savePersistedCacheIfDue, regardless of whether any member actually found
+// sessions: DiscoverMatchingStream has no error channel (best-effort per
+// member, by design, same as MultiProvider.DiscoverSessions), so "every
+// member failed" is indistinguishable from "every member genuinely found
+// nothing" at this level. Unlike Reload (which skips the save entirely on a
+// hard discovery error), ReloadStreaming therefore always saves on
+// completion, since "the stream finished" -- not "discovery succeeded" --
+// is its completion signal. (The one exception: if a Reload was absorbed
+// mid-stream, the catch-up Reload's own save covers completion instead --
+// see runReloadStreaming.) If every member fails or emits nothing, the
+// manager simply ends with an empty snapshot: the same observable outcome
+// Reload's own error path already produces via empty views today, and the
+// resulting save is advisory and harmless (see CachePersister) -- no new
+// error surface is introduced.
 func (m *SessionManager) ReloadStreaming(onUpdate func()) {
+	m.BeginReloadStreaming()(onUpdate)
+}
+
+// runReloadStreaming is BeginReloadStreaming's returned func -- see both
+// its doc and ReloadStreaming's for the full contract. streamInFlight is
+// already true by the time this runs (BeginReloadStreaming set it
+// synchronously before returning it), so everything here can safely take
+// as long as it needs to.
+func (m *SessionManager) runReloadStreaming(onUpdate func()) {
 	m.loadPersistedCacheOnce()
 
 	matcher := m.exclusionMatcher()
-
-	m.mu.Lock()
-	m.streamInFlight = true
-	m.mu.Unlock()
 
 	done := DiscoverMatchingStream(m.provider, matcher, func(batch []*model.Session) {
 		m.mu.Lock()
@@ -414,7 +473,32 @@ func (m *SessionManager) ReloadStreaming(onUpdate func()) {
 
 	m.mu.Lock()
 	m.streamInFlight = false
+	pending := m.pendingReload
+	m.pendingReload = false
 	m.mu.Unlock()
+
+	if pending {
+		// A watcher/ticker-driven Reload was absorbed while the stream was
+		// in flight (see Reload's doc comment) -- catch up now with one
+		// full, ordinary Reload, rather than risk silently losing whatever
+		// it would have picked up until some future watcher event (which,
+		// for an all-watcher provider setup with no periodic
+		// RefreshInterval, e.g. claude/pi/grok/kimi, might never come again
+		// for that exact change). Reload replaces m.sessions with a fresh,
+		// complete, non-duplicated discovery -- superseding the stream's
+		// own accumulated batches entirely -- and already calls
+		// savePersistedCacheIfDue as part of its own normal flow, so that
+		// IS this call's completion save; skip the explicit one below to
+		// avoid a redundant (harmless, but pointless) second save attempt
+		// back to back. onUpdate is called again so a progressive-rendering
+		// caller notices the catch-up's effect too, not just whatever the
+		// stream's own batches produced.
+		_ = m.Reload()
+		if onUpdate != nil {
+			onUpdate()
+		}
+		return
+	}
 
 	m.savePersistedCacheIfDue()
 }
@@ -625,9 +709,30 @@ func (m *SessionManager) SessionDetail(id string) *SessionDetailView {
 	return nil
 }
 
-// SortSessions sorts sessions by last activity (most recent first).
+// SortSessions sorts sessions by last activity (most recent first),
+// breaking ties by SessionID ascending for a fully deterministic order.
+// The tiebreak matters for ReloadStreaming: batches from different
+// provider members can merge in a nondeterministic arrival order, so two
+// sessions that happen to share an exact LastActivity must still land in
+// the same relative position no matter which batch each came from or when
+// it arrived -- a plain LastActivity-only comparator would leave that pair
+// in whatever order slices.SortFunc's internal algorithm happened to
+// produce. Uses SortStableFunc (not SortFunc) as defense in depth on top of
+// that: even a literal duplicate SessionID (which should never legitimately
+// occur, but is exactly the shape a guard bug like the one this stable sort
+// was added alongside would produce) sorts into a predictable, inspectable
+// order rather than getting shuffled.
+//
+// Mirrors internal/sessions' bySessionRecency (same rule: LastActivity
+// descending, SessionID ascending) -- checked and confirmed NOT importable
+// here instead of duplicated: internal/sessions already imports
+// internal/core, so importing back would be a cycle. Keep the two in sync
+// by hand if the ordering rule ever changes.
 func SortSessions(sessions []*model.Session) {
-	slices.SortFunc(sessions, func(a, b *model.Session) int {
-		return cmp.Compare(b.LastActivity.UnixNano(), a.LastActivity.UnixNano())
+	slices.SortStableFunc(sessions, func(a, b *model.Session) int {
+		if c := cmp.Compare(b.LastActivity.UnixNano(), a.LastActivity.UnixNano()); c != 0 {
+			return c
+		}
+		return strings.Compare(a.SessionID, b.SessionID)
 	})
 }

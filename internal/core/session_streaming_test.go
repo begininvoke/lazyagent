@@ -154,6 +154,14 @@ func TestReloadStreaming_EquivalentToSynchronousReload(t *testing.T) {
 			if !reflect.DeepEqual(gotVisible, wantVisible) {
 				t.Fatalf("patterns=%v: ReloadStreaming VisibleSessions() = %v, want %v", patterns, gotVisible, wantVisible)
 			}
+
+			// Per-session activity state must also agree, not just the
+			// session set/order (review fix round, minor 5).
+			for _, id := range gotAll {
+				if got, want := streamMgr.ActivityFor(id), syncMgr.ActivityFor(id); got != want {
+					t.Fatalf("patterns=%v: ActivityFor(%q) = %v, want %v (streaming vs synchronous Reload)", patterns, id, got, want)
+				}
+			}
 		})
 	}
 }
@@ -235,14 +243,24 @@ func TestReloadStreaming_SavesOnceEvenWhenAllMembersFail(t *testing.T) {
 // deterministically for "this call has started" without sleeping. calls
 // counts every invocation, letting tests prove a guarded caller never
 // triggers a second, concurrent discovery while one is already in flight.
+// If secondCallSessions is set, it is returned starting from the 2nd
+// DiscoverSessions call onward instead of sessions -- lets a test simulate
+// "the underlying data changed between the stream's own discovery and a
+// later catch-up Reload" (see TestReloadStreaming_CatchesUpAbsorbedReloadOnCompletion).
+// It also implements CachePersister (loadCalls/saveCalls counters, no-op
+// bodies) so persistence-focused tests can reuse this same
+// blocking-discovery stub instead of a separate type.
 type blockingProvider struct {
-	mu       sync.Mutex
-	calls    int
-	once     sync.Once
-	entered  chan struct{}
-	release  chan struct{}
-	sessions []*model.Session
-	interval time.Duration
+	mu                 sync.Mutex
+	calls              int
+	loadCalls          int
+	saveCalls          int
+	once               sync.Once
+	entered            chan struct{}
+	release            chan struct{}
+	sessions           []*model.Session
+	secondCallSessions []*model.Session
+	interval           time.Duration
 }
 
 func newBlockingProvider(sessions []*model.Session, interval time.Duration) *blockingProvider {
@@ -257,9 +275,13 @@ func newBlockingProvider(sessions []*model.Session, interval time.Duration) *blo
 func (p *blockingProvider) DiscoverSessions() ([]*model.Session, error) {
 	p.mu.Lock()
 	p.calls++
+	calls := p.calls
 	p.mu.Unlock()
 	p.once.Do(func() { close(p.entered) })
 	<-p.release
+	if calls >= 2 && p.secondCallSessions != nil {
+		return p.secondCallSessions, nil
+	}
 	return p.sessions, nil
 }
 
@@ -269,9 +291,33 @@ func (p *blockingProvider) callCount() int {
 	return p.calls
 }
 
+// LoadCaches/SaveCaches implement CachePersister as no-op counters, so
+// tests can assert save/load call counts on a blockingProvider directly.
+func (p *blockingProvider) LoadCaches(dir string) error {
+	p.mu.Lock()
+	p.loadCalls++
+	p.mu.Unlock()
+	return nil
+}
+
+func (p *blockingProvider) SaveCaches(dir string) error {
+	p.mu.Lock()
+	p.saveCalls++
+	p.mu.Unlock()
+	return nil
+}
+
+func (p *blockingProvider) saveCallCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.saveCalls
+}
+
 func (p *blockingProvider) UseWatcher() bool               { return false }
 func (p *blockingProvider) RefreshInterval() time.Duration { return p.interval }
 func (p *blockingProvider) WatchDirs() []string            { return nil }
+
+var _ CachePersister = (*blockingProvider)(nil)
 
 func TestUpdateActivities_SkipsRediscoveryWhileStreamInFlight(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -391,7 +437,7 @@ func TestReload_RunsNormallyAfterStreamCompletes(t *testing.T) {
 // TestClose_DuringInFlightStream_DoesNotSaveAndDoesNotRace documents and
 // pins "shutdown save behavior unchanged" for the specific new scenario
 // ReloadStreaming introduces: the TUI never joins the goroutine running
-// ReloadStreaming (see internal/ui's startStreamingLoadCmd -- the same
+// ReloadStreaming (see internal/ui's runStreamingLoadCmd -- the same
 // pattern Task 11's picker uses for its own background discovery
 // goroutine), so a user quitting mid-stream reaches Close() while
 // ReloadStreaming is genuinely still running concurrently in another
@@ -401,13 +447,16 @@ func TestReload_RunsNormallyAfterStreamCompletes(t *testing.T) {
 // saves when persistDirty is true, and ReloadStreaming's single
 // savePersistedCacheIfDue call happens after <-done, so persistDirty is
 // never set during the stream. An early quit therefore reaches Close()
-// before that call ever ran: no save happens for this run at all (not even
-// a partial one) -- the previous run's persisted cache, if any, is simply
-// left on disk untouched. That is safe and lossless (advisory cache, see
-// CachePersister), just not a speed win for the aborted run; this test
-// exists to pin that exact behavior and, under -race, prove Close() reading
-// persistEnabled/persistDirty concurrently with ReloadStreaming's own
-// locked mutations is race-free.
+// before that call ever ran, so Close() ITSELF never triggers a save here
+// -- verified below via a counting stub, not just by inspection. This is
+// specifically about what Close() does (nothing, while the stream is still
+// in flight): nothing cancels the still-running background stream
+// goroutine, so if it happens to reach its own natural completion (and
+// save) before the process actually exits, that save still fires
+// independently of Close() -- a completion save is not guaranteed to be
+// skipped for the run as a whole, only Close()'s own attempt is. Also
+// proves, under -race, that Close() reading persistEnabled/persistDirty
+// concurrently with ReloadStreaming's own locked mutations is race-free.
 func TestClose_DuringInFlightStream_DoesNotSaveAndDoesNotRace(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
@@ -432,10 +481,180 @@ func TestClose_DuringInFlightStream_DoesNotSaveAndDoesNotRace(t *testing.T) {
 	// guarantee the background ReloadStreaming goroutine has finished.
 	mgr.Close()
 
+	if got := p.saveCallCount(); got != 0 {
+		t.Fatalf("saveCalls after Close() during an in-flight stream = %d, want 0 (Close must not save while the stream's own completion save hasn't run yet)", got)
+	}
+
 	close(p.release)
 	select {
 	case <-streamDone:
 	case <-time.After(5 * time.Second):
 		t.Fatal("ReloadStreaming did not complete after release")
+	}
+}
+
+// TestReloadStreaming_CatchesUpAbsorbedReloadOnCompletion pins the
+// pendingReload latch (review fix round, Important 2): a Reload absorbed
+// while a stream is in flight must not be lost forever for an
+// all-watcher-provider setup with no periodic RefreshInterval (e.g.
+// claude/pi/grok/kimi) -- there, nothing else naturally retries it; the
+// next real watcher event might not arrive for a long time, or ever, for
+// that exact change. Uses blockingProvider.secondCallSessions so the
+// catch-up Reload's discovery (the 2nd DiscoverSessions call) can return a
+// genuinely different result than the stream's own (1st) call, proving the
+// catch-up actually re-discovered rather than just re-merging stale data.
+func TestReloadStreaming_CatchesUpAbsorbedReloadOnCompletion(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	now := time.Now()
+	p := newBlockingProvider([]*model.Session{{SessionID: "s1", LastActivity: now}}, 0)
+	p.secondCallSessions = []*model.Session{
+		{SessionID: "s1", LastActivity: now},
+		{SessionID: "s2", LastActivity: now.Add(time.Minute)},
+	}
+	mgr := NewSessionManager(60, p)
+
+	streamDone := make(chan struct{})
+	go func() {
+		mgr.ReloadStreaming(nil)
+		close(streamDone)
+	}()
+
+	select {
+	case <-p.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("blockingProvider.DiscoverSessions was never entered")
+	}
+
+	// Absorbed mid-stream -- must be latched, not dropped.
+	if err := mgr.Reload(); err != nil {
+		t.Fatalf("absorbed Reload: %v", err)
+	}
+
+	close(p.release)
+	select {
+	case <-streamDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ReloadStreaming did not complete after release")
+	}
+
+	if got := p.callCount(); got != 2 {
+		t.Fatalf("provider.DiscoverSessions call count after completion = %d, want 2 (the stream's own call, plus one catch-up Reload for the absorbed watcher event)", got)
+	}
+	ids := sessionIDOrder(mgr.Sessions())
+	if len(ids) != 2 || ids[0] != "s2" || ids[1] != "s1" {
+		t.Fatalf("Sessions() after completion = %v, want [s2 s1] (the catch-up Reload's fresh discovery, most-recent-first) -- the absorbed Reload's change must not be lost", ids)
+	}
+}
+
+// --- Important 1 (review fix round): streamInFlight must be true through
+// the ENTIRE streaming reload, including loadPersistedCacheOnce (a
+// potentially slow, multi-MB JSON parse) -- not just once discovery itself
+// starts. blockingLoadProvider blocks LoadCaches (not DiscoverSessions)
+// until released, isolating that specific window.
+
+type blockingLoadProvider struct {
+	mu            sync.Mutex
+	discoverCalls int
+	once          sync.Once
+	entered       chan struct{}
+	release       chan struct{}
+	sessions      []*model.Session
+}
+
+func newBlockingLoadProvider(sessions []*model.Session) *blockingLoadProvider {
+	return &blockingLoadProvider{
+		entered:  make(chan struct{}),
+		release:  make(chan struct{}),
+		sessions: sessions,
+	}
+}
+
+func (p *blockingLoadProvider) DiscoverSessions() ([]*model.Session, error) {
+	p.mu.Lock()
+	p.discoverCalls++
+	p.mu.Unlock()
+	return p.sessions, nil
+}
+
+func (p *blockingLoadProvider) discoverCallCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.discoverCalls
+}
+
+func (p *blockingLoadProvider) LoadCaches(dir string) error {
+	p.once.Do(func() { close(p.entered) })
+	<-p.release
+	return nil
+}
+
+func (p *blockingLoadProvider) SaveCaches(dir string) error { return nil }
+
+func (p *blockingLoadProvider) UseWatcher() bool               { return false }
+func (p *blockingLoadProvider) RefreshInterval() time.Duration { return time.Millisecond }
+func (p *blockingLoadProvider) WatchDirs() []string            { return nil }
+
+var _ CachePersister = (*blockingLoadProvider)(nil)
+
+// TestReloadStreaming_GuardsHoldThroughCacheLoad is the Important-1 review
+// fix: with the pre-fix implementation, ReloadStreaming set streamInFlight
+// only AFTER calling loadPersistedCacheOnce, so a watcher event or
+// UpdateActivities tick landing during that (potentially slow) load would
+// pass the guard, run its own full discovery, and race the stream's own
+// per-batch appends into duplicate SessionIDs (which, over the Wails IPC
+// boundary, breaks the Svelte frontend's keyed session list).
+// BeginReloadStreaming fixes this by setting streamInFlight synchronously
+// before returning the run func -- before ANY of the streaming reload's own
+// work begins.
+func TestReloadStreaming_GuardsHoldThroughCacheLoad(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	p := newBlockingLoadProvider([]*model.Session{{SessionID: "s1", LastActivity: time.Now()}})
+	mgr := NewSessionManager(60, p)
+	mgr.EnableCachePersistence(t.TempDir())
+
+	run := mgr.BeginReloadStreaming()
+	streamDone := make(chan struct{})
+	go func() {
+		run(nil)
+		close(streamDone)
+	}()
+
+	select {
+	case <-p.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("LoadCaches was never entered")
+	}
+
+	// We are inside the persisted-cache load, well before
+	// DiscoverMatchingStream's own discovery has even started -- both
+	// Reload and UpdateActivities must already be guarded here, not just
+	// once discovery begins.
+	if err := mgr.Reload(); err != nil {
+		t.Fatalf("Reload during the cache-load window: %v", err)
+	}
+	_ = mgr.UpdateActivities()
+
+	if got := p.discoverCallCount(); got != 0 {
+		t.Fatalf("DiscoverSessions call count after Reload+UpdateActivities during the cache-load window = %d, want 0 (both must be guarded before discovery even starts, not just once it does)", got)
+	}
+
+	close(p.release)
+	select {
+	case <-streamDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stream did not complete after release")
+	}
+
+	// 2, not 1: the Reload() above was absorbed while streamInFlight was
+	// true, which also latches pendingReload (Important 2) -- so its own
+	// catch-up Reload legitimately runs one more discovery once the stream
+	// completes. This is the two fixes working together, not a leak: had
+	// the guard failed to hold through the cache-load window, the call
+	// count observed *during* the window (asserted above) would already
+	// have been > 0.
+	if got := p.discoverCallCount(); got != 2 {
+		t.Fatalf("final DiscoverSessions call count = %d, want 2 (the stream's own discovery, plus the absorbed Reload's catch-up)", got)
 	}
 }

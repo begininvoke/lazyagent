@@ -163,9 +163,9 @@ func TestUpdate_SessionsMsg_DoesNotResetLoading(t *testing.T) {
 	}
 }
 
-// --- startStreamingLoadCmd: end-to-end through the manager (no TTY) ---
+// --- runStreamingLoadCmd: end-to-end through the manager (no TTY) ---
 
-func TestStartStreamingLoadCmd_EndToEndReachesStreamDone(t *testing.T) {
+func TestRunStreamingLoadCmd_EndToEndReachesStreamDone(t *testing.T) {
 	now := time.Now()
 	p1 := testProvider{sessions: []*model.Session{{SessionID: "s1", CWD: "/p1", LastActivity: now}}}
 	p2 := testProvider{sessions: []*model.Session{{SessionID: "s2", CWD: "/p2", LastActivity: now}}}
@@ -173,10 +173,11 @@ func TestStartStreamingLoadCmd_EndToEndReachesStreamDone(t *testing.T) {
 
 	m := loadingModel(t, mp)
 
-	startMsg := startStreamingLoadCmd(m.manager)()
+	run := m.manager.BeginReloadStreaming()
+	startMsg := runStreamingLoadCmd(run)()
 	started, ok := startMsg.(streamStartedMsg)
 	if !ok {
-		t.Fatalf("startStreamingLoadCmd()() = %T, want streamStartedMsg", startMsg)
+		t.Fatalf("runStreamingLoadCmd()() = %T, want streamStartedMsg", startMsg)
 	}
 
 	updated, cmd := m.Update(started)
