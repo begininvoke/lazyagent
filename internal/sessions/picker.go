@@ -359,8 +359,6 @@ func agentColor(agent string) lipgloss.Color {
 	return chatops.ColTextSubtle
 }
 
-// runPicker shows the interactive list and returns the chosen session and
-// action. A nil session means the user quit without choosing.
 // memberCount returns how many independent discovery members provider has,
 // matching DiscoverMatchingStream's granularity: a MultiProvider fans out
 // to one member per entry in Providers (zero for an empty MultiProvider,
