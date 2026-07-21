@@ -38,7 +38,7 @@ func SessionIndexPath() string {
 
 // DiscoverSessions scans the Codex sessions tree for JSONL session files.
 func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
-	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, nil)
+	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, nil, nil)
 }
 
 // DiscoverSessionsFiltered scans the Codex sessions tree like DiscoverSessions,
@@ -59,7 +59,17 @@ func DiscoverSessions(cache *model.SessionCache) ([]*model.Session, error) {
 // cwdMatch may be nil, in which case every session matches (equivalent to
 // DiscoverSessions).
 func DiscoverSessionsFiltered(cache *model.SessionCache, cwdMatch func(string) bool) ([]*model.Session, error) {
-	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, cwdMatch)
+	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, cwdMatch, nil)
+}
+
+// DiscoverSessionsFilteredIndexed is DiscoverSessionsFiltered plus a
+// CWDIndex: cwdIdx (may be nil, equivalent to DiscoverSessionsFiltered)
+// lets the head/tail prefilter reuse previously-determined results — from
+// earlier in this process or reloaded from a persisted index written by a
+// previous run — for files whose (mtime, size) haven't changed, avoiding
+// the I/O entirely for files that keep getting skipped run after run.
+func DiscoverSessionsFilteredIndexed(cache *model.SessionCache, cwdMatch func(string) bool, cwdIdx *CWDIndex) ([]*model.Session, error) {
+	return discoverSessionsFromDir(SessionsDir(), SessionIndexPath(), cache, cwdMatch, cwdIdx)
 }
 
 type parseJob struct {
@@ -76,7 +86,7 @@ type parseResult struct {
 	newOffset int64
 }
 
-func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.SessionCache, cwdMatch func(string) bool) ([]*model.Session, error) {
+func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.SessionCache, cwdMatch func(string) bool, cwdIdx *CWDIndex) ([]*model.Session, error) {
 	if sessionsDir == "" {
 		return nil, fmt.Errorf("could not find home directory")
 	}
@@ -117,7 +127,7 @@ func discoverSessionsFromDir(sessionsDir, indexPath string, cache *model.Session
 			// regardless, any cached.CWD they'd be checked against may
 			// already be stale, and the uniform post-parse filter below is
 			// the single source of truth for whether they're included.
-			if !shouldParseForCWD(path, cwdMatch) {
+			if !shouldParseForCWDIndexed(path, cwdMatch, cwdIdx) {
 				return nil
 			}
 		}
@@ -418,17 +428,57 @@ func tailFinalCWD(path string) (cwd string, found bool) {
 // returns true, so a session is never skipped without certainty; the actual
 // parsed cwd is still checked afterward by the caller's uniform post-parse
 // filter.
+//
+// This is shouldParseForCWDIndexed with a nil index (always live I/O) — see
+// that function for the cache-aware version used by discovery once a
+// CWDIndex is available.
 func shouldParseForCWD(path string, cwdMatch func(string) bool) bool {
-	cwd, ok := headCWD(path)
+	return shouldParseForCWDIndexed(path, cwdMatch, nil)
+}
+
+// shouldParseForCWDIndexed is shouldParseForCWD's cache-aware counterpart:
+// byte-for-byte the same decision tree (see shouldParseForCWD's doc
+// comment), but each of the two underlying I/O primitives — headCWD and
+// tailFinalCWD — is looked up through cwdIdx when cwdIdx is non-nil,
+// instead of always re-reading the file. Both primitives are pure functions
+// of a file's content (they take no matcher), so a cached result is exactly
+// what fresh I/O would return for an unchanged file, regardless of which
+// matcher originally populated the cache entry — reusing them changes
+// nothing about the decision itself, only how the two inputs are obtained.
+// cwdIdx == nil reproduces shouldParseForCWD's plain (always-live-I/O)
+// behavior exactly.
+func shouldParseForCWDIndexed(path string, cwdMatch func(string) bool, cwdIdx *CWDIndex) bool {
+	if cwdIdx == nil {
+		cwd, ok := headCWD(path)
+		if !ok {
+			return true // can't tell from the head — parse it
+		}
+		if cwdMatch(cwd) {
+			return true
+		}
+		tail, found := tailFinalCWD(path)
+		if !found {
+			return true // tail window didn't contain a turn_context — parse it
+		}
+		return cwdMatch(tail)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return true // can't stat — conservative parse, same as headCWD's own "can't open" -> not ok -> true
+	}
+	mtime, size := info.ModTime(), info.Size()
+
+	cwd, ok := cwdIdx.headCWDIndexed(path, mtime, size)
 	if !ok {
-		return true // can't tell from the head — parse it
+		return true
 	}
 	if cwdMatch(cwd) {
 		return true
 	}
-	tail, found := tailFinalCWD(path)
+	tail, found := cwdIdx.tailFinalCWDIndexed(path, mtime, size)
 	if !found {
-		return true // tail window didn't contain a turn_context — parse it
+		return true
 	}
 	return cwdMatch(tail)
 }

@@ -51,7 +51,7 @@ func TestDiscoverSessions_FromSyntheticDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestDiscoverSessions_ParallelMultipleFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestDiscoverSessionsFiltered_ScopesToMatchingCWD(t *testing.T) {
 
 	matchA := func(cwd string) bool { return cwd == "/tmp/project-a" }
 
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matchA)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matchA, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestDiscoverSessionsFiltered_NilMatcherReturnsAll(t *testing.T) {
 	writeRolloutFile(t, dir, 2, "sess-b-0000-0000-0000-000000000000", "/tmp/project-b")
 	writeRolloutFile(t, dir, 3, "sess-c-0000-0000-0000-000000000000", "")
 
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestDiscoverSessionsFiltered_FullCacheHitUsesCachedCWDWithoutRereadingFile(
 
 	cache := model.NewSessionCache()
 	// Prime the cache with a full parse (nil matcher) so both files are cached.
-	if _, err := discoverSessionsFromDir(dir, indexPath, cache, nil); err != nil {
+	if _, err := discoverSessionsFromDir(dir, indexPath, cache, nil, nil); err != nil {
 		t.Fatalf("priming pass: unexpected error: %v", err)
 	}
 
@@ -363,7 +363,7 @@ func TestDiscoverSessionsFiltered_FullCacheHitUsesCachedCWDWithoutRereadingFile(
 	}
 
 	matchA := func(cwd string) bool { return cwd == "/tmp/project-a" }
-	sessions, err := discoverSessionsFromDir(dir, indexPath, cache, matchA)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, cache, matchA, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestDiscoverSessions_StillReturnsEverything(t *testing.T) {
 	writeRolloutFile(t, dir, 1, "sess-a-0000-0000-0000-000000000000", "/tmp/project-a")
 	writeRolloutFile(t, dir, 2, "sess-b-0000-0000-0000-000000000000", "/tmp/project-b")
 
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -540,7 +540,7 @@ func TestDiscoverSessionsFiltered_CWDDriftMatchesFinalCWDViaTailScan(t *testing.
 	path := writeRolloutFileRaw(t, dir, 1, "sess-drift-0000-0000-0000-000000000000", driftFixtureLines("/tmp/project-b", false))
 
 	matchB := func(cwd string) bool { return cwd == "/tmp/project-b" }
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matchB)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matchB, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -563,7 +563,7 @@ func TestDiscoverSessionsFiltered_CWDDriftExcludesOriginalCWDViaPostParseFilter(
 	// session's *final* cwd (after the turn_context) is project-b, so it
 	// must be excluded now that the post-parse filter is authoritative.
 	matchA := func(cwd string) bool { return cwd == "/tmp/project-a" }
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matchA)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matchA, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -579,7 +579,7 @@ func TestDiscoverSessionsFiltered_EmptyTurnContextCWDDoesNotOverwriteFinal(t *te
 	writeRolloutFileRaw(t, dir, 1, "sess-drift-0000-0000-0000-000000000000", driftFixtureLines("/tmp/project-b", true))
 
 	matchB := func(cwd string) bool { return cwd == "/tmp/project-b" }
-	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matchB)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matchB, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -618,7 +618,7 @@ func TestDiscoverSessionsFiltered_EquivalentToManualFilterOfFullDiscovery(t *tes
 
 	for name, matcher := range matchers {
 		t.Run(name, func(t *testing.T) {
-			full, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil)
+			full, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), nil, nil)
 			if err != nil {
 				t.Fatalf("full discovery: unexpected error: %v", err)
 			}
@@ -630,7 +630,7 @@ func TestDiscoverSessionsFiltered_EquivalentToManualFilterOfFullDiscovery(t *tes
 			}
 			sort.Strings(want)
 
-			got, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matcher)
+			got, err := discoverSessionsFromDir(dir, indexPath, model.NewSessionCache(), matcher, nil)
 			if err != nil {
 				t.Fatalf("filtered discovery: unexpected error: %v", err)
 			}
@@ -655,7 +655,7 @@ func TestDiscoverSessionsFiltered_IncrementalCacheHitUsesPostParseFilterNotStale
 
 	cache := model.NewSessionCache()
 	// Prime the cache with a full parse — cached.CWD is now /tmp/project-a.
-	if _, err := discoverSessionsFromDir(dir, indexPath, cache, nil); err != nil {
+	if _, err := discoverSessionsFromDir(dir, indexPath, cache, nil, nil); err != nil {
 		t.Fatalf("priming pass: unexpected error: %v", err)
 	}
 
@@ -674,7 +674,7 @@ func TestDiscoverSessionsFiltered_IncrementalCacheHitUsesPostParseFilterNotStale
 	}
 
 	matchB := func(cwd string) bool { return cwd == "/tmp/project-b" }
-	sessions, err := discoverSessionsFromDir(dir, indexPath, cache, matchB)
+	sessions, err := discoverSessionsFromDir(dir, indexPath, cache, matchB, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
