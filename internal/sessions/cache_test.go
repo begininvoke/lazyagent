@@ -146,6 +146,35 @@ func TestRun_SavesCacheAfterSuccessfulDiscovery(t *testing.T) {
 	}
 }
 
+// TestRun_SavesCacheAfterSuccessfulDiscoveryWithZeroResults is the
+// zero-results counterpart to the test above: a discovery that succeeds but
+// matches nothing (the fixture session's cwd is a different directory than
+// --dir queries for) must still save the caches -- per the brief, "Save
+// even when the run found zero sessions." This also exercises the
+// cwd-index specifically, since the one fixture file gets prefiltered
+// (its non-matching cwd populates cwdindex-codex.json) rather than parsed.
+func TestRun_SavesCacheAfterSuccessfulDiscoveryWithZeroResults(t *testing.T) {
+	home := writeFixtureCodexHome(t, "/tmp/some-completely-different-project")
+	t.Setenv("HOME", home)
+
+	cacheBase := t.TempDir()
+	withStubbedCacheDir(t, cacheBase)
+
+	dir := t.TempDir() // does not match the fixture session's cwd
+	code := Run([]string{"--agent", "codex", "--dir", dir})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (successful discovery, zero results -> \"no sessions found\")", code)
+	}
+
+	cacheDir := filepath.Join(cacheBase, "lazyagent")
+	if _, err := os.Stat(filepath.Join(cacheDir, "discovery-codex.json")); err != nil {
+		t.Fatalf("expected discovery-codex.json to exist after a zero-result run: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, "cwdindex-codex.json")); err != nil {
+		t.Fatalf("expected cwdindex-codex.json to exist after a zero-result run: %v", err)
+	}
+}
+
 func TestRun_DoesNotSaveCacheAfterDiscoveryError(t *testing.T) {
 	// An empty HOME makes codex.SessionsDir() return "", which
 	// discoverSessionsFromDir turns into a genuine discovery error.

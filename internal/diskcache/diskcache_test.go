@@ -11,6 +11,54 @@ type sample struct {
 	Count int    `json:"count"`
 }
 
+func TestEnsureDir_CreatesAt0700(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "lazyagent")
+	if err := EnsureDir(dir); err != nil {
+		t.Fatalf("EnsureDir: %v", err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("perms = %o, want 0700", perm)
+	}
+}
+
+// TestEnsureDir_TightensPreExisting0755Dir covers the real scenario this
+// function exists for: another lazyagent feature sharing the same cache
+// root (e.g. internal/search's index, which creates os.UserCacheDir()/
+// lazyagent at 0755) may have already created the directory at looser
+// permissions before a discovery cache is ever saved. Plain os.MkdirAll
+// would silently leave those loose permissions in place, since it only
+// applies the given mode when it actually creates the directory. EnsureDir
+// must tighten it regardless of who created it first.
+func TestEnsureDir_TightensPreExisting0755Dir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "lazyagent")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o755 {
+		t.Fatalf("fixture setup: dir perms = %o, want 0755 before EnsureDir runs", perm)
+	}
+
+	if err := EnsureDir(dir); err != nil {
+		t.Fatalf("EnsureDir: %v", err)
+	}
+
+	info, err = os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("perms after EnsureDir = %o, want 0700 (tightened from the pre-existing 0755)", perm)
+	}
+}
+
 func TestAtomicWriteJSON_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cache.json")

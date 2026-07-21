@@ -1,7 +1,6 @@
 package core
 
 import (
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/claude"
 	"github.com/illegalstudio/lazyagent/internal/codex"
 	"github.com/illegalstudio/lazyagent/internal/cursor"
+	"github.com/illegalstudio/lazyagent/internal/diskcache"
 	"github.com/illegalstudio/lazyagent/internal/grok"
 	"github.com/illegalstudio/lazyagent/internal/kilo"
 	"github.com/illegalstudio/lazyagent/internal/kimi"
@@ -62,7 +62,7 @@ func (p *LiveProvider) LoadCaches(dir string) error {
 
 // SaveCaches implements CachePersister.
 func (p *LiveProvider) SaveCaches(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := diskcache.EnsureDir(dir); err != nil {
 		return err
 	}
 	err1 := p.cache.SaveTo(filepath.Join(dir, "discovery-claude.json"))
@@ -103,7 +103,7 @@ func (p *PiProvider) LoadCaches(dir string) error {
 
 // SaveCaches implements CachePersister.
 func (p *PiProvider) SaveCaches(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := diskcache.EnsureDir(dir); err != nil {
 		return err
 	}
 	return p.cache.SaveTo(filepath.Join(dir, "discovery-pi.json"))
@@ -242,7 +242,7 @@ func (p *CodexProvider) LoadCaches(dir string) error {
 
 // SaveCaches implements CachePersister.
 func (p *CodexProvider) SaveCaches(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := diskcache.EnsureDir(dir); err != nil {
 		return err
 	}
 	err1 := p.cache.SaveTo(filepath.Join(dir, "discovery-codex.json"))
@@ -282,7 +282,7 @@ func (p *AmpProvider) LoadCaches(dir string) error {
 
 // SaveCaches implements CachePersister.
 func (p *AmpProvider) SaveCaches(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := diskcache.EnsureDir(dir); err != nil {
 		return err
 	}
 	return p.cache.SaveTo(filepath.Join(dir, "discovery-amp.json"))
@@ -320,7 +320,7 @@ func (p *GrokProvider) LoadCaches(dir string) error {
 
 // SaveCaches implements CachePersister.
 func (p *GrokProvider) SaveCaches(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := diskcache.EnsureDir(dir); err != nil {
 		return err
 	}
 	return p.cache.SaveTo(filepath.Join(dir, "discovery-grok.json"))
@@ -353,7 +353,7 @@ func (p *KimiProvider) LoadCaches(dir string) error {
 
 // SaveCaches implements CachePersister.
 func (p *KimiProvider) SaveCaches(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := diskcache.EnsureDir(dir); err != nil {
 		return err
 	}
 	return p.cache.SaveTo(filepath.Join(dir, "discovery-kimi.json"))

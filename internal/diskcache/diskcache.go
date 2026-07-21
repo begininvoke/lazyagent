@@ -11,6 +11,27 @@ import (
 	"path/filepath"
 )
 
+// EnsureDir makes sure dir exists with 0700 permissions, for a cache
+// directory that may end up holding files with transcript snippets
+// (AtomicWriteJSON already writes each file itself at 0600; this covers the
+// containing directory). MkdirAll alone only sets permissions when it
+// actually creates the directory — it never tightens a directory that
+// already exists at looser permissions, which matters here specifically
+// because lazyagent's cache root (os.UserCacheDir()/lazyagent) is shared
+// with other features (e.g. internal/search's index, which creates the same
+// directory at 0755) that may have created it first. The Chmod's own error
+// is swallowed: it's advisory hardening on top of MkdirAll's own error
+// (returned, and the one that actually determines whether the caller can
+// proceed) — if Chmod fails, the directory is still usable, just not
+// necessarily as tightly permissioned as intended.
+func EnsureDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	_ = os.Chmod(dir, 0o700)
+	return nil
+}
+
 // AtomicWriteJSON marshals v to JSON and writes it to path atomically: the
 // data is first written to a unique temporary file in the same directory as
 // path (so the final rename is same-filesystem and therefore atomic), then
