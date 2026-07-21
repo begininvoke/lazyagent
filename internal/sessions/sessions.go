@@ -74,6 +74,15 @@ Flags:
 	cfg := core.LoadConfig()
 	provider := core.BuildProvider(*agent, cfg)
 
+	// Persistence is advisory and best-effort: when the user cache
+	// directory can't be resolved, discovery just runs cold, exactly as
+	// before this existed. Only the sessions subcommand wires this up (the
+	// TUI/GUI/API keep their in-memory-only behavior).
+	cacheDir, hasCacheDir := resolveCacheDir()
+	if hasCacheDir {
+		core.LoadProviderCaches(provider, cacheDir)
+	}
+
 	variants, err := targetVariants(dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -85,6 +94,12 @@ Flags:
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
+	}
+	// Save right after a successful discovery, reached by both the --json
+	// and interactive-picker paths below, and even when zero sessions were
+	// found. Never reached on a discovery error (the return above).
+	if hasCacheDir {
+		core.SaveProviderCaches(provider, cacheDir)
 	}
 	filtered, err := FilterByDir(all, dir)
 	if err != nil {
