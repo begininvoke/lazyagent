@@ -67,7 +67,22 @@ type pickerModel struct {
 	titles   []string // pre-computed row titles, same indexing as sessions
 	cursor   int
 	action   pickerAction
-	status   string
+	// chosen is the concrete session the user acted on (enter/c), captured
+	// at the moment of the decision rather than re-derived later from
+	// sessions[cursor]. A batch can still be in flight on p.msgs when the
+	// user decides -- both a sessionBatchMsg and the QuitMsg from tea.Quit
+	// travel through the same channel -- so if that batch is processed
+	// after the key and re-sorts the list, sessions[cursor] could end up
+	// pointing at a different session than the one the user actually
+	// looked at. Capturing it here means runPicker never has to re-derive
+	// it from a cursor that may have moved.
+	chosen *model.Session
+	status string
+	// decided is set the moment updateKey sets a terminal action
+	// (actionOpen/actionCopy/actionQuit). Once true, applyBatch and
+	// applyStreamDone become no-ops: the decision has already been made
+	// and must not be disturbed by a message that was already in flight.
+	decided  bool
 	dirLabel string
 	now      time.Time
 	height   int // terminal height from the last tea.WindowSizeMsg; 0 = unknown
@@ -115,7 +130,16 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // applyBatch merges one discovery member's batch into the accumulated
 // list, keeps the cursor on whatever session it was tracking (see
 // relocateCursor), and advances the loading progress counter.
+//
+// It's a no-op once the user has already made a terminal decision
+// (m.decided): a batch can still be in flight on p.msgs at the moment
+// enter/c/q is pressed (see the chosen field's doc comment), and once the
+// program is quitting, nothing should keep mutating the list, the cursor,
+// or the loading counters underneath that decision.
 func (m pickerModel) applyBatch(msg sessionBatchMsg) pickerModel {
+	if m.decided {
+		return m
+	}
 	prevSessions, prevCursor := m.sessions, m.cursor
 	m.sessions, m.titles = mergeSessions(m.sessions, m.titles, msg.sessions, msg.titles)
 	m.cursor = relocateCursor(prevSessions, prevCursor, m.sessions)
@@ -129,10 +153,23 @@ func (m pickerModel) applyBatch(msg sessionBatchMsg) pickerModel {
 // nothing was ever found, the picker quits itself with actionEmpty so Run
 // can print the "No sessions found" message; otherwise it just switches the
 // footer out of its loading state.
+//
+// Like applyBatch, this is a no-op once m.decided: without this guard, a
+// streamDoneMsg arriving right after an explicit quit on an
+// still-empty-so-far list would flip m.action from the user's actionQuit
+// to actionEmpty, corrupting a decision that had already been made. In
+// practice DiscoverMatchingStream never sends a batch after streamDoneMsg
+// (done only closes once every member's emit has already been delivered),
+// so this guard's only real job is protecting against a decision racing
+// the done message itself, not a batch racing after it.
 func (m pickerModel) applyStreamDone() (tea.Model, tea.Cmd) {
+	if m.decided {
+		return m, nil
+	}
 	m.loading = false
 	if len(m.sessions) == 0 {
 		m.action = actionEmpty
+		m.decided = true
 		return m, tea.Quit
 	}
 	return m, nil
@@ -160,10 +197,14 @@ func (m pickerModel) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case core.ResumeArgv(s.Agent, s.SessionID) != nil:
 			m.action = actionOpen
+			m.chosen = s
+			m.decided = true
 			return m, tea.Quit
 		case core.ResumeCommand(s.Agent, s.SessionID) != "":
 			// Not executable from here, but the command exists: copy it.
 			m.action = actionCopy
+			m.chosen = s
+			m.decided = true
 			return m, tea.Quit
 		default:
 			m.status = fmt.Sprintf("no resume available for %s sessions", s.Agent)
@@ -175,11 +216,14 @@ func (m pickerModel) updateKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		s := m.sessions[m.cursor]
 		if core.ResumeCommand(s.Agent, s.SessionID) != "" {
 			m.action = actionCopy
+			m.chosen = s
+			m.decided = true
 			return m, tea.Quit
 		}
 		m.status = fmt.Sprintf("no resume command for %s sessions", s.Agent)
 	case "q", "esc", "ctrl+c":
 		m.action = actionQuit
+		m.decided = true
 		return m, tea.Quit
 	}
 	return m, nil
@@ -423,7 +467,12 @@ func runPicker(provider core.SessionProvider, match func(string) bool, dir, dirL
 	if res.action == actionQuit || res.action == actionEmpty {
 		return nil, res.action, streamComplete, nil
 	}
-	return res.sessions[res.cursor], res.action, streamComplete, nil
+	// res.chosen, not res.sessions[res.cursor]: the session was captured at
+	// the moment of the decision (see pickerModel.chosen's doc comment), so
+	// it's correct even if a batch that was already in flight got merged in
+	// afterward (applyBatch is a no-op post-decision, but chosen is what
+	// actually protects the returned session's identity).
+	return res.chosen, res.action, streamComplete, nil
 }
 
 // relTime renders t relative to now, degrading to an absolute date after

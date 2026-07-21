@@ -499,3 +499,135 @@ func TestPickerCKeyOnEmptyListDuringLoadingIsNoop(t *testing.T) {
 		t.Fatalf("action = %v, want the zero value actionQuit (no-op)", m.action)
 	}
 }
+
+// --- decisive-key vs concurrent-batch race ---
+//
+// A batch can be in flight on p.msgs at the exact moment the user presses
+// enter/c: both a sessionBatchMsg and the QuitMsg produced by tea.Quit
+// travel through the same channel, and Update processes messages strictly
+// in receive order, so a batch that was sent before the key but read after
+// it (or vice versa) is a legitimate interleaving, not a bug in bubbletea.
+// If a late batch re-sorts the list and relocateCursor pins cursor 0 to a
+// brand new top row, re-deriving the chosen session from sessions[cursor]
+// after the fact returns a DIFFERENT session than the one the user actually
+// acted on. These tests drive Update with the exact ordering: a batch
+// lands, the user decides on the row it's now looking at, then a second,
+// newer batch that would displace that row from the top arrives. The
+// decision must survive untouched.
+
+func TestPickerEnterFreezesSelectionAgainstLaterBatch(t *testing.T) {
+	now := time.Now()
+	m := pickerModel{loading: true, total: 2}
+
+	// Batch A lands: session "a" is the only (so top) row.
+	next, _ := m.Update(sessionBatchMsg{
+		sessions: []*model.Session{{Agent: "claude", SessionID: "a", LastActivity: now.Add(-time.Hour)}},
+		titles:   []string{"A"},
+	})
+	m = next.(pickerModel)
+
+	// The user decides on the row they're looking at (session "a", cursor 0).
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(pickerModel)
+	if cmd == nil {
+		t.Fatal("expected tea.Quit after opening")
+	}
+	if m.action != actionOpen {
+		t.Fatalf("action = %v, want actionOpen", m.action)
+	}
+	if m.chosen == nil || m.chosen.SessionID != "a" {
+		t.Fatalf("chosen = %v, want session a", m.chosen)
+	}
+
+	// Batch B "arrives late": a NEWER session that would sort ahead of "a",
+	// displacing it from row 0.
+	next, cmd = m.Update(sessionBatchMsg{
+		sessions: []*model.Session{{Agent: "codex", SessionID: "b", LastActivity: now}},
+		titles:   []string{"B"},
+	})
+	m = next.(pickerModel)
+
+	if cmd != nil {
+		t.Fatal("a batch arriving after a terminal decision must not produce a command")
+	}
+	if m.chosen == nil || m.chosen.SessionID != "a" {
+		t.Fatalf("chosen after the late batch = %v, want still session a", m.chosen)
+	}
+	if len(m.sessions) != 1 || m.sessions[0].SessionID != "a" {
+		t.Fatalf("sessions must not be re-merged after a terminal decision, got %#v", m.sessions)
+	}
+}
+
+func TestPickerCKeyFreezesSelectionAgainstLaterBatch(t *testing.T) {
+	now := time.Now()
+	m := pickerModel{loading: true, total: 2}
+
+	// Batch A: an opencode session (copyable, not directly executable) is
+	// the only, so top, row.
+	next, _ := m.Update(sessionBatchMsg{
+		sessions: []*model.Session{{Agent: "opencode", SessionID: "a", LastActivity: now.Add(-time.Hour)}},
+		titles:   []string{"A"},
+	})
+	m = next.(pickerModel)
+
+	next, cmd := m.Update(keyRune('c'))
+	m = next.(pickerModel)
+	if cmd == nil {
+		t.Fatal("expected tea.Quit after copy")
+	}
+	if m.action != actionCopy {
+		t.Fatalf("action = %v, want actionCopy", m.action)
+	}
+	if m.chosen == nil || m.chosen.SessionID != "a" {
+		t.Fatalf("chosen = %v, want session a", m.chosen)
+	}
+
+	next, cmd = m.Update(sessionBatchMsg{
+		sessions: []*model.Session{{Agent: "codex", SessionID: "b", LastActivity: now}},
+		titles:   []string{"B"},
+	})
+	m = next.(pickerModel)
+
+	if cmd != nil {
+		t.Fatal("a batch arriving after a terminal decision must not produce a command")
+	}
+	if m.chosen == nil || m.chosen.SessionID != "a" {
+		t.Fatalf("chosen after the late batch = %v, want still session a", m.chosen)
+	}
+}
+
+func TestPickerQuitFreezesAgainstLaterBatch(t *testing.T) {
+	m := pickerModel{loading: true, total: 2}
+	next, cmd := m.Update(keyRune('q'))
+	m = next.(pickerModel)
+	if cmd == nil || m.action != actionQuit {
+		t.Fatalf("expected actionQuit + tea.Quit, got action=%v cmd=%v", m.action, cmd)
+	}
+
+	next, cmd = m.Update(sessionBatchMsg{sessions: []*model.Session{{SessionID: "z"}}, titles: []string{"Z"}})
+	m = next.(pickerModel)
+	if cmd != nil {
+		t.Fatal("a batch arriving after quit must not produce a command")
+	}
+	if len(m.sessions) != 0 {
+		t.Fatalf("sessions must stay empty once quit was decided, got %#v", m.sessions)
+	}
+}
+
+func TestPickerStreamDoneFreezesAfterDecision(t *testing.T) {
+	m := pickerModel{loading: true, total: 1}
+	next, cmd := m.Update(keyRune('q'))
+	m = next.(pickerModel)
+	if cmd == nil {
+		t.Fatal("expected tea.Quit")
+	}
+
+	next, cmd = m.Update(streamDoneMsg{})
+	m = next.(pickerModel)
+	if cmd != nil {
+		t.Fatal("streamDoneMsg arriving after a decision must not produce a command")
+	}
+	if m.action != actionQuit {
+		t.Fatalf("action must stay actionQuit, got %v (must not flip to actionEmpty)", m.action)
+	}
+}
