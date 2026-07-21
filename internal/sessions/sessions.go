@@ -89,15 +89,29 @@ Flags:
 		return 1
 	}
 	match := func(cwd string) bool { return matchesDir(cwd, variants) }
+	names := core.NewSessionNames()
+
+	// Interactive picker path: open immediately and stream discovery
+	// results in as agents finish (see runPicker), instead of blocking on
+	// a full discovery first. This only applies when we're actually about
+	// to show a picker on a real terminal -- --json always wants the
+	// complete, byte-identical list, and without a TTY there is no
+	// progressive rendering to benefit from, so both of those keep using
+	// the plain blocking flow below unchanged.
+	if !*jsonOut && isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stderr.Fd()) {
+		return runInteractive(provider, match, dir, names, hasCacheDir, cacheDir)
+	}
 
 	all, err := core.DiscoverMatching(provider, match)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
 	}
-	// Save right after a successful discovery, reached by both the --json
-	// and interactive-picker paths below, and even when zero sessions were
-	// found. Never reached on a discovery error (the return above).
+	// Save right after a successful discovery, reached by --json and by
+	// the non-interactive (no-TTY) fallback below, and even when zero
+	// sessions were found. Never reached on a discovery error (the return
+	// above). The interactive picker path above has its own, later save
+	// point tied to stream completion -- see runInteractive.
 	if hasCacheDir {
 		core.SaveProviderCaches(provider, cacheDir)
 	}
@@ -107,15 +121,13 @@ Flags:
 		return 1
 	}
 
-	names := core.NewSessionNames()
-	nameFor := func(s *model.Session) string {
-		if alias := names.Get(s.SessionID); alias != "" {
-			return alias
-		}
-		return s.Name
-	}
-
 	if *jsonOut {
+		nameFor := func(s *model.Session) string {
+			if alias := names.Get(s.SessionID); alias != "" {
+				return alias
+			}
+			return s.Name
+		}
 		if err := writeJSON(os.Stdout, filtered, nameFor); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			return 1
@@ -127,32 +139,61 @@ Flags:
 		fmt.Fprintf(os.Stderr, "No sessions found in %s.\n", abbreviateHome(dir))
 		return 0
 	}
-	if !isatty.IsTerminal(os.Stdin.Fd()) || !isatty.IsTerminal(os.Stderr.Fd()) {
-		fmt.Fprintln(os.Stderr, "Error: the interactive picker needs a terminal (use --json for scripted output)")
-		return 2
-	}
+	fmt.Fprintln(os.Stderr, "Error: the interactive picker needs a terminal (use --json for scripted output)")
+	return 2
+}
 
-	titles := make([]string, len(filtered))
-	for i, s := range filtered {
-		titles[i] = titleFor(s, names.Get(s.SessionID))
-	}
-	chosen, action, err := runPicker(filtered, titles, abbreviateHome(dir))
+// runInteractive drives the streaming picker path: open the picker
+// immediately, let discovery results stream in, then act on whatever the
+// user chose. The resume/copy action always happens before any cache save
+// (which itself only happens when the stream had already completed by the
+// time the picker exited -- see runPicker's streamComplete and the
+// maybeSave comment below), so a user's chosen action is never delayed by
+// unfinished background discovery.
+func runInteractive(provider core.SessionProvider, match func(string) bool, dir string, names *core.SessionNames, hasCacheDir bool, cacheDir string) int {
+	dirLabel := abbreviateHome(dir)
+	chosen, action, streamComplete, err := runPicker(provider, match, dir, dirLabel, names)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
 	}
+
+	// Only persist provider caches when the discovery stream had already
+	// fully finished by the time the picker exited -- if the user quit or
+	// acted early, the providers' in-memory caches may still be getting
+	// mutated by discovery goroutines running in the background (see
+	// runPicker), so saving then would race with them; skipping the save
+	// in that case is acceptable, since the next run just redoes the work.
+	maybeSave := func() {
+		if hasCacheDir && streamComplete {
+			core.SaveProviderCaches(provider, cacheDir)
+		}
+	}
+
 	switch action {
+	case actionEmpty:
+		fmt.Fprintf(os.Stderr, "No sessions found in %s.\n", dirLabel)
+		maybeSave()
+		return 0
 	case actionOpen:
-		return openSession(chosen)
+		code := openSession(chosen)
+		maybeSave()
+		return code
 	case actionCopy:
 		cmdStr := core.ResumeCommand(chosen.Agent, chosen.SessionID)
+		code := 0
 		if err := core.CopyToClipboard(cmdStr); err != nil {
 			fmt.Fprintf(os.Stderr, "Copy failed: %v\nCommand: %s\n", err, cmdStr)
-			return 1
+			code = 1
+		} else {
+			fmt.Fprintf(os.Stderr, "Copied to clipboard: %s\n", cmdStr)
 		}
-		fmt.Fprintf(os.Stderr, "Copied to clipboard: %s\n", cmdStr)
+		maybeSave()
+		return code
+	default: // actionQuit
+		maybeSave()
+		return 0
 	}
-	return 0
 }
 
 // openSession execs the agent's resume command in the current terminal,

@@ -361,21 +361,71 @@ func agentColor(agent string) lipgloss.Color {
 
 // runPicker shows the interactive list and returns the chosen session and
 // action. A nil session means the user quit without choosing.
-func runPicker(list []*model.Session, titles []string, dirLabel string) (*model.Session, pickerAction, error) {
-	if len(list) == 0 {
-		return nil, actionQuit, nil
+// memberCount returns how many independent discovery members provider has,
+// matching DiscoverMatchingStream's granularity: a MultiProvider fans out
+// to one member per entry in Providers (zero for an empty MultiProvider,
+// e.g. when every agent is disabled); any other provider is a single
+// member. Used to size the picker's "loading agents… (done/total)" footer.
+func memberCount(p core.SessionProvider) int {
+	if mp, ok := p.(core.MultiProvider); ok {
+		return len(mp.Providers)
 	}
-	m := pickerModel{sessions: list, titles: titles, dirLabel: dirLabel, now: time.Now()}
+	return 1
+}
+
+// runPicker opens the interactive picker immediately and streams discovery
+// results into it via core.DiscoverMatchingStream as they arrive, instead
+// of blocking until every agent has finished. Each incoming batch is
+// filtered to dir's variants (filterBatch — the same per-session rule
+// FilterByDir applies) and given per-session titles (titleFor) before being
+// delivered to the running program as a sessionBatchMsg; a final
+// streamDoneMsg follows once every member is done.
+//
+// The discovery goroutine is never joined here: once the picker exits,
+// runPicker returns immediately regardless of whether background discovery
+// is still running (Program.Send is documented safe to call, and a no-op,
+// once the program has exited — see bubbletea's Program.Send/Quit docs).
+// This is deliberate: Run must not block the user's chosen action (open/
+// copy) on unfinished discovery.
+//
+// streamComplete reports whether the discovery stream's done message had
+// already arrived by the time the picker exited. Run uses it to decide
+// whether saving provider caches is safe — see Run's comment on cache-save
+// timing on the picker path.
+func runPicker(provider core.SessionProvider, match func(string) bool, dir, dirLabel string, names *core.SessionNames) (chosen *model.Session, action pickerAction, streamComplete bool, err error) {
+	// dir was already validated by Run (os.Stat + this same targetVariants
+	// call both succeeded there) before runPicker is ever reached, so this
+	// error is not expected in practice; degrade to "nothing matches"
+	// rather than propagate a surprising failure out of the picker.
+	variants, _ := targetVariants(dir)
+
+	m := pickerModel{dirLabel: dirLabel, now: time.Now(), loading: true, total: memberCount(provider)}
 	p := tea.NewProgram(m, tea.WithInput(os.Stdin), tea.WithOutput(os.Stderr))
-	final, err := p.Run()
-	if err != nil {
-		return nil, actionQuit, fmt.Errorf("session picker: %w", err)
+
+	go func() {
+		emit := func(batch []*model.Session) {
+			filtered := filterBatch(batch, variants)
+			titles := make([]string, len(filtered))
+			for i, s := range filtered {
+				titles[i] = titleFor(s, names.Get(s.SessionID))
+			}
+			p.Send(sessionBatchMsg{sessions: filtered, titles: titles})
+		}
+		done := core.DiscoverMatchingStream(provider, match, emit)
+		<-done
+		p.Send(streamDoneMsg{})
+	}()
+
+	final, runErr := p.Run()
+	if runErr != nil {
+		return nil, actionQuit, false, fmt.Errorf("session picker: %w", runErr)
 	}
 	res := final.(pickerModel)
-	if res.action == actionQuit {
-		return nil, actionQuit, nil
+	streamComplete = !res.loading
+	if res.action == actionQuit || res.action == actionEmpty {
+		return nil, res.action, streamComplete, nil
 	}
-	return res.sessions[res.cursor], res.action, nil
+	return res.sessions[res.cursor], res.action, streamComplete, nil
 }
 
 // relTime renders t relative to now, degrading to an absolute date after
