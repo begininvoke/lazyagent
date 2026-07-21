@@ -34,8 +34,16 @@ func NewLiveProvider(claudeDirs []string) *LiveProvider {
 	}
 }
 
+var _ DirScopedProvider = (*LiveProvider)(nil)
+
 func (p *LiveProvider) DiscoverSessions() ([]*model.Session, error) {
 	return claude.DiscoverSessions(p.cache, p.desktopCache, p.claudeDirs)
+}
+
+// DiscoverSessionsMatching implements DirScopedProvider: it scopes discovery
+// to files whose cwd matches cwdMatch, skipping full parses of the rest.
+func (p *LiveProvider) DiscoverSessionsMatching(cwdMatch func(string) bool) ([]*model.Session, error) {
+	return claude.DiscoverSessionsFiltered(p.cache, p.desktopCache, p.claudeDirs, cwdMatch)
 }
 
 func (p *LiveProvider) UseWatcher() bool               { return true }
