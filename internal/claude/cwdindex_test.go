@@ -313,3 +313,180 @@ func TestDiscoverSessionsFilteredIndexed_PersistedIndexEquivalentToCold(t *testi
 		}
 	}
 }
+
+func claudeAssertSameSessionSet(t *testing.T, label string, cold, got []*model.Session) {
+	t.Helper()
+	coldPaths := claudeSessionPaths(cold)
+	gotPaths := claudeSessionPaths(got)
+	if len(coldPaths) != len(gotPaths) {
+		t.Errorf("%s: session count = %d, want %d", label, len(gotPaths), len(coldPaths))
+	}
+	for p := range coldPaths {
+		if !gotPaths[p] {
+			t.Errorf("%s: missing %s (present in cold discovery)", label, p)
+		}
+	}
+	for p := range gotPaths {
+		if !coldPaths[p] {
+			t.Errorf("%s: unexpected extra %s (absent from cold discovery)", label, p)
+		}
+	}
+}
+
+// TestDiscoverSessionsFilteredIndexed_ComprehensiveEquivalence is claude's
+// counterpart to codex's test of the same name: discovery using a
+// persisted-and-reloaded SessionCache + CWDIndex must match cold discovery
+// across the brief's required fixture-tree scenarios: unchanged files, a
+// truncated/replaced file with the same mtime but a different size, a
+// truncated/replaced file with a different mtime, a deleted file, a
+// corrupted persisted cache/index JSON, and a wrong-formatVersion persisted
+// cache/index JSON. (The "appended file changes the answer" scenario is
+// codex-specific per the brief -- claude's headCWD scans forward from the
+// start of the file, so an append can never change what it finds; see
+// shouldParseForCWD's doc comment. Truncation/replacement is what actually
+// exercises claude's invalidate-on-change rule.)
+func TestDiscoverSessionsFilteredIndexed_ComprehensiveEquivalence(t *testing.T) {
+	configDir, projectsDir := newTestProjectsRoot(t)
+	match := func(cwd string) bool { return cwd == "/tmp/match" }
+
+	paths := map[string]string{
+		"unchanged_match":    writeClaudeSession(t, projectsDir, "dir-unchanged-match", "sess-unchanged-match", []string{cwdLine("/tmp/match")}),
+		"unchanged_nonmatch": writeClaudeSession(t, projectsDir, "dir-unchanged-nonmatch", "sess-unchanged-nonmatch", []string{cwdLine("/tmp/other")}),
+		// The original cwd here is deliberately a different length than
+		// "/tmp/match" (below), so the mutation genuinely changes the
+		// file's size, not just its bytes -- a same-length replacement
+		// would accidentally collide on size and fail to exercise the
+		// "same mtime, different size" invalidation path at all.
+		"truncated_same_mtime": writeClaudeSession(t, projectsDir, "dir-trunc-same", "sess-trunc-same", []string{cwdLine("/tmp/some-other-much-longer-directory-name")}),
+		"truncated_diff_mtime": writeClaudeSession(t, projectsDir, "dir-trunc-diff", "sess-trunc-diff", []string{cwdLine("/tmp/some-other-much-longer-directory-name")}),
+		"deleted":              writeClaudeSession(t, projectsDir, "dir-deleted", "sess-deleted", []string{cwdLine("/tmp/other")}),
+	}
+
+	cache := model.NewSessionCache()
+	cwdIdx := NewCWDIndex()
+	if _, err := DiscoverSessionsFilteredIndexed(cache, NewDesktopCache(), []string{configDir}, match, cwdIdx); err != nil {
+		t.Fatalf("run1: %v", err)
+	}
+	cacheDir := t.TempDir()
+	discoveryPath := filepath.Join(cacheDir, "discovery-claude.json")
+	cwdIndexPath := filepath.Join(cacheDir, "cwdindex-claude.json")
+	if err := cache.SaveTo(discoveryPath); err != nil {
+		t.Fatalf("SaveTo cache: %v", err)
+	}
+	if err := cwdIdx.SaveTo(cwdIndexPath); err != nil {
+		t.Fatalf("SaveTo cwdIdx: %v", err)
+	}
+
+	infoSame, err := os.Stat(paths["truncated_same_mtime"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	origMtime := infoSame.ModTime()
+	if err := os.WriteFile(paths["truncated_same_mtime"], []byte(cwdLine("/tmp/match")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(paths["truncated_same_mtime"], origMtime, origMtime); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(paths["truncated_diff_mtime"], []byte(cwdLine("/tmp/match")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Remove(paths["deleted"]); err != nil {
+		t.Fatal(err)
+	}
+
+	cold, err := DiscoverSessionsFilteredIndexed(model.NewSessionCache(), NewDesktopCache(), []string{configDir}, match, nil)
+	if err != nil {
+		t.Fatalf("cold run: %v", err)
+	}
+
+	reloadedCache := model.NewSessionCache()
+	if err := reloadedCache.LoadFrom(discoveryPath); err != nil {
+		t.Fatalf("LoadFrom cache: %v", err)
+	}
+	reloadedIdx := NewCWDIndex()
+	if err := reloadedIdx.LoadFrom(cwdIndexPath); err != nil {
+		t.Fatalf("LoadFrom cwdIdx: %v", err)
+	}
+	warm, err := DiscoverSessionsFilteredIndexed(reloadedCache, NewDesktopCache(), []string{configDir}, match, reloadedIdx)
+	if err != nil {
+		t.Fatalf("warm run: %v", err)
+	}
+
+	claudeAssertSameSessionSet(t, "warm-vs-cold after mutations", cold, warm)
+
+	warmPaths := claudeSessionPaths(warm)
+	if !warmPaths[paths["truncated_same_mtime"]] {
+		t.Errorf("truncated (same mtime, different size) file missing from warm results")
+	}
+	if !warmPaths[paths["truncated_diff_mtime"]] {
+		t.Errorf("truncated (different mtime) file missing from warm results")
+	}
+	if warmPaths[paths["deleted"]] {
+		t.Errorf("deleted file unexpectedly present in warm results")
+	}
+
+	corruptionCases := []struct {
+		name string
+		path string
+	}{
+		{"corrupted_cache_json", discoveryPath},
+		{"corrupted_cwdindex_json", cwdIndexPath},
+	}
+	for _, tc := range corruptionCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(tc.path, []byte("{not valid json"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c := model.NewSessionCache()
+			idx := NewCWDIndex()
+			var loadErr error
+			if tc.path == discoveryPath {
+				loadErr = c.LoadFrom(discoveryPath)
+			} else {
+				loadErr = idx.LoadFrom(cwdIndexPath)
+			}
+			if loadErr == nil {
+				t.Fatal("LoadFrom corrupted JSON: want error, got nil")
+			}
+			got, err := DiscoverSessionsFilteredIndexed(c, NewDesktopCache(), []string{configDir}, match, idx)
+			if err != nil {
+				t.Fatalf("discovery: %v", err)
+			}
+			claudeAssertSameSessionSet(t, tc.name, cold, got)
+		})
+	}
+
+	versionCases := []struct {
+		name string
+		path string
+	}{
+		{"wrong_format_version_cache", discoveryPath},
+		{"wrong_format_version_cwdindex", cwdIndexPath},
+	}
+	for _, tc := range versionCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(tc.path, []byte(`{"formatVersion":999,"entries":{}}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			c := model.NewSessionCache()
+			idx := NewCWDIndex()
+			var loadErr error
+			if tc.path == discoveryPath {
+				loadErr = c.LoadFrom(discoveryPath)
+			} else {
+				loadErr = idx.LoadFrom(cwdIndexPath)
+			}
+			if loadErr == nil {
+				t.Fatal("LoadFrom wrong format version: want error, got nil")
+			}
+			got, err := DiscoverSessionsFilteredIndexed(c, NewDesktopCache(), []string{configDir}, match, idx)
+			if err != nil {
+				t.Fatalf("discovery: %v", err)
+			}
+			claudeAssertSameSessionSet(t, tc.name, cold, got)
+		})
+	}
+}
