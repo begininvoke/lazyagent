@@ -10,21 +10,28 @@ import (
 
 // fakeCachePersister records LoadCaches/SaveCaches calls for testing
 // LoadProviderCaches/SaveProviderCaches's dispatch logic without touching
-// disk.
+// disk. loadCalls/saveCalls (in addition to the last-seen dir) let
+// SessionManager-level tests (session_persist_test.go) assert exactly how
+// many times each was invoked, e.g. "loaded exactly once before the first
+// discovery, never again on later reloads".
 type fakeCachePersister struct {
 	fakeProvider
 	loadedDir string
 	savedDir  string
 	loadErr   error
 	saveErr   error
+	loadCalls int
+	saveCalls int
 }
 
 func (f *fakeCachePersister) LoadCaches(dir string) error {
+	f.loadCalls++
 	f.loadedDir = dir
 	return f.loadErr
 }
 
 func (f *fakeCachePersister) SaveCaches(dir string) error {
+	f.saveCalls++
 	f.savedDir = dir
 	return f.saveErr
 }

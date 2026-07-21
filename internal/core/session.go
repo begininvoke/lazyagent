@@ -16,6 +16,14 @@ const (
 	MaxWindowMinutes = 480
 )
 
+// cacheSaveInterval is the minimum time between persisted-discovery-cache
+// saves that a dirty (but not first) Reload() triggers. Long-lived surfaces
+// (TUI/GUI/API) reload on every watcher event, and each save rewrites a few
+// MB of JSON, so successful reloads after the first just mark the cache
+// dirty; an actual save happens at most this often. See
+// SessionManager.EnableCachePersistence.
+const cacheSaveInterval = 5 * time.Minute
+
 // SessionProvider abstracts how sessions are discovered.
 type SessionProvider interface {
 	// DiscoverSessions returns all available sessions.
@@ -49,6 +57,18 @@ type SessionManager struct {
 	searchQuery          string
 	lastPollDiscover     time.Time
 	excludeCWDSubstrings []string
+
+	// Persisted discovery cache (opt-in, see EnableCachePersistence). All
+	// guarded by mu like everything else above; the actual Load/Save disk
+	// I/O always happens outside the lock (see loadPersistedCacheOnce /
+	// savePersistedCacheIfDue / Close) so a slow write never blocks readers
+	// like Sessions()/VisibleSessions().
+	persistEnabled  bool
+	persistDir      string
+	persistLoaded   bool      // Load has been attempted (first Reload only)
+	persistDirty    bool      // a successful Reload happened since the last save
+	lastPersistSave time.Time // zero until the first save
+	persistNow      func() time.Time
 }
 
 // NewSessionManager creates a new SessionManager with the given provider.
@@ -58,7 +78,76 @@ func NewSessionManager(windowMinutes int, provider SessionProvider) *SessionMana
 		windowMinutes: windowMinutes,
 		provider:      provider,
 		names:         NewSessionNames(),
+		persistNow:    time.Now,
 	}
+}
+
+// EnableCachePersistence opts the manager into persisting the provider's
+// discovery caches under dir between process runs, via
+// core.CachePersister / LoadProviderCaches / SaveProviderCaches (the same
+// mechanism the `sessions` subcommand already uses). Call it before the
+// first Reload(). Once enabled:
+//   - the FIRST Reload() loads any previously persisted caches before
+//     discovering, and never loads again on later reloads;
+//   - after the first successful discovery, the caches are saved once;
+//   - later successful reloads mark the cache dirty; an actual save then
+//     happens at most once per cacheSaveInterval;
+//   - Close() performs a final save if the cache is still dirty at shutdown.
+//
+// Persistence is purely advisory: providers that don't implement
+// CachePersister (e.g. demo.Provider) make every Load/Save call a silent
+// no-op via the LoadProviderCaches/SaveProviderCaches helpers, and a load or
+// save failure never affects discovery.
+func (m *SessionManager) EnableCachePersistence(dir string) {
+	m.mu.Lock()
+	m.persistEnabled = true
+	m.persistDir = dir
+	m.mu.Unlock()
+}
+
+// loadPersistedCacheOnce loads the provider's persisted discovery caches on
+// the first call after EnableCachePersistence, and is a no-op on every call
+// after that (or when persistence was never enabled). Must run before the
+// provider's first DiscoverSessions call so that discovery reuses the prior
+// run's cache. The actual disk I/O happens without m.mu held.
+func (m *SessionManager) loadPersistedCacheOnce() {
+	m.mu.Lock()
+	if !m.persistEnabled || m.persistLoaded {
+		m.mu.Unlock()
+		return
+	}
+	m.persistLoaded = true
+	dir := m.persistDir
+	m.mu.Unlock()
+
+	LoadProviderCaches(m.provider, dir)
+}
+
+// savePersistedCacheIfDue runs after a successful Reload when persistence is
+// enabled. The very first save (lastPersistSave still zero) always happens,
+// so a persisted cache exists as early as possible; subsequent saves happen
+// at most once per cacheSaveInterval, with reloads in between just marking
+// the cache dirty for Close's final save. The actual disk I/O happens
+// without m.mu held.
+func (m *SessionManager) savePersistedCacheIfDue() {
+	m.mu.Lock()
+	if !m.persistEnabled {
+		m.mu.Unlock()
+		return
+	}
+	now := m.persistNow()
+	due := m.lastPersistSave.IsZero() || now.Sub(m.lastPersistSave) >= cacheSaveInterval
+	if !due {
+		m.persistDirty = true
+		m.mu.Unlock()
+		return
+	}
+	dir := m.persistDir
+	m.lastPersistSave = now
+	m.persistDirty = false
+	m.mu.Unlock()
+
+	SaveProviderCaches(m.provider, dir)
 }
 
 // SetEventBus attaches an event bus so activity transitions are published
@@ -107,6 +196,27 @@ func (m *SessionManager) StopWatcher() {
 	}
 }
 
+// Close is the shutdown hook the long-lived surfaces (TUI, GUI/tray, API)
+// should call in place of StopWatcher: it stops the file watcher and, if
+// cache persistence is enabled and a Reload happened since the last save
+// (the cache is dirty — see savePersistedCacheIfDue), performs one final
+// save so shutdown never loses more than the most recent in-flight reload.
+// A no-op final save (persistence disabled, or already clean) costs nothing
+// beyond the StopWatcher call it always makes.
+func (m *SessionManager) Close() {
+	m.StopWatcher()
+
+	m.mu.Lock()
+	due := m.persistEnabled && m.persistDirty
+	dir := m.persistDir
+	m.persistDirty = false
+	m.mu.Unlock()
+
+	if due {
+		SaveProviderCaches(m.provider, dir)
+	}
+}
+
 // WatcherEvents returns the channel for file change notifications, or nil.
 func (m *SessionManager) WatcherEvents() <-chan struct{} {
 	if m.watcher != nil {
@@ -116,7 +226,12 @@ func (m *SessionManager) WatcherEvents() <-chan struct{} {
 }
 
 // Reload discovers sessions via the provider and updates activity states.
+// When cache persistence is enabled (EnableCachePersistence), this is also
+// where the persisted cache gets loaded (once, before the first discovery)
+// and saved (see loadPersistedCacheOnce / savePersistedCacheIfDue).
 func (m *SessionManager) Reload() error {
+	m.loadPersistedCacheOnce()
+
 	sessions, err := m.provider.DiscoverSessions()
 	if err != nil {
 		return err
@@ -127,6 +242,8 @@ func (m *SessionManager) Reload() error {
 	SortSessions(m.sessions)
 	m.lastPollDiscover = time.Now()
 	m.mu.Unlock()
+
+	m.savePersistedCacheIfDue()
 	return nil
 }
 

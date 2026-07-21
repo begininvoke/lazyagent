@@ -15,12 +15,13 @@ func firstErr(errs ...error) error {
 }
 
 // CachePersister is implemented by providers whose discovery caches can be
-// persisted between one-shot CLI runs (see internal/sessions.Run, the only
-// caller that wires this up — the TUI/GUI/API keep their in-memory-only
-// behavior). Both methods are best-effort: the cache is purely advisory, so
-// a non-nil error must never fail discovery. Callers are expected to invoke
-// these and ignore the returned error; it exists mainly so tests can assert
-// on it directly.
+// persisted between runs. internal/sessions.Run wires it up explicitly
+// around its own one-shot control flow; SessionManager.EnableCachePersistence
+// (used by the TUI, GUI/tray, and API server) wires it up once for every
+// long-lived surface. Both methods are best-effort: the cache is purely
+// advisory, so a non-nil error must never fail discovery. Callers are
+// expected to invoke these and ignore the returned error; it exists mainly
+// so tests can assert on it directly.
 type CachePersister interface {
 	// LoadCaches best-effort loads previously persisted caches from dir
 	// into the provider's in-memory caches.
