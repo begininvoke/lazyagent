@@ -182,10 +182,7 @@ The response carries a top-level `usage` quota plus zero or more rolling `limits
 
 Cursor is the odd one out: it's an IDE, not a CLI, so its usage lives in the web dashboard rather than a `/status` endpoint. lazyagent reads it the way Cursor's own dashboard does — with the session token Cursor stores locally.
 
-Unlike the others, there is no OAuth file and no bearer env var. lazyagent reads two values straight from Cursor's local `state.vscdb` (the same SQLite database it already uses for Cursor session monitoring):
-
-1. **`cursorAuth/accessToken`** — the JWT session token. lazyagent decodes its `sub` claim to recover the user id and rebuilds the `WorkosCursorSessionToken=<userId>%3A%3A<token>` cookie the dashboard sends.
-2. **`cursorAuth/stripeMembershipType`** — the plan (`pro`, `pro_plus`, `ultra`, …). Read for Cursor session monitoring; the limits report takes the plan name from the API response instead.
+Unlike the others, there is no OAuth file and no bearer env var. lazyagent reads one value straight from Cursor's local `state.vscdb` (the same SQLite database it already uses for Cursor session monitoring): **`cursorAuth/accessToken`**, the JWT session token. lazyagent decodes its `sub` claim to recover the user id and rebuilds the `WorkosCursorSessionToken=<userId>%3A%3A<token>` cookie the dashboard sends. The plan name (`pro`, `pro_plus`, `ultra`, …) comes from the API response's `membershipType` field instead of a separate database read.
 
 With that cookie it makes one HTTPS call to `cursor.com`: `GET /api/usage-summary`, the same endpoint the dashboard uses for its usage headline.
 
@@ -194,6 +191,8 @@ With that cookie it makes one HTTPS call to `cursor.com`: `GET /api/usage-summar
 **Why `Cursor Models` reads lower than Cursor's UI.** When Auto is the selected model, Cursor's own dashboard shows the *combined* figure (`totalPercentUsed`), not the Auto pool's own utilization. lazyagent deliberately shows `autoPercentUsed`: with two separate rows, using the combined total would double-count the API spend the second row already reports.
 
 **No dollar amounts.** The endpoint returns percentages, not the per-pool split in currency. It does carry `plan.used` / `plan.limit`, but those are not the denominators of any of the three percentages, so rendering them would mislead. The percentage comes straight from Cursor — there is no plan table to keep in sync and nothing to override.
+
+**`CURSOR_INCLUDED_USD` is gone.** Earlier versions read this environment variable to override a hardcoded per-plan dollar table used to compute a single Cursor row. That table and the override are both removed now that Cursor supplies the percentage directly — lazyagent no longer reads `CURSOR_INCLUDED_USD`, so any value you have exported is silently ignored.
 
 ## When an agent isn't installed
 

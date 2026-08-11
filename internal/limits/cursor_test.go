@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,7 +64,8 @@ func loadCursorSummary(t *testing.T, name string) *cursorUsageSummary {
 }
 
 func TestCursorSummaryToReports_Individual(t *testing.T) {
-	reports, err := cursorSummaryToReports(loadCursorSummary(t, "cursor_usage_summary.json"))
+	s := loadCursorSummary(t, "cursor_usage_summary.json")
+	reports, err := cursorSummaryToReports(s)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -72,15 +74,31 @@ func TestCursorSummaryToReports_Individual(t *testing.T) {
 	}
 
 	wantEnd := time.Date(2026, 8, 25, 13, 40, 53, 0, time.UTC)
+
+	// Build the expected billing-cycle text from the same fixture timestamps
+	// cursorSummaryToReports parses, formatted the same way (start.Local() /
+	// end.Local()) so the assertion doesn't hardcode a date that would only
+	// match in one timezone.
+	start, err := time.Parse(time.RFC3339, s.BillingCycleStart)
+	if err != nil {
+		t.Fatalf("parse fixture BillingCycleStart: %v", err)
+	}
+	end, err := time.Parse(time.RFC3339, s.BillingCycleEnd)
+	if err != nil {
+		t.Fatalf("parse fixture BillingCycleEnd: %v", err)
+	}
+	cycle := fmt.Sprintf("billing cycle %s – %s", start.Local().Format("2 Jan"), end.Local().Format("2 Jan"))
+
 	// The Models row asserts autoPercentUsed (5.219), never totalPercentUsed
 	// (12.484 in the fixture) — the latter would double-count the API spend the
 	// second row already reports.
 	cases := []struct {
 		provider string
 		pct      float64
+		source   string
 	}{
-		{"Cursor Models", 5.219},
-		{"Cursor API", 41.544},
+		{"Cursor Models", 5.219, fmt.Sprintf("Source: 5.2%% of the plan's included Auto/Composer allowance (Ultra); %s", cycle)},
+		{"Cursor API", 41.544, fmt.Sprintf("Source: 41.5%% of the plan's included API allowance (Ultra); %s", cycle)},
 	}
 	for i, c := range cases {
 		r := reports[i]
@@ -106,8 +124,8 @@ func TestCursorSummaryToReports_Individual(t *testing.T) {
 		if r.Note == "" {
 			t.Errorf("%s: expected a non-empty disclaimer Note", c.provider)
 		}
-		if !strings.Contains(r.Source, "Ultra") {
-			t.Errorf("%s Source = %q, want it to name the plan", c.provider, r.Source)
+		if r.Source != c.source {
+			t.Errorf("%s Source = %q, want %q", c.provider, r.Source, c.source)
 		}
 	}
 }
@@ -126,6 +144,35 @@ func TestCursorSummaryToReports_PlanDisabled(t *testing.T) {
 	if _, err := cursorSummaryToReports(s); !errors.Is(err, errAgentUnavailable) {
 		t.Fatalf("err = %v, want errAgentUnavailable", err)
 	}
+}
+
+// TestCursorSummaryToReports_MissingPercentFields covers a renamed or dropped
+// upstream field: AutoPercentUsed/APIPercentUsed are *float64 specifically so
+// this case is distinguishable from a genuine 0.0% (which would otherwise be
+// reported, confidently and wrongly, in green).
+func TestCursorSummaryToReports_MissingPercentFields(t *testing.T) {
+	t.Run("autoPercentUsed absent", func(t *testing.T) {
+		s := loadCursorSummary(t, "cursor_usage_summary.json")
+		s.IndividualUsage.Plan.AutoPercentUsed = nil
+		_, err := cursorSummaryToReports(s)
+		if !errors.Is(err, errAgentUnavailable) {
+			t.Fatalf("err = %v, want errAgentUnavailable", err)
+		}
+		if !strings.Contains(err.Error(), "autoPercentUsed") {
+			t.Fatalf("err = %v, want it to name autoPercentUsed", err)
+		}
+	})
+	t.Run("apiPercentUsed absent", func(t *testing.T) {
+		s := loadCursorSummary(t, "cursor_usage_summary.json")
+		s.IndividualUsage.Plan.APIPercentUsed = nil
+		_, err := cursorSummaryToReports(s)
+		if !errors.Is(err, errAgentUnavailable) {
+			t.Fatalf("err = %v, want errAgentUnavailable", err)
+		}
+		if !strings.Contains(err.Error(), "apiPercentUsed") {
+			t.Fatalf("err = %v, want it to name apiPercentUsed", err)
+		}
+	})
 }
 
 // Team accounts report through teamUsage with the same shape; the individual

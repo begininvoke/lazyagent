@@ -118,10 +118,10 @@ func (m Model) renderLimitsHint(moreBelow bool) string {
 func (m Model) renderLimitsSummaryLines() []string {
 	lines := []string{
 		lipgloss.NewStyle().Foreground(m.theme.Subtext).Bold(true).Render(
-			fmt.Sprintf("  %-8s  %-24s  %-24s", "Agent", "5h", "Week / Global")),
+			fmt.Sprintf("  %-14s  %-24s  %-24s", "Agent", "5h", "Week / Global")),
 	}
 	for _, row := range m.limitsView.Summary {
-		prov := lipgloss.NewStyle().Foreground(m.theme.Text).Render(fmt.Sprintf("%-8s", row.Provider))
+		prov := lipgloss.NewStyle().Foreground(m.theme.Text).Render(fmt.Sprintf("%-14s", row.Provider))
 		lines = append(lines, "  "+prov+"  "+m.summaryCellText(row.FiveHour)+"  "+m.summaryCellText(row.WeekGlobal))
 	}
 	return lines

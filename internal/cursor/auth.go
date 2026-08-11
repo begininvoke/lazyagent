@@ -5,35 +5,32 @@ import (
 	"os"
 )
 
-// ReadAuth returns Cursor's locally-stored OAuth access token and Stripe
-// membership type, both read from state.vscdb's ItemTable.
+// ReadAuth returns Cursor's locally-stored OAuth access token, read from
+// state.vscdb's ItemTable.
 //
 // ok is false (with a nil error) when Cursor simply isn't installed or the user
 // isn't logged in — no database, or no cursorAuth/accessToken entry. Real failures
-// (DB open/query errors) are returned as err so callers can surface them. The
-// membership type may be empty even when a token is present; callers fall back to
-// an explicit override in that case.
-func ReadAuth() (accessToken, membershipType string, ok bool, err error) {
+// (DB open/query errors) are returned as err so callers can surface them.
+func ReadAuth() (accessToken string, ok bool, err error) {
 	path := stateDBPath()
 	if path == "" {
-		return "", "", false, nil
+		return "", false, nil
 	}
 	if _, statErr := os.Stat(path); statErr != nil {
-		return "", "", false, nil
+		return "", false, nil
 	}
 
 	db, err := sql.Open("sqlite", path+"?mode=ro")
 	if err != nil {
-		return "", "", false, err
+		return "", false, err
 	}
 	defer db.Close()
 
 	accessToken = readItemValue(db, "cursorAuth/accessToken")
 	if accessToken == "" {
-		return "", "", false, nil
+		return "", false, nil
 	}
-	membershipType = readItemValue(db, "cursorAuth/stripeMembershipType")
-	return accessToken, membershipType, true, nil
+	return accessToken, true, nil
 }
 
 // readItemValue fetches a single ItemTable value, returning "" when the key is

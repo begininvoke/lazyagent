@@ -106,7 +106,7 @@
                 <div class="flex items-center gap-2 text-[11px] text-subtext">
                   <span class="w-20">Used {w.UsedPercent.toFixed(1)}%</span>
                   <div class="flex-1 h-1.5 rounded bg-border overflow-hidden">
-                    <div class="h-full {sevBar(w.UsedSeverity)}" style="width: {Math.min(100, w.UsedPercent)}%"></div>
+                    <div class="h-full {sevBar(w.UsedSeverity)}" style="width: {Math.max(0, Math.min(100, w.UsedPercent))}%"></div>
                   </div>
                 </div>
                 <div class="text-[11px] text-subtext">Expected {w.ExpectedPercent.toFixed(1)}%</div>

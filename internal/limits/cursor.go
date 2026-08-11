@@ -22,7 +22,7 @@ const cursorUsageSummaryURL = "https://cursor.com/api/usage-summary"
 // the Auto/Composer allowance and the usage-based API allowance. Both come from
 // one call, so they always appear or disappear together.
 func fetchCursorReports(ctx context.Context) ([]Report, error) {
-	token, _, ok, err := cursor.ReadAuth()
+	token, ok, err := cursor.ReadAuth()
 	if err != nil {
 		return nil, fmt.Errorf("read Cursor credentials: %w", err)
 	}
@@ -142,10 +142,14 @@ type cursorUsageBlock struct {
 	Plan *cursorPlanUsage `json:"plan"`
 }
 
+// AutoPercentUsed and APIPercentUsed are pointers so a renamed or missing
+// upstream field is distinguishable from a genuine 0.0%: cursorSummaryToReports
+// treats a nil pointer as errAgentUnavailable instead of silently reporting a
+// green "0.0% used".
 type cursorPlanUsage struct {
-	Enabled         bool    `json:"enabled"`
-	AutoPercentUsed float64 `json:"autoPercentUsed"`
-	APIPercentUsed  float64 `json:"apiPercentUsed"`
+	Enabled         bool     `json:"enabled"`
+	AutoPercentUsed *float64 `json:"autoPercentUsed"`
+	APIPercentUsed  *float64 `json:"apiPercentUsed"`
 }
 
 // cursorPlanBlock picks the usage scope that applies to this account: the
@@ -172,6 +176,15 @@ func cursorSummaryToReports(s *cursorUsageSummary) ([]Report, error) {
 	if plan == nil {
 		return nil, fmt.Errorf("%w: Cursor is signed in but reports no enabled usage plan for this account", errAgentUnavailable)
 	}
+	if plan.AutoPercentUsed == nil {
+		return nil, fmt.Errorf("%w: Cursor's usage-summary response is missing autoPercentUsed", errAgentUnavailable)
+	}
+	if plan.APIPercentUsed == nil {
+		return nil, fmt.Errorf("%w: Cursor's usage-summary response is missing apiPercentUsed", errAgentUnavailable)
+	}
+	autoPercentUsed := *plan.AutoPercentUsed
+	apiPercentUsed := *plan.APIPercentUsed
+
 	start, err := time.Parse(time.RFC3339, s.BillingCycleStart)
 	if err != nil {
 		return nil, fmt.Errorf("parse Cursor billingCycleStart %q: %w", s.BillingCycleStart, err)
@@ -197,15 +210,15 @@ func cursorSummaryToReports(s *cursorUsageSummary) ([]Report, error) {
 		{
 			Provider: "Cursor Models",
 			Source: fmt.Sprintf("Source: %.1f%% of the plan's included Auto/Composer allowance (%s); %s",
-				plan.AutoPercentUsed, planName, cycle),
-			Windows: window(plan.AutoPercentUsed),
-			Note: "Note: reads /api/usage-summary on cursor.com with the Cursor session token from state.vscdb — the Auto/Composer pool's own allowance (autoPercentUsed). Cursor's dashboard shows the combined total instead when Auto is the selected model, so this figure reads lower than the one in its UI. Undocumented; may break or be revoked by Cursor without notice.",
+				autoPercentUsed, planName, cycle),
+			Windows: window(autoPercentUsed),
+			Note:    "Note: reads /api/usage-summary on cursor.com with the Cursor session token from state.vscdb — the Auto/Composer pool's own allowance (autoPercentUsed). Cursor's dashboard shows the combined total instead when Auto is the selected model, so this figure reads lower than the one in its UI. Undocumented; may break or be revoked by Cursor without notice.",
 		},
 		{
 			Provider: "Cursor API",
 			Source: fmt.Sprintf("Source: %.1f%% of the plan's included API allowance (%s); %s",
-				plan.APIPercentUsed, planName, cycle),
-			Windows: window(plan.APIPercentUsed),
+				apiPercentUsed, planName, cycle),
+			Windows: window(apiPercentUsed),
 			Note:    "Note: reads /api/usage-summary on cursor.com with the Cursor session token from state.vscdb — the usage-based (API) pool only. Undocumented; may break or be revoked by Cursor without notice.",
 		},
 	}, nil

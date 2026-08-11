@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -73,6 +74,58 @@ func TestRenderLimitsModal_FitsScreen(t *testing.T) {
 			if w := lipgloss.Width(out); w > s.w {
 				t.Errorf("tab=%d size=%dx%d: rendered width %d > screen %d", tab, s.w, s.h, w, s.w)
 			}
+		}
+	}
+}
+
+// columnGutterRe matches the first run of 2+ spaces in a summary line — the
+// gutter between the provider column and the first data column. Cell text
+// itself (e.g. "80.0% used / 70.0% exp") only ever contains single spaces, so
+// this reliably locates where the data columns begin, provided the caller has
+// already stripped the fixed 2-space left margin every line starts with
+// (otherwise that margin itself is the first match).
+var columnGutterRe = regexp.MustCompile(`\s{2,}`)
+
+// TestRenderLimitsSummaryLines_ColumnsAlign guards against provider names
+// wider than their column padding pushing the data columns out of alignment.
+// %-8s is a minimum width, not a truncation: "Cursor Models" (13 chars) and
+// "Cursor API" (10 chars) both overflow an 8-wide column, so each row's data
+// columns start at a different position instead of lining up under the
+// header. This must fail against the old %-8s verb and pass against %-14s.
+func TestRenderLimitsSummaryLines_ColumnsAlign(t *testing.T) {
+	now := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
+	reports := []limits.Report{
+		{Provider: "Claude Code", Windows: []limits.Window{
+			{Label: "5-hour", WindowMinutes: 300, UsedPercent: 80, ResetsAt: now.Add(time.Hour)},
+		}},
+		{Provider: "Cursor Models", Windows: []limits.Window{
+			{Label: "monthly", WindowMinutes: 31 * 24 * 60, UsedPercent: 5.2, ResetsAt: now.Add(24 * time.Hour)},
+		}},
+		{Provider: "Cursor API", Windows: []limits.Window{
+			{Label: "monthly", WindowMinutes: 31 * 24 * 60, UsedPercent: 5.2, ResetsAt: now.Add(24 * time.Hour)},
+		}},
+	}
+	view := limits.BuildView(reports, now)
+	m := limitsTestModel(limitsTabSummary, false, view)
+
+	lines := m.renderLimitsSummaryLines()
+	if len(lines) != 4 {
+		t.Fatalf("got %d lines, want 4 (header + 3 rows)", len(lines))
+	}
+
+	headerLoc := columnGutterRe.FindStringIndex(strings.TrimPrefix(lines[0], "  "))
+	if headerLoc == nil {
+		t.Fatalf("header line has no column gutter: %q", lines[0])
+	}
+	wantCol := headerLoc[1]
+
+	for i, ln := range lines[1:] {
+		loc := columnGutterRe.FindStringIndex(strings.TrimPrefix(ln, "  "))
+		if loc == nil {
+			t.Fatalf("row %d: no column gutter found: %q", i, ln)
+		}
+		if got := loc[1]; got != wantCol {
+			t.Errorf("row %d: data column starts at %d, want %d (header's column) — %q", i, got, wantCol, ln)
 		}
 	}
 }

@@ -53,8 +53,8 @@ var errAgentNotInstalled = errors.New("agent not installed")
 
 // errAgentUnavailable means the agent IS installed and authenticated, but we
 // can't produce a usable report right now for a reason worth telling the user
-// about (e.g. Cursor is signed in but on a plan whose included budget we can't
-// determine). Unlike a hard error it's skipped silently in `--agent all` mode so
+// about (e.g. Cursor reports the account as unlimited, or has no enabled usage
+// plan). Unlike a hard error it's skipped silently in `--agent all` mode so
 // one agent's quirk never breaks the aggregate command; in explicit single-agent
 // mode the wrapped message is shown so the user knows how to fix it.
 var errAgentUnavailable = errors.New("agent unavailable")
