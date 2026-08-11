@@ -102,6 +102,9 @@ func TestCursorSummaryToReports_Individual(t *testing.T) {
 	}
 
 	wantEnd := time.Date(2026, 8, 25, 13, 40, 53, 0, time.UTC)
+	// The Models row asserts autoPercentUsed (5.219), never totalPercentUsed
+	// (12.484 in the fixture) — the latter would double-count the API spend the
+	// second row already reports.
 	cases := []struct {
 		provider string
 		pct      float64
@@ -136,18 +139,6 @@ func TestCursorSummaryToReports_Individual(t *testing.T) {
 		if !strings.Contains(r.Source, "Ultra") {
 			t.Errorf("%s Source = %q, want it to name the plan", c.provider, r.Source)
 		}
-	}
-}
-
-// The Models row must never borrow totalPercentUsed (12.484 in the fixture):
-// that would double-count the API spend the second row already reports.
-func TestCursorSummaryToReports_ModelsRowUsesAutoNotTotal(t *testing.T) {
-	reports, err := cursorSummaryToReports(loadCursorSummary(t, "cursor_usage_summary.json"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := reports[0].Windows[0].UsedPercent; got == 12.484 {
-		t.Fatalf("Models row used totalPercentUsed (%v); it must use autoPercentUsed", got)
 	}
 }
 
@@ -343,7 +334,7 @@ func cursorSummaryToReports(s *cursorUsageSummary) ([]Report, error) {
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `go test ./internal/limits/ -run 'TestCursorSummaryToReports|TestCursorPlanName' -v`
-Expected: PASS, 8 tests (including subtests).
+Expected: PASS — 6 `TestCursorSummaryToReports_*` functions (one with two subtests) plus `TestCursorPlanName`.
 
 - [ ] **Step 7: Run the full package suite**
 
