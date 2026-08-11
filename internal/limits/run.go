@@ -241,7 +241,7 @@ func fetchReports(ctx context.Context, agent string) ([]Report, error) {
 	case "kimi":
 		return single(fetchKimiReport(ctx))
 	case "cursor":
-		return single(fetchCursorReport(ctx))
+		return fetchCursorReports(ctx)
 	default:
 		return nil, fmt.Errorf("unsupported agent %q", agent)
 	}

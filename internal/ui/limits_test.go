@@ -41,7 +41,7 @@ func fullView() limits.View {
 	now := time.Date(2026, 6, 12, 12, 0, 0, 0, time.UTC)
 	longNote := "This source is undocumented and may break without notice; lazyagent only queries it on explicit user invocation."
 	var reports []limits.Report
-	for _, p := range []string{"Claude Code", "Codex", "Grok", "Kimi Code", "Cursor"} {
+	for _, p := range []string{"Claude Code", "Codex", "Grok", "Kimi Code", "Cursor Models", "Cursor API"} {
 		reports = append(reports, limits.Report{
 			Provider: p,
 			Source:   longNote,
