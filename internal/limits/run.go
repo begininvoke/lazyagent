@@ -153,7 +153,7 @@ Flags:
 	missing := 0
 	explicit := len(agents) == 1
 	for _, a := range agents {
-		report, err := fetchReport(ctx, a)
+		rs, err := fetchReports(ctx, a)
 		if err != nil {
 			if errors.Is(err, errAgentNotInstalled) {
 				missing++
@@ -180,7 +180,7 @@ Flags:
 			exitCode = 1
 			continue
 		}
-		reports = append(reports, report)
+		reports = append(reports, rs...)
 	}
 
 	// All agents were missing AND no real errors fired: tell the user once,
@@ -227,21 +227,32 @@ func notInstalledMessage(agent string) string {
 	}
 }
 
-func fetchReport(ctx context.Context, agent string) (Report, error) {
+// fetchReports dispatches to one agent's fetcher. It returns a slice because a
+// single agent can meter more than one independent pool — Cursor reports its
+// Auto/Composer and usage-based API allowances as two separate rows.
+func fetchReports(ctx context.Context, agent string) ([]Report, error) {
 	switch agent {
 	case "claude":
-		return fetchClaudeReport(ctx)
+		return single(fetchClaudeReport(ctx))
 	case "codex":
-		return fetchCodexReport(ctx)
+		return single(fetchCodexReport(ctx))
 	case "grok":
-		return fetchGrokReport(ctx)
+		return single(fetchGrokReport(ctx))
 	case "kimi":
-		return fetchKimiReport(ctx)
+		return single(fetchKimiReport(ctx))
 	case "cursor":
-		return fetchCursorReport(ctx)
+		return single(fetchCursorReport(ctx))
 	default:
-		return Report{}, fmt.Errorf("unsupported agent %q", agent)
+		return nil, fmt.Errorf("unsupported agent %q", agent)
 	}
+}
+
+// single adapts a one-report fetcher to the dispatcher's slice signature.
+func single(r Report, err error) ([]Report, error) {
+	if err != nil {
+		return nil, err
+	}
+	return []Report{r}, nil
 }
 
 func resolveAgents(arg string) ([]string, error) {

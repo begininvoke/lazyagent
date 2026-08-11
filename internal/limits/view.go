@@ -68,28 +68,24 @@ type View struct {
 // (TUI and GUI callers wrap a 30 s timeout before calling this function).
 func FetchAll(ctx context.Context) []Report {
 	agents, _ := resolveAgents("all") // "all" is always a valid argument, so the error is never non-nil here.
-	results := make([]Report, len(agents))
-	found := make([]bool, len(agents))
+	results := make([][]Report, len(agents))
 	var wg sync.WaitGroup
 	for i, a := range agents {
 		wg.Add(1)
 		go func(i int, a string) {
 			defer wg.Done()
-			report, err := fetchReport(ctx, a)
+			rs, err := fetchReports(ctx, a)
 			if err != nil {
 				return
 			}
-			results[i] = report
-			found[i] = true
+			results[i] = rs
 		}(i, a)
 	}
 	wg.Wait()
 
 	var out []Report
 	for i := range agents {
-		if found[i] {
-			out = append(out, results[i])
-		}
+		out = append(out, results[i]...)
 	}
 	return out
 }
