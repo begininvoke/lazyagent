@@ -55,7 +55,7 @@ Cursor stores everything in a single SQLite database (`state.vscdb`) as key-valu
 
 CWD is inferred from the Cursor workspace URI if available, otherwise from the first file path mentioned in the session.
 
-**Usage limits.** The separate `lazyagent limits` command also reports Cursor's monthly usage-based (API) spend against the plan's included credit. It reuses the same `state.vscdb` — reading the `cursorAuth/accessToken` session token and `cursorAuth/stripeMembershipType` plan — and queries the Cursor dashboard's usage endpoint. Only the metered API pool is reported, not the unlimited Auto/Composer pool. See [Show rate-limit usage](../maintenance/limits.md#cursor).
+**Usage limits.** The separate `lazyagent limits` command also reports Cursor's monthly usage, as two rows: `Cursor Models` (the Auto/Composer pool) and `Cursor API` (the usage-based pool). It reuses the same `state.vscdb` — reading the `cursorAuth/accessToken` session token — and queries the Cursor dashboard's usage-summary endpoint. See [Show rate-limit usage](../maintenance/limits.md#cursor).
 
 ### Codex CLI
 

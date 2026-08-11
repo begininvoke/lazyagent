@@ -51,7 +51,7 @@ The mobile app fetches the public salt from `/api/auth`, then derives the bearer
 
 ## Check rate-limit usage before a long run
 
-Before starting an agent task that might burn through quota, snapshot where you stand across the supported providers (Claude/Codex on 5h + 7d windows, Grok on the monthly billing window, Kimi on the windows returned by Kimi Code, Cursor on the monthly usage-based API window):
+Before starting an agent task that might burn through quota, snapshot where you stand across the supported providers (Claude/Codex on 5h + 7d windows, Grok on the monthly billing window, Kimi on the windows returned by Kimi Code, Cursor on its two monthly pools — Models and API):
 
 ```bash
 lazyagent limits                 # summary table for all supported limits providers
@@ -59,7 +59,7 @@ lazyagent limits --detailed      # detailed report with reset times and pace
 lazyagent limits --agent claude  # just Claude
 lazyagent limits --agent grok    # just Grok (monthly billing)
 lazyagent limits --agent kimi    # just Kimi Code
-lazyagent limits --agent cursor  # just Cursor (usage-based API pool)
+lazyagent limits --agent cursor  # just Cursor (Models + API pools)
 ```
 
 In the `--detailed` output, the `Pace` line tells you whether you're consuming faster than linear (`overutilizing`), in line, or slower (`underutilizing`). If Claude reports `overutilizing` on the 5-hour window with hours still to go, that's a strong hint to defer the run or fan it out across days.
