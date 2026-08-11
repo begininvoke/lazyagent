@@ -5,9 +5,9 @@ sidebar:
   order: 3
 ---
 
-`lazyagent limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default output is optimized for a quick scan: one row per agent, with a **5-hour** column and a **weekly/global** column. Each populated cell labels both **used** and **expected**, where expected is the linear usage pace for elapsed window time. `--detailed` prints the full per-window report with reset times, source notes, and the *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
+`lazyagent limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default output is optimized for a quick scan: one row per agent — two for Cursor, whose Auto/Composer and API pools are metered independently — with a **5-hour** column and a **weekly/global** column. Each populated cell labels both **used** and **expected**, where expected is the linear usage pace for elapsed window time. `--detailed` prints the full per-window report with reset times, source notes, and the *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
 
-Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single **monthly** credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes a single **monthly** window tracking its usage-based (API) spend against the plan's included credit.
+Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single **monthly** credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes two **monthly** rows sharing one billing-cycle window — its Auto/Composer pool and its usage-based API pool, each against its own allowance.
 
 Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall, or *"how much of my Grok monthly credit have I burned this month?"* before kicking off a long Grok run.
 
@@ -38,7 +38,7 @@ lazyagent limits --agent claude    # only Claude Code
 lazyagent limits --agent codex     # only Codex
 lazyagent limits --agent grok      # only Grok
 lazyagent limits --agent kimi      # only Kimi Code
-lazyagent limits --agent cursor    # only Cursor (usage-based API pool)
+lazyagent limits --agent cursor    # only Cursor (Models + API pools)
 lazyagent limits --help            # full usage + disclaimers
 ```
 
@@ -47,18 +47,19 @@ lazyagent limits --help            # full usage + disclaimers
 By default the command prints a compact terminal table:
 
 ```
-╭────────┬───────────────┬──────────────────╮
-│ Agent  │ 5h            │ Week (or Global) │
-├────────┼───────────────┼──────────────────┤
-│ Claude │ 21.0% used / 40.0% exp │ 23.0% used / 57.1% exp │
-│ Codex  │ 4.0% used / 90.0% exp  │ 11.0% used / 42.9% exp │
-│ Grok   │ --                     │ 13.9% used / 51.6% exp │
-│ Kimi   │ 10.0% used / 33.3% exp │ 20.0% used / 14.3% exp │
-│ Cursor │ --                     │ 39.1% used / 50.9% exp │
-╰────────┴───────────────┴──────────────────╯
+╭───────────────┬────────────────────────┬────────────────────────╮
+│ Agent         │ 5h                     │ Week (or Global)       │
+├───────────────┼────────────────────────┼────────────────────────┤
+│ Claude        │ 21.0% used / 40.0% exp │ 23.0% used / 57.1% exp │
+│ Codex         │ 4.0% used / 90.0% exp  │ 11.0% used / 42.9% exp │
+│ Grok          │ --                     │ 13.9% used / 51.6% exp │
+│ Kimi          │ 10.0% used / 33.3% exp │ 20.0% used / 14.3% exp │
+│ Cursor Models │ --                     │  5.2% used / 54.8% exp │
+│ Cursor API    │ --                     │ 41.5% used / 54.8% exp │
+╰───────────────┴────────────────────────┴────────────────────────╯
 ```
 
-Cells label `used` and `exp` explicitly. `exp` is how much of the quota you would have consumed at a perfectly linear pace through the current window. In an interactive terminal cells are colored by severity, blending absolute usage with pace: red when used ≥ 90% or consumption is over pace, orange when used ≥ 75%, green when comfortably under pace, and the default text color when on track. `--` means that agent does not expose that window. For the `Week (or Global)` column, Claude, Codex, and Kimi use their weekly window when present; Grok and Cursor use their monthly billing window. Cursor never populates the `5h` column — it only has a monthly window.
+Cells label `used` and `exp` explicitly. `exp` is how much of the quota you would have consumed at a perfectly linear pace through the current window. In an interactive terminal cells are colored by severity, blending absolute usage with pace: red when used ≥ 90% or consumption is over pace, orange when used ≥ 75%, green when comfortably under pace, and the default text color when on track. `--` means that agent does not expose that window. For the `Week (or Global)` column, Claude, Codex, and Kimi use their weekly window when present; Grok and both Cursor rows use their monthly billing window. Neither Cursor row populates the `5h` column — they only have a monthly window.
 
 With `--detailed`, each window prints four lines:
 
@@ -184,13 +185,15 @@ Cursor is the odd one out: it's an IDE, not a CLI, so its usage lives in the web
 Unlike the others, there is no OAuth file and no bearer env var. lazyagent reads two values straight from Cursor's local `state.vscdb` (the same SQLite database it already uses for Cursor session monitoring):
 
 1. **`cursorAuth/accessToken`** — the JWT session token. lazyagent decodes its `sub` claim to recover the user id and rebuilds the `WorkosCursorSessionToken=<userId>%3A%3A<token>` cookie the dashboard sends.
-2. **`cursorAuth/stripeMembershipType`** — the plan (`pro`, `pro_plus`, `ultra`, …), used to look up the included API budget.
+2. **`cursorAuth/stripeMembershipType`** — the plan (`pro`, `pro_plus`, `ultra`, …). Read for Cursor session monitoring; the limits report takes the plan name from the API response instead.
 
-With that cookie it makes two HTTPS calls to `cursor.com`: `GET /api/usage` to find the billing-cycle anchor (`startOfMonth`), then `POST /api/dashboard/get-aggregated-usage-events` for the per-model spend over the current cycle — the same endpoint the dashboard's usage summary uses.
+With that cookie it makes one HTTPS call to `cursor.com`: `GET /api/usage-summary`, the same endpoint the dashboard uses for its usage headline.
 
-**Two pools, one window.** Cursor splits spend into an **Auto / Composer** pool (effectively unlimited on paid plans, billed flat, does *not* draw from the included credit) and an **API / usage-based** pool (specific models, drawn from the plan's included credit, then on-demand above it). lazyagent reports **only the API pool** — the one with a budget worth pacing against. The split is keyed off each aggregation's `tier` field: tier 2 is Auto/Composer, everything else is metered API usage. The Auto spend is shown for reference on the `Source:` line but never counted toward `Used %`.
+**Two pools, two rows.** Cursor meters spend into an **Auto / Composer** pool and a **usage-based API** pool, each against its own allowance, and reports each as its own percentage. lazyagent shows both: `Cursor Models` uses `autoPercentUsed`, `Cursor API` uses `apiPercentUsed`. They share one monthly window bounded by `billingCycleStart` and `billingCycleEnd`, and both appear or disappear together since one call produces both.
 
-**The included budget.** Cursor doesn't expose the plan's included dollar amount per user, so — exactly like Cursor's own UI ("your plan includes at least $400 of API usage") — lazyagent derives it from the plan: **Pro $20, Pro+ $70, Ultra $400**. `Used %` is `apiSpend / included × 100`, and the window resets one calendar month after `startOfMonth`. Set **`CURSOR_INCLUDED_USD`** to override the amount — required for plans not in the table (Business, Enterprise, Teams) and useful if Cursor changes its included amounts. The `hardLimit` from the dashboard is the *on-demand* spending cap (spend allowed *above* the included credit), not the included budget, so lazyagent deliberately ignores it for the percentage.
+**Why `Cursor Models` reads lower than Cursor's UI.** When Auto is the selected model, Cursor's own dashboard shows the *combined* figure (`totalPercentUsed`), not the Auto pool's own utilization. lazyagent deliberately shows `autoPercentUsed`: with two separate rows, using the combined total would double-count the API spend the second row already reports.
+
+**No dollar amounts.** The endpoint returns percentages, not the per-pool split in currency. It does carry `plan.used` / `plan.limit`, but those are not the denominators of any of the three percentages, so rendering them would mislead. The percentage comes straight from Cursor — there is no plan table to keep in sync and nothing to override.
 
 ## When an agent isn't installed
 
@@ -204,7 +207,7 @@ All providers are optional. The command's behavior depends on which agents have 
 
 The default `--agent all` mode is forgiving: a missing agent is not an error, it just doesn't show up. Explicit `--agent X` is strict: if you asked for it, missing it is an error worth surfacing.
 
-**Cursor signed in, but on an unmapped plan.** There's a second skip case unique to Cursor: you're signed in (so the token is present), but lazyagent can't determine your plan's included API budget — a plan not in the built-in table (Business, Enterprise, Teams), an empty membership, or Free (which has no API budget to pace). This is treated like a missing agent rather than a hard failure: silently skipped under `--agent all`, and under `--agent cursor` it prints an actionable message telling you to set `CURSOR_INCLUDED_USD`. Either way it never breaks the aggregate command for everyone else.
+**Cursor signed in, but with no budget to pace.** There's a second skip case unique to Cursor: you're signed in, but Cursor reports the account as unlimited (`isUnlimited`) or returns no enabled usage plan. Both rows are skipped together — silently under `--agent all`, with an actionable message under `--agent cursor`. Plans outside the consumer tiers (Business, Enterprise, Teams) no longer need any configuration: Cursor computes the percentage for them too.
 
 ## Disclaimers (Claude Code, Grok, Kimi, Cursor)
 
@@ -228,10 +231,10 @@ For **Kimi**, `/coding/v1/usages` is similarly not documented as a public API. A
 - **Subscription scope** — the response reflects the plan associated with the Kimi Code OAuth token.
 - **Bearer reuse** — lazyagent sends the same access token Kimi Code CLI uses, but does not refresh it. Treat it as a credential.
 
-For **Cursor**, `/api/usage` and `/api/dashboard/get-aggregated-usage-events` on `cursor.com` are not documented as a public API. As of this writing they are used internally by the Cursor dashboard's usage summary and are subject to:
+For **Cursor**, `/api/usage-summary` on `cursor.com` is not documented as a public API. As of this writing it is used internally by the Cursor dashboard's usage headline and is subject to:
 
-- **No stability guarantee** — endpoint paths, response shape, and the `tier` field that separates the Auto and API pools may change without notice. lazyagent fails gracefully when this happens.
-- **Plan-derived budget** — Cursor does not expose the included API dollar amount per user, so it's inferred from the plan (`CURSOR_INCLUDED_USD` overrides). If Cursor changes its plan allowances, the percentage will drift until the table or your override is updated.
+- **No stability guarantee** — the endpoint path, the response shape, and the `autoPercentUsed` / `apiPercentUsed` fields may change without notice. lazyagent fails gracefully when this happens.
+- **Vendor-computed percentages** — the figures come from Cursor's own `autoPercentUsed` / `apiPercentUsed`, so they track whatever allowances Cursor applies to your plan. If Cursor renames or restructures those fields, lazyagent fails gracefully rather than reporting a stale number.
 - **Session-token reuse** — lazyagent reads the session token from Cursor's local `state.vscdb` and sends it as the dashboard's cookie. Treat it as a credential; it is not refreshed.
 
 The "don't poll" guidance applies equally to Grok, Kimi, and Cursor: run `lazyagent limits` interactively, not in a `watch` loop.
@@ -254,7 +257,6 @@ Even on partial failure (`1`), the successful agents' output is printed to stdou
 | `GROK_OAUTH_TOKEN` | Override the OAuth token for the Grok call. Used in priority before `~/.grok/auth.json` |
 | `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token for the Kimi call. Used in priority before `~/.kimi-code/credentials/kimi-code.json` |
 | `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL. lazyagent appends `/usages` |
-| `CURSOR_INCLUDED_USD` | Override the Cursor plan's included API-usage dollar amount used as the denominator for `Used %`. Required for plans not in the built-in table (Business, Enterprise, Teams); overrides the per-plan default otherwise |
 
 ## See also
 
