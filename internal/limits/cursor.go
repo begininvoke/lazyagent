@@ -286,3 +286,96 @@ func cursorDo(req *http.Request, cookie string, out any) error {
 	}
 	return nil
 }
+
+// cursorUsageSummary is the (subset of the) shape returned by
+// GET /api/usage-summary on cursor.com — the endpoint Cursor's dashboard uses
+// to render its usage headline. Fields we don't consume are omitted.
+//
+// Cursor meters two disjoint pools against two separate allowances and reports
+// each as its own percentage: autoPercentUsed for the Auto/Composer pool and
+// apiPercentUsed for the usage-based (API) pool. Note that plan.used/limit are
+// NOT the denominators of those percentages, which is why they are not parsed.
+type cursorUsageSummary struct {
+	BillingCycleStart string           `json:"billingCycleStart"`
+	BillingCycleEnd   string           `json:"billingCycleEnd"`
+	MembershipType    string           `json:"membershipType"`
+	IsUnlimited       bool             `json:"isUnlimited"`
+	IndividualUsage   cursorUsageBlock `json:"individualUsage"`
+	TeamUsage         cursorUsageBlock `json:"teamUsage"`
+}
+
+// cursorUsageBlock is one of the two parallel usage scopes in the response.
+// Individual accounts populate individualUsage and leave teamUsage as {};
+// team-billed accounts do the reverse.
+type cursorUsageBlock struct {
+	Plan *cursorPlanUsage `json:"plan"`
+}
+
+type cursorPlanUsage struct {
+	Enabled         bool    `json:"enabled"`
+	AutoPercentUsed float64 `json:"autoPercentUsed"`
+	APIPercentUsed  float64 `json:"apiPercentUsed"`
+}
+
+// cursorPlanBlock picks the usage scope that applies to this account: the
+// individual plan when enabled, otherwise the team plan. Returns nil when
+// neither is usable, which the caller turns into errAgentUnavailable.
+func cursorPlanBlock(s *cursorUsageSummary) *cursorPlanUsage {
+	if p := s.IndividualUsage.Plan; p != nil && p.Enabled {
+		return p
+	}
+	if p := s.TeamUsage.Plan; p != nil && p.Enabled {
+		return p
+	}
+	return nil
+}
+
+// cursorSummaryToReports maps one usage-summary response to the two rows
+// lazyagent shows for Cursor. Kept pure so the mapping is unit-testable without
+// a server; all network work lives in fetchCursorReports.
+func cursorSummaryToReports(s *cursorUsageSummary) ([]Report, error) {
+	if s.IsUnlimited {
+		return nil, fmt.Errorf("%w: Cursor reports this account as unlimited, so there is no budget to pace against", errAgentUnavailable)
+	}
+	plan := cursorPlanBlock(s)
+	if plan == nil {
+		return nil, fmt.Errorf("%w: Cursor is signed in but reports no enabled usage plan for this account", errAgentUnavailable)
+	}
+	start, err := time.Parse(time.RFC3339, s.BillingCycleStart)
+	if err != nil {
+		return nil, fmt.Errorf("parse Cursor billingCycleStart %q: %w", s.BillingCycleStart, err)
+	}
+	end, err := time.Parse(time.RFC3339, s.BillingCycleEnd)
+	if err != nil {
+		return nil, fmt.Errorf("parse Cursor billingCycleEnd %q: %w", s.BillingCycleEnd, err)
+	}
+
+	windowMinutes := int(end.Sub(start).Minutes())
+	planName := cursorPlanName(s.MembershipType)
+	cycle := fmt.Sprintf("billing cycle %s – %s", start.Local().Format("2 Jan"), end.Local().Format("2 Jan"))
+	window := func(pct float64) []Window {
+		return []Window{{
+			Label:         "monthly",
+			WindowMinutes: windowMinutes,
+			UsedPercent:   pct,
+			ResetsAt:      end,
+		}}
+	}
+
+	return []Report{
+		{
+			Provider: "Cursor Models",
+			Source: fmt.Sprintf("Source: %.1f%% of the plan's included Auto/Composer allowance (%s); %s",
+				plan.AutoPercentUsed, planName, cycle),
+			Windows: window(plan.AutoPercentUsed),
+			Note: "Note: reads /api/usage-summary on cursor.com with the Cursor session token from state.vscdb — the Auto/Composer pool's own allowance (autoPercentUsed). Cursor's dashboard shows the combined total instead when Auto is the selected model, so this figure reads lower than the one in its UI. Undocumented; may break or be revoked by Cursor without notice.",
+		},
+		{
+			Provider: "Cursor API",
+			Source: fmt.Sprintf("Source: %.1f%% of the plan's included API allowance (%s); %s",
+				plan.APIPercentUsed, planName, cycle),
+			Windows: window(plan.APIPercentUsed),
+			Note:    "Note: reads /api/usage-summary on cursor.com with the Cursor session token from state.vscdb — the usage-based (API) pool only. Undocumented; may break or be revoked by Cursor without notice.",
+		},
+	}, nil
+}
