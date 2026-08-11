@@ -110,10 +110,13 @@ skipped rather than reported as 0%.
 `/api/usage` and `/api/dashboard/get-aggregated-usage-events` calls,
 `cursorUsageResponse`, `cursorAggResponse`, `cursorAgg`, `cursorUsage`,
 `cursorSpendByPool`, `cursorAutoTier`, `cursorIncludedByPlan`,
-`cursorIncludedUSD`, `cursorIncluded`, `cursorPlanName`, `cursorBillingCycle`,
+`cursorIncludedUSD`, `cursorIncluded`, `cursorBillingCycle`,
 `cursorUsageToReport`, and `cursorPOST` (left without callers).
 
-Retained: `cursorUserIDFromToken`, `cursorGET`, `cursorDo`.
+Retained: `cursorUserIDFromToken`, `cursorGET`, `cursorDo`, and `cursorPlanName`
+— the latter still formats `membershipType` for the `Source` lines
+(`pro_plus` → `Pro+`), now sourced from the API response rather than
+`state.vscdb`.
 
 ## Two reports from one fetch
 
