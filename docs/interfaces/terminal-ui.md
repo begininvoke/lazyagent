@@ -54,15 +54,32 @@ for location, permissions, and cleanup behavior.
 
 ## Themes
 
-Two themes ship in: `dark` (default) and `light`. Switch by setting `tui.theme` in [Configuration](../reference/configuration.md):
+Three values ship in: `auto` — the default for new installations — plus `dark` and `light`. Set `tui.theme` in [Configuration](../reference/configuration.md):
 
 ```json
 {
-  "tui": { "theme": "light" }
+  "tui": { "theme": "auto" }
 }
 ```
 
-Every color — panels, activity states, help bar, overlays — is driven by the theme, so both variants are fully coherent.
+Every color — panels, activity states, help bar, overlays — is driven by the theme, so both palettes are fully coherent.
+
+### How `auto` works
+
+At startup, before the TUI takes over the screen, lazyagent asks the terminal for its background color with an OSC 11 query and picks the matching palette. The answer is read once: changing your terminal's theme while lazyagent is running does not repaint it until you restart.
+
+Detection does not always succeed, and every failure resolves to `dark` — what the TUI used unconditionally before `auto` existed, so nothing gets worse than the previous release:
+
+| Situation | Result |
+|-----------|--------|
+| The terminal answers the query | Detected palette |
+| The terminal ignores it (notably inside `tmux`) | Dark |
+| `COLORFGBG` is set but the terminal has no OSC support | Derived from `COLORFGBG` |
+| Output is not a terminal (piped or redirected) | Dark |
+
+Set `"dark"` or `"light"` explicitly to skip detection entirely — an explicit value never queries the terminal.
+
+**Existing installations keep what they have.** lazyagent writes the config file on first run, so an install predating `auto` already carries `"theme": "dark"`. Set `"theme": "auto"` by hand to opt in.
 
 ## Combining with other interfaces
 
