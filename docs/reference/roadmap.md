@@ -122,7 +122,7 @@ sidebar:
 ## v0.8.1 — TUI themes
 
 - ✅ Dark and light theme support for the TUI
-- ✅ Theme selection via `tui.theme` in config (`"dark"` or `"light"`)
+- ✅ Theme selection via `tui.theme` in config (`"auto"`, `"dark"`, or `"light"`), with `"auto"` as default for new installations
 - ✅ All TUI colors driven by theme (panels, activity states, help bar, overlays)
 
 ## v0.8.2 — Resume command

@@ -32,7 +32,7 @@ lazyagent reads `~/.config/lazyagent/config.json` (or `$XDG_CONFIG_HOME/lazyagen
   "exclude_cwd_substrings": [],
   "api_salt": "lazyagent-api-v1-2CwLr3D6GKbVv5m0Pu1nHQ",
   "tui": {
-    "theme": "dark"
+    "theme": "auto"
   }
 }
 ```
@@ -129,12 +129,17 @@ Default: generated once per install. Public salt used with `api_passphrase` for 
 
 ### `tui.theme`
 
-Default: `"dark"`. Supported values:
+Default: `"auto"` for new installations. Supported values:
 
-- `"dark"` — the default, Catppuccin-derived palette
+- `"auto"` — detect the terminal's background color at startup and pick the matching palette
+- `"dark"` — Catppuccin-derived palette
 - `"light"` — paper-like palette for bright environments
 
 All TUI colors (panels, activity labels, help bar, overlays) are driven by the theme.
+
+**Existing installations are not migrated.** lazyagent writes the config file on first run, so any install predating `auto` already carries `"theme": "dark"` on disk and keeps it. A config with no `tui` block at all expresses no theme choice, though, and picks up `"theme": "auto"` on the next load. Set `"theme": "auto"` by hand to opt in.
+
+Detection is not always possible, and every failure resolves to `dark` — the value the TUI used unconditionally before `auto` existed, so nothing degrades. See [Terminal UI](../interfaces/terminal-ui.md) for the full behavior.
 
 ### `webhooks`
 

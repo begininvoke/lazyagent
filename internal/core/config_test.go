@@ -129,3 +129,73 @@ func TestConfig_ValidWebhooks_SkipsInvalid(t *testing.T) {
 		t.Fatalf("got %+v, want only 'ok'", got)
 	}
 }
+
+func TestDefaultConfigThemeIsAuto(t *testing.T) {
+	if got := DefaultConfig().TUI.Theme; got != "auto" {
+		t.Errorf("DefaultConfig().TUI.Theme = %q, want %q", got, "auto")
+	}
+}
+
+// Existing installs already carry "theme": "dark" — written by LoadConfig
+// itself on first run, not chosen by the user. Switching the default to "auto"
+// must not migrate them, neither in the returned config nor in the file
+// LoadConfig rewrites when it backfills other keys.
+func TestLoadConfigDoesNotMigrateExistingTheme(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	cfgDir := filepath.Join(tmpDir, "lazyagent")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	existing := map[string]interface{}{
+		"window_minutes": 30,
+		"agents":         map[string]bool{"claude": true},
+		"tui":            map[string]string{"theme": "dark"},
+	}
+	data, _ := json.Marshal(existing)
+	path := filepath.Join(cfgDir, "config.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := LoadConfig().TUI.Theme; got != "dark" {
+		t.Errorf("LoadConfig().TUI.Theme = %q, want %q — existing configs must not be migrated", got, "dark")
+	}
+
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reread Config
+	if err := json.Unmarshal(written, &reread); err != nil {
+		t.Fatal(err)
+	}
+	if reread.TUI.Theme != "dark" {
+		t.Errorf("config file on disk has theme %q after LoadConfig, want %q", reread.TUI.Theme, "dark")
+	}
+}
+
+// A config file with no "tui" block at all expresses no choice, so it picks up
+// the new default rather than the old hardcoded dark.
+func TestLoadConfigAbsentThemeGetsAuto(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	cfgDir := filepath.Join(tmpDir, "lazyagent")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	minimal := map[string]interface{}{
+		"window_minutes": 30,
+		"agents":         map[string]bool{"claude": true},
+	}
+	data, _ := json.Marshal(minimal)
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := LoadConfig().TUI.Theme; got != "auto" {
+		t.Errorf("LoadConfig().TUI.Theme = %q, want %q", got, "auto")
+	}
+}

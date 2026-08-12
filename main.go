@@ -241,6 +241,11 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	}
 
 	if runTUI {
+		// ui.NewModel must stay here, evaluated as an argument to
+		// tea.NewProgram, and not be hoisted above this call: it resolves the
+		// theme via LoadTheme, whose "auto" case blocks on a terminal query
+		// that has to run before p.Run() puts the terminal into raw mode /
+		// the alt screen (see internal/ui/theme.go LoadTheme).
 		p := tea.NewProgram(
 			ui.NewModel(provider, eventBus),
 			tea.WithAltScreen(),
