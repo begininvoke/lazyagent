@@ -15,7 +15,7 @@ import (
 
 // TUIConfig holds TUI-specific settings.
 type TUIConfig struct {
-	Theme string `json:"theme"` // "dark" (default) or "light"
+	Theme string `json:"theme"` // "auto" (default), "dark", or "light"
 }
 
 // WebhookConfig is a single outbound webhook destination.
@@ -140,7 +140,7 @@ func DefaultConfig() Config {
 			"kimi":     true,
 		},
 		ExcludeCWDSubstrings: []string{},
-		TUI:                  TUIConfig{Theme: "dark"},
+		TUI:                  TUIConfig{Theme: "auto"},
 	}
 }
 
