@@ -137,7 +137,7 @@ Default: `"auto"` for new installations. Supported values:
 
 All TUI colors (panels, activity labels, help bar, overlays) are driven by the theme.
 
-**Existing installations are not migrated.** lazyagent writes the config file on first run, so any install predating `auto` already carries `"theme": "dark"` on disk and keeps it. Set `"theme": "auto"` by hand to opt in.
+**Existing installations are not migrated.** lazyagent writes the config file on first run, so any install predating `auto` already carries `"theme": "dark"` on disk and keeps it. A config with no `tui` block at all expresses no theme choice, though, and picks up `"theme": "auto"` on the next load. Set `"theme": "auto"` by hand to opt in.
 
 Detection is not always possible, and every failure resolves to `dark` — the value the TUI used unconditionally before `auto` existed, so nothing degrades. See [Terminal UI](../interfaces/terminal-ui.md) for the full behavior.
 

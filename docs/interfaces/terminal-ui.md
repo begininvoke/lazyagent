@@ -73,13 +73,15 @@ Detection does not always succeed, and every failure resolves to `dark` — what
 | Situation | Result |
 |-----------|--------|
 | The terminal answers the query | Detected palette |
-| The terminal ignores it (notably inside `tmux`) | Dark |
+| The terminal ignores it (notably inside `tmux`), unless `COLORFGBG` is set | Dark |
 | `COLORFGBG` is set but the terminal has no OSC support | Derived from `COLORFGBG` |
 | Output is not a terminal (piped or redirected) | Dark |
+| The `CI` environment variable is non-empty | Dark, regardless of whether a real terminal is attached |
+| A pty relays bytes but nothing answers either query — e.g. `docker run -t` without an interactive client, `script`/`expect` wrappers, some CI runners that allocate a tty | Dark, but only after a delay of up to ~5 seconds |
 
-Set `"dark"` or `"light"` explicitly to skip detection entirely — an explicit value never queries the terminal.
+`tmux` and `screen` are recognized by their `TERM` prefix and fail instantly, before any query is sent — that's the fast path above. The slow path is the last row: lazyagent writes the query and blocks waiting for a reply that never comes, so nothing appears on screen for up to five seconds. Set `"dark"` or `"light"` explicitly to skip detection entirely and avoid both the ambiguity and the possible delay — an explicit value never queries the terminal, so startup stays instant.
 
-**Existing installations keep what they have.** lazyagent writes the config file on first run, so an install predating `auto` already carries `"theme": "dark"`. Set `"theme": "auto"` by hand to opt in.
+**Existing installations keep what they have.** lazyagent writes the config file on first run, so an install predating `auto` already carries `"theme": "dark"`. A config with no `tui` block at all (for example, a hand-trimmed file) expresses no theme choice and picks up `"theme": "auto"` instead. Set `"theme": "auto"` by hand to opt in.
 
 ## Combining with other interfaces
 

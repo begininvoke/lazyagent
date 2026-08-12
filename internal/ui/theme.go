@@ -41,6 +41,14 @@ type Theme struct {
 
 // LoadTheme returns the theme for the given name. "auto" resolves against the
 // terminal's background color; unrecognized names fall back to dark.
+//
+// For "auto" this blocks on a terminal query (OSC 11, via lipgloss/termenv)
+// that can take up to ~5s if nothing answers. It must be called before the
+// terminal enters raw mode / the alt screen — currently guaranteed because
+// NewModel (which calls LoadTheme) is evaluated as an argument to
+// tea.NewProgram(...) in main.go, ahead of p.Run(). Do not hoist that
+// construction below tea.NewProgram, and do not add tea.WithInput, without
+// preserving this ordering.
 func LoadTheme(name string) Theme {
 	return loadTheme(name, lipgloss.HasDarkBackground)
 }
