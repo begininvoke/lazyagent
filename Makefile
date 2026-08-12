@@ -1,4 +1,4 @@
-.PHONY: all build tui frontend bindings clean dev install
+.PHONY: all build tui frontend bindings clean dev install deploy
 
 all: build
 
@@ -30,6 +30,10 @@ dev: bindings
 	rm -rf internal/assets/dist/*
 	cp -r frontend/dist/. internal/assets/dist/
 	go run . --gui
+
+# Interactive release: propose next semver tag, then tag + push to origin.
+deploy:
+	@scripts/deploy.sh
 
 # Clean build artifacts
 clean:
