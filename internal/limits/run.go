@@ -25,11 +25,13 @@
 // the same endpoint Kimi Code CLI's `/status` slash command calls. lazyagent
 // uses the current access token as-is and does not refresh OAuth credentials.
 //
-// IMPORTANT (Cursor): the source for Cursor is /api/dashboard/get-aggregated-usage-events
-// on cursor.com — the same endpoint the Cursor dashboard uses to render its usage
-// summary. It is read with the session token from Cursor's local state.vscdb. We
-// report only the API (usage-based) pool, not the unlimited Auto/Composer pool.
-// Same caveats as the others: on-demand only, undocumented, fail gracefully.
+// IMPORTANT (Cursor): the source for Cursor is /api/usage-summary on cursor.com —
+// the same endpoint the Cursor dashboard uses to render its usage headline. It is
+// read with the session token from Cursor's local state.vscdb. Cursor meters two
+// disjoint pools against separate allowances, so it is reported as two rows:
+// "Cursor Models" (the Auto/Composer pool, autoPercentUsed) and "Cursor API" (the
+// usage-based pool, apiPercentUsed). Same caveats as the others: on-demand only,
+// undocumented, fail gracefully.
 package limits
 
 import (
@@ -51,8 +53,8 @@ var errAgentNotInstalled = errors.New("agent not installed")
 
 // errAgentUnavailable means the agent IS installed and authenticated, but we
 // can't produce a usable report right now for a reason worth telling the user
-// about (e.g. Cursor is signed in but on a plan whose included budget we can't
-// determine). Unlike a hard error it's skipped silently in `--agent all` mode so
+// about (e.g. Cursor reports the account as unlimited, or has no enabled usage
+// plan). Unlike a hard error it's skipped silently in `--agent all` mode so
 // one agent's quirk never breaks the aggregate command; in explicit single-agent
 // mode the wrapped message is shown so the user knows how to fix it.
 var errAgentUnavailable = errors.New("agent unavailable")
@@ -81,7 +83,7 @@ Usage:
   lazyagent limits --agent codex    Show only Codex limits
   lazyagent limits --agent grok     Show only Grok limits
   lazyagent limits --agent kimi     Show only Kimi Code limits
-  lazyagent limits --agent cursor   Show only Cursor limits (API usage pool)
+  lazyagent limits --agent cursor   Show only Cursor limits (Models + API pools)
 
 Summary output:
   The default table shows used % and expected % for the 5-hour window and the
@@ -114,10 +116,10 @@ Authentication:
             1. KIMI_CODE_OAUTH_TOKEN env var
             2. ~/.kimi-code/credentials/kimi-code.json
           If none is found, run `+"`kimi login`"+`.
-  Cursor  reads its session token and plan from Cursor's local state.vscdb.
-          If none is found, open Cursor and sign in. Cursor only exposes the
-          plan's included API budget indirectly, so it's derived from your plan
-          (Pro $20, Pro+ $70, Ultra $400). Override with CURSOR_INCLUDED_USD.
+  Cursor  reads its session token from Cursor's local state.vscdb.
+          If none is found, open Cursor and sign in. Cursor reports its
+          Auto/Composer and usage-based API pools as separate percentages,
+          shown as two rows.
 
 Disclaimer (Claude, Codex, Grok, Kimi, Cursor):
   These providers expose their usage through undocumented endpoints used by
@@ -153,7 +155,7 @@ Flags:
 	missing := 0
 	explicit := len(agents) == 1
 	for _, a := range agents {
-		report, err := fetchReport(ctx, a)
+		rs, err := fetchReports(ctx, a)
 		if err != nil {
 			if errors.Is(err, errAgentNotInstalled) {
 				missing++
@@ -180,7 +182,7 @@ Flags:
 			exitCode = 1
 			continue
 		}
-		reports = append(reports, report)
+		reports = append(reports, rs...)
 	}
 
 	// All agents were missing AND no real errors fired: tell the user once,
@@ -227,21 +229,32 @@ func notInstalledMessage(agent string) string {
 	}
 }
 
-func fetchReport(ctx context.Context, agent string) (Report, error) {
+// fetchReports dispatches to one agent's fetcher. It returns a slice because a
+// single agent can meter more than one independent pool — Cursor reports its
+// Auto/Composer and usage-based API allowances as two separate rows.
+func fetchReports(ctx context.Context, agent string) ([]Report, error) {
 	switch agent {
 	case "claude":
-		return fetchClaudeReport(ctx)
+		return single(fetchClaudeReport(ctx))
 	case "codex":
-		return fetchCodexReport(ctx)
+		return single(fetchCodexReport(ctx))
 	case "grok":
-		return fetchGrokReport(ctx)
+		return single(fetchGrokReport(ctx))
 	case "kimi":
-		return fetchKimiReport(ctx)
+		return single(fetchKimiReport(ctx))
 	case "cursor":
-		return fetchCursorReport(ctx)
+		return fetchCursorReports(ctx)
 	default:
-		return Report{}, fmt.Errorf("unsupported agent %q", agent)
+		return nil, fmt.Errorf("unsupported agent %q", agent)
 	}
+}
+
+// single adapts a one-report fetcher to the dispatcher's slice signature.
+func single(r Report, err error) ([]Report, error) {
+	if err != nil {
+		return nil, err
+	}
+	return []Report{r}, nil
 }
 
 func resolveAgents(arg string) ([]string, error) {

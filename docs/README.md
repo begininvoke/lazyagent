@@ -38,7 +38,7 @@ Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, a
 - [Prune old sessions](maintenance/prune.md) — delete chat files by age or orphaned-project filter
 - [Compact session files](maintenance/compact.md) — truncate bulky tool outputs and thinking blocks in place
 - [Search chat transcripts](maintenance/search.md) — full-text search with highlighted snippets and an incremental SQLite index
-- [Show rate-limit usage](maintenance/limits.md) — on-demand rate-limit / billing summary for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), Kimi Code, and Cursor (monthly API usage), with a detailed pace view via `--detailed`
+- [Show rate-limit usage](maintenance/limits.md) — on-demand rate-limit / billing summary for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), Kimi Code, and Cursor (monthly, Models + API pools), with a detailed pace view via `--detailed`
 
 ## Reference
 
