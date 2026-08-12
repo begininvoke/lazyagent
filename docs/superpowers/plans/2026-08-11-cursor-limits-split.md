@@ -525,7 +525,7 @@ Cursor now emits two rows. The plan table, the env-var override, the cycle arith
 - Modify: `internal/ui/limits_test.go:44` (provider list)
 
 **Interfaces:**
-- Consumes: `cursorSummaryToReports` and `cursorUsageSummary` (Task 1); `fetchReports` (Task 2); `cursor.ReadAuth()` (`internal/cursor/auth.go:16`); `cursorUserIDFromToken`, `cursorGET`, `cursorDo`.
+- Consumes: `cursorSummaryToReports` and `cursorUsageSummary` (Task 1); `fetchReports` (Task 2); `cursor.ReadAuth()` (`internal/cursor/auth.go:14`); `cursorUserIDFromToken`, `cursorGET`, `cursorDo`.
 - Produces: `func fetchCursorReports(ctx context.Context) ([]Report, error)` — replaces `fetchCursorReport`.
 
 - [ ] **Step 1: Establish the guard before deleting**
@@ -572,7 +572,7 @@ const cursorUsageSummaryURL = "https://cursor.com/api/usage-summary"
 // the Auto/Composer allowance and the usage-based API allowance. Both come from
 // one call, so they always appear or disappear together.
 func fetchCursorReports(ctx context.Context) ([]Report, error) {
-	token, _, ok, err := cursor.ReadAuth()
+	token, ok, err := cursor.ReadAuth()
 	if err != nil {
 		return nil, fmt.Errorf("read Cursor credentials: %w", err)
 	}
@@ -594,7 +594,7 @@ func fetchCursorReports(ctx context.Context) ([]Report, error) {
 }
 ```
 
-The membership type from `state.vscdb` is deliberately discarded — the response carries an authoritative `membershipType`.
+`ReadAuth` yields only the access token: the membership type stored in `state.vscdb` is not needed here, because the response carries an authoritative `membershipType`.
 
 - [ ] **Step 4: Rewire the dispatcher**
 
