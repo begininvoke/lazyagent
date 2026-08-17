@@ -4,6 +4,8 @@
     selectedId,
     selectedDetail,
     windowMinutes,
+    cardDensity,
+    type CardDensity,
     searching,
     showLimits,
     limitsRefreshToken,
@@ -86,6 +88,10 @@
     SessionService.GetWindowMinutes().then((m) => {
       $windowMinutes = m;
     }).catch(() => {});
+
+    SessionService.GetCardDensity()
+      .then((d) => $cardDensity = d as CardDensity)
+      .catch(() => {});
 
     Events.On("sessions:updated", () => {
       loadSessions();
