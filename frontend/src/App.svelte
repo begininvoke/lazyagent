@@ -8,6 +8,7 @@
     showLimits,
     limitsRefreshToken,
     updateVersion,
+    isDetached,
   } from "./lib/stores";
   import {
     loadSessions,
@@ -19,6 +20,7 @@
     syncDetachState,
   } from "./lib/actions";
   import PanelView from "./lib/PanelView.svelte";
+  import DesktopView from "./lib/DesktopView.svelte";
   import * as SessionService from "./bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
   import { Events } from "@wailsio/runtime";
 
@@ -108,4 +110,8 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<PanelView />
+{#if $isDetached}
+  <DesktopView />
+{:else}
+  <PanelView />
+{/if}
