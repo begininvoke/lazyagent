@@ -53,6 +53,8 @@ Unlike other tools, lazyagent doesn't replace your workflow — it watches it. L
 ### macOS Menu Bar App
 ![lazyagent macOS tray](assets/tray.png)
 
+Detach the panel and lazyagent becomes a full desktop app — Dock icon, Cmd-Tab, native menus — with a card-grid dashboard and a `compact | rich | live` density switch. Attach again to return it to the menu bar.
+
 ### HTTP API
 ![lazyagent API playground](assets/api.png)
 

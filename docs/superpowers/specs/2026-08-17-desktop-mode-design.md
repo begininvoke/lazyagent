@@ -135,7 +135,7 @@ Config-file backed (not webview localStorage, which can be ephemeral):
 
 - `GetCardDensity() string` / `SetCardDensity(d string) error` on
   `SessionService`; value stored in the lazyagent config JSON
-  (`cardDensity`, one of `compact|rich|live`; missing/invalid → `live`).
+  (`card_density`, one of `compact|rich|live`; missing/invalid → `live`).
 
 ## Edge cases
 
