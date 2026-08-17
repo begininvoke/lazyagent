@@ -35,13 +35,19 @@
   function startResize(e: PointerEvent) {
     resizing = true;
     resizeStartX = e.clientX;
-    resizeStartWidth = $detailWidth;
+    // Baseline from the rendered width, not the store: a persisted value
+    // wider than the current window's 60vw cap renders CSS-clamped, and
+    // seeding from the store would make the first move jump.
+    const panel = (e.target as HTMLElement).parentElement;
+    resizeStartWidth = panel ? panel.getBoundingClientRect().width : $detailWidth;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function moveResize(e: PointerEvent) {
     if (!resizing) return;
-    const max = Math.floor(window.innerWidth * 0.6);
+    // 2000 mirrors the Go-side plausibility ceiling (NormalizeDetailWidth):
+    // without it a wide-display drag past 2000 would persist as 400.
+    const max = Math.min(2000, Math.floor(window.innerWidth * 0.6));
     $detailWidth = Math.min(max, Math.max(300, resizeStartWidth + (resizeStartX - e.clientX)));
   }
 

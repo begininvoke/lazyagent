@@ -134,8 +134,8 @@ type Config struct {
 	CardDensity          string          `json:"card_density,omitempty"`
 	// DetailWidth is the GUI desktop-mode detail panel width in pixels.
 	// 0 or out-of-range values mean the 400px default.
-	DetailWidth          int             `json:"detail_width,omitempty"`
-	Webhooks             []WebhookConfig `json:"webhooks,omitempty"`
+	DetailWidth int             `json:"detail_width,omitempty"`
+	Webhooks    []WebhookConfig `json:"webhooks,omitempty"`
 	// APIPassphrase is the secret used to derive the bearer token that
 	// protects the HTTP API. Empty means the API has not been configured yet
 	// — `lazyagent --api` will prompt for one on first run.
