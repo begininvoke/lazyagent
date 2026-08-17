@@ -44,9 +44,9 @@ sidebar:
 - ⬜ Dynamic tray icon (active count)
 - ⬜ macOS notifications
 - ⬜ Launch at Login
-- ⬜ Code signing & notarization
+- ✅ Code signing & notarization: CI signs, notarizes, and staples the universal `Lazyagent.app` bundle
 - ⬜ DMG distribution
-- ⬜ Homebrew cask
+- ✅ Homebrew distribution split: `brew install --cask illegalstudio/tap/lazyagent` installs the signed, notarized `Lazyagent.app`; `brew install illegalstudio/tap/lazyagent-cli` installs the CLI-only (notray) build as `lazyagent-cli` for darwin and linux
 
 ## v0.4 — HTTP API
 
@@ -142,11 +142,11 @@ sidebar:
 
 ## v0.9 — Maintenance commands
 
-- ✅ `lazyagent prune` — delete chat files older than N days or whose project folder no longer exists
+- ✅ `lazyagent-cli prune` — delete chat files older than N days or whose project folder no longer exists
 - ✅ Interactive agent picker with colored checkboxes when `--agent` is omitted
 - ✅ Dry-run summary and verbose tables with before/after disk sizes
 - ✅ Destructive-op disclaimer box before the y/N confirmation
-- ✅ `lazyagent compact` — rewrite JSONL sessions in place, truncating bulky tool outputs, thinking blocks, and embedded images
+- ✅ `lazyagent-cli compact` — rewrite JSONL sessions in place, truncating bulky tool outputs, thinking blocks, and embedded images
 - ✅ Per-agent field-path mutators for Claude Code, pi, and Codex
 - ✅ Line-count validation, `.bak` sidecars, preserved file permissions, path guards
 - ✅ Shared `chatops` package powering the interactive UI for both subcommands
@@ -156,18 +156,18 @@ sidebar:
 - ✅ Grok CLI session discovery from `~/.grok/sessions/`
 - ✅ `--agent grok` flag and `G` prefix in session lists
 - ✅ Search, prune, and compact support for Grok session directories
-- ✅ Monthly Grok billing snapshot in `lazyagent limits`
+- ✅ Monthly Grok billing snapshot in `lazyagent-cli limits`
 
 ## v0.9.x — Kimi support
 
 - ✅ Kimi Code CLI session discovery from `~/.kimi-code/sessions/`
 - ✅ `--agent kimi` flag and `K` prefix in session lists
 - ✅ Search, prune, and compact support for Kimi session directories
-- ✅ Kimi usage snapshot in `lazyagent limits`
+- ✅ Kimi usage snapshot in `lazyagent-cli limits`
 
 ## v0.9.x — Rate-limit visibility
 
-- ✅ `lazyagent limits` — on-demand snapshot of 5-hour, weekly, and monthly usage windows
+- ✅ `lazyagent-cli limits` — on-demand snapshot of 5-hour, weekly, and monthly usage windows
 - ✅ Pace indicator comparing actual consumption to a perfectly linear pace (under / on track / over)
 - ✅ Claude Code via `/api/oauth/usage` (the same endpoint Claude Code's `/status` uses), token resolved from env / macOS keychain / `~/.claude/.credentials.json`
 - ✅ Codex via `/backend-api/wham/usage` on `chatgpt.com` (the same endpoint the Codex CLI's TUI polls), ChatGPT token resolved from `CODEX_OAUTH_TOKEN` / `~/.codex/auth.json`
