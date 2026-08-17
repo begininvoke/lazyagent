@@ -133,6 +133,20 @@ homebrew_casks:
     # Cask `app` stanza directly.
     custom_block: |
       app "Lazyagent.app"
+    # DEVIATION (documented in task-5-report.md, fix round 1): goreleaser
+    # OSS unconditionally emits a top-level `binary "lazyagent"` stanza
+    # here — internal/pipe/cask/cask.go's Default() forces
+    # homebrew_casks[].binaries to [name] whenever it's empty or its
+    # first entry is "" (confirmed identical in installed v2.14.2 and
+    # latest goreleaser main; `binaries: []` was tested and has no
+    # effect — Default() re-populates it). There is no config-only way
+    # to suppress it, and the `lazyagent` command is retired (CLI ships
+    # only as `lazyagent-cli`, via the app's ~/bin self-link and the
+    # separate `brews` formula below) — linking it into PATH would also
+    # collide with the `lazyagent-cli` formula on co-install. The release
+    # CI workflow must strip this `binary "lazyagent"` line from the
+    # generated tap cask after goreleaser writes it (before/instead of
+    # publishing), same place notarization already patches the cask.
     repository:
       owner: illegalstudio
       name: homebrew-tap
