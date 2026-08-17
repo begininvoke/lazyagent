@@ -8,7 +8,23 @@
     activeCount,
     activityFilter,
     searchQuery,
+    searching,
+    showLimits,
+    limitsRefreshToken,
+    updateVersion,
+    isDetached,
+    isPinned,
   } from "./lib/stores";
+  import {
+    loadSessions,
+    loadDetail,
+    cycleFilter,
+    adjustWindow,
+    toggleDetach,
+    togglePin,
+    setSearch,
+    syncDetachState,
+  } from "./lib/actions";
   import SessionList from "./lib/SessionList.svelte";
   import SessionDetail from "./lib/SessionDetail.svelte";
   import LimitsPage from "./lib/LimitsPage.svelte";
@@ -16,30 +32,6 @@
   import { Events } from "@wailsio/runtime";
 
   let showDetail = $derived($selectedId !== null);
-  let searching = $state(false);
-  let showLimits = $state(false);
-  let limitsRefreshToken = $state(0);
-  let updateVersion = $state("");
-  let isDetached = $state(false);
-  let isPinned = $state(false);
-
-  async function loadSessions() {
-    try {
-      const items = await SessionService.GetSessions();
-      $sessions = items || [];
-    } catch {
-      // Fallback for dev mode without Go backend
-    }
-  }
-
-  async function loadDetail(id: string) {
-    try {
-      const detail = await SessionService.GetSessionDetail(id);
-      $selectedDetail = detail as any;
-    } catch {
-      $selectedDetail = null;
-    }
-  }
 
   $effect(() => {
     const id = $selectedId;
@@ -51,24 +43,22 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
-    if (searching) {
+    if ($searching) {
       if (e.key === "Escape") {
         e.preventDefault();
-        searching = false;
-        $searchQuery = "";
-        SessionService.SetSearchQuery("").catch(() => {});
-        loadSessions();
+        setSearch("");
+        $searching = false;
       }
       return;
     }
 
-    if (showLimits) {
+    if ($showLimits) {
       if (e.key === "Escape" || e.key === "l" || e.key === "L") {
         e.preventDefault();
-        showLimits = false;
+        $showLimits = false;
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
-        limitsRefreshToken += 1;
+        $limitsRefreshToken += 1;
       }
       return;
     }
@@ -80,7 +70,7 @@
       }
     } else if (e.key === "/") {
       e.preventDefault();
-      searching = true;
+      $searching = true;
     } else if (e.key === "d") {
       e.preventDefault();
       toggleDetach();
@@ -95,44 +85,8 @@
       adjustWindow(-10);
     } else if (e.key === "l" || e.key === "L") {
       e.preventDefault();
-      showLimits = true;
+      $showLimits = true;
     }
-  }
-
-  function handleSearchInput(e: Event) {
-    const target = e.target as HTMLInputElement;
-    $searchQuery = target.value;
-    SessionService.SetSearchQuery(target.value).catch(() => {});
-    loadSessions();
-  }
-
-  const allFilters = ["", "idle", "waiting", "thinking", "compacting", "reading", "writing", "running", "searching", "browsing", "spawning"];
-
-  function cycleFilter() {
-    const idx = allFilters.indexOf($activityFilter);
-    $activityFilter = allFilters[(idx + 1) % allFilters.length];
-    SessionService.SetActivityFilter($activityFilter).catch(() => {});
-    loadSessions();
-  }
-
-  function syncDetachState() {
-    SessionService.IsDetached().then((d) => { isDetached = d; }).catch(() => {});
-    SessionService.IsPinned().then((p) => { isPinned = p; }).catch(() => {});
-  }
-
-  function toggleDetach() {
-    if (isDetached) {
-      SessionService.Attach().catch(() => {});
-    } else {
-      SessionService.Detach().catch(() => {});
-    }
-  }
-
-  function adjustWindow(delta: number) {
-    const next = Math.max(10, Math.min(480, $windowMinutes + delta));
-    $windowMinutes = next;
-    SessionService.SetWindowMinutes(next).catch(() => {});
-    loadSessions();
   }
 
   onMount(() => {
@@ -157,7 +111,7 @@
     setTimeout(async () => {
       try {
         const v = await SessionService.GetUpdateVersion();
-        if (v) updateVersion = v;
+        if (v) $updateVersion = v;
       } catch {}
     }, 3000);
   });
@@ -176,8 +130,8 @@
     </div>
     <div class="flex items-center gap-2 no-drag">
       <button
-        class="rounded px-1.5 py-0.5 text-[11px] font-medium {showLimits ? 'text-accent bg-accent/10' : 'text-subtext hover:text-text'}"
-        onclick={() => (showLimits = !showLimits)}
+        class="rounded px-1.5 py-0.5 text-[11px] font-medium {$showLimits ? 'text-accent bg-accent/10' : 'text-subtext hover:text-text'}"
+        onclick={() => ($showLimits = !$showLimits)}
         title="Show limits (l)"
       >limits</button>
       {#if $activityFilter}
@@ -199,39 +153,39 @@
         onclick={() => adjustWindow(10)}
         title="Increase time window"
       >+</button>
-      {#if isDetached}
+      {#if $isDetached}
         <button
-          class="leading-none ml-1 text-[11px] font-medium rounded px-1 py-0.5 {isPinned ? 'text-accent bg-accent/10' : 'text-subtext hover:text-text'}"
-          onclick={() => SessionService.TogglePin().catch(() => {})}
-          title={isPinned ? "Unpin from top" : "Pin on top"}
+          class="leading-none ml-1 text-[11px] font-medium rounded px-1 py-0.5 {$isPinned ? 'text-accent bg-accent/10' : 'text-subtext hover:text-text'}"
+          onclick={togglePin}
+          title={$isPinned ? "Unpin from top" : "Pin on top"}
         >pin</button>
       {/if}
       <button
         class="text-subtext hover:text-text text-[14px] leading-none ml-1"
         onclick={toggleDetach}
-        title={isDetached ? "Attach to tray" : "Detach to window"}
-      >{isDetached ? "\u2921" : "\u2922"}</button>
+        title={$isDetached ? "Attach to tray" : "Detach to window"}
+      >{$isDetached ? "\u2921" : "\u2922"}</button>
     </div>
   </header>
 
   <!-- Search bar -->
-  {#if searching}
+  {#if $searching}
     <div class="px-3 py-1.5 bg-surface border-b border-border">
       <input
         type="text"
         class="w-full bg-transparent text-text text-[13px] outline-none placeholder-subtext"
         placeholder="Search sessions..."
         value={$searchQuery}
-        oninput={handleSearchInput}
+        oninput={(e) => setSearch((e.target as HTMLInputElement).value)}
       />
     </div>
   {/if}
 
   <!-- Content -->
   <div class="flex-1 flex min-h-0">
-    {#if showLimits}
+    {#if $showLimits}
       <div class="flex-1 overflow-hidden">
-        <LimitsPage refreshToken={limitsRefreshToken} />
+        <LimitsPage refreshToken={$limitsRefreshToken} />
       </div>
     {:else if showDetail}
       <div class="w-[45%] border-r border-border overflow-hidden">
@@ -249,9 +203,9 @@
 
   <!-- Footer -->
   <footer class="px-3 py-1 bg-surface border-t border-border">
-    {#if updateVersion}
+    {#if $updateVersion}
       <div class="flex items-center justify-center gap-1 text-[10px] text-accent pb-0.5">
-        <span>↑ lazyagent {updateVersion} available —</span>
+        <span>↑ lazyagent {$updateVersion} available —</span>
         <button
           class="underline hover:text-text cursor-pointer"
           onclick={() => SessionService.OpenReleases()}
@@ -264,8 +218,8 @@
       <span><kbd class="text-text/60">f</kbd> filter</span>
       <span><kbd class="text-text/60">l</kbd> limits</span>
       <span><kbd class="text-text/60">+/−</kbd> window</span>
-      <span><kbd class="text-text/60">r</kbd> {showLimits ? "refresh" : "rename"}</span>
-      <span><kbd class="text-text/60">d</kbd> {isDetached ? "attach" : "detach"}</span>
+      <span><kbd class="text-text/60">r</kbd> {$showLimits ? "refresh" : "rename"}</span>
+      <span><kbd class="text-text/60">d</kbd> {$isDetached ? "attach" : "detach"}</span>
       <span><kbd class="text-text/60">esc</kbd> back</span>
     </div>
   </footer>
