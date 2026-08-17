@@ -26,6 +26,24 @@ builds:
     goarch:
       - amd64
       - arm64
+
+  # macOS: CLI/TUI only (no Wails, no CGo) — ships as lazyagent-cli
+  - id: darwin-cli
+    main: .
+    binary: lazyagent-cli
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X github.com/illegalstudio/lazyagent/internal/version.Version={{.Version}}
+      - -X github.com/illegalstudio/lazyagent/internal/version.Commit={{.ShortCommit}}
+    tags:
+      - notray
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
     hooks:
       post:
         - scripts/codesign.sh {{ .Path }}
@@ -33,7 +51,7 @@ builds:
   # Linux: TUI only, no GUI (no CGo needed)
   - id: linux
     main: .
-    binary: lazyagent
+    binary: lazyagent-cli
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -48,18 +66,50 @@ builds:
       - amd64
       - arm64
 
-archives:
+universal_binaries:
   - id: darwin
-    builds:
+    ids:
       - darwin
+    name_template: lazyagent
+    replace: true
+    hooks:
+      post:
+        - scripts/make-app.sh "{{ .Path }}" "{{ .Version }}" dist
+
+archives:
+  # The desktop app: a zip containing Lazyagent.app.
+  #
+  # NOTE: not `meta: true`. In OSS goreleaser (v2.14.2), archive.go's
+  # createMeta() always calls create() with binaries=nil, so a meta
+  # archive can never carry Goos/Goarch — but the homebrew_casks pipe
+  # (cask.go doRun) hard-requires ByGooses/ByGoarches on the matched
+  # archive, so a meta archive is invisible to it ("no linux/macos
+  # archives found matching goos=... ids=[darwin-app]"). Referencing the
+  # `darwin` universal_binaries id here makes this a normal archive that
+  # inherits Goos=darwin/Goarch=all from the embedded universal binary
+  # (so the cask can find it), while `files` still adds Lazyagent.app.
+  - id: darwin-app
+    ids:
+      - darwin
+    name_template: "Lazyagent_{{ .Version }}_darwin_universal"
+    formats:
+      - zip
+    files:
+      - src: dist/Lazyagent.app
+        dst: Lazyagent.app
+  - id: darwin-cli
+    ids:
+      - darwin-cli
+    name_template: "lazyagent-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - zip
     files:
       - README.md
       - LICENSE
   - id: linux
-    builds:
+    ids:
       - linux
+    name_template: "lazyagent-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - tar.gz
     files:
@@ -75,9 +125,29 @@ changelog:
       - "^chore:"
 
 homebrew_casks:
-  - repository:
+  - name: lazyagent
+    ids:
+      - darwin-app
+    # `app` (Pro-only, DMG-based) isn't available in OSS goreleaser; the
+    # zip already contains Lazyagent.app, so inject the standard Homebrew
+    # Cask `app` stanza directly.
+    custom_block: |
+      app "Lazyagent.app"
+    repository:
       owner: illegalstudio
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/illegalstudio/lazyagent
-    description: A lazy TUI for monitoring Claude Code agent sessions
+    description: Desktop app for monitoring coding agent sessions (includes the CLI)
+
+brews:
+  - name: lazyagent-cli
+    ids:
+      - darwin-cli
+      - linux
+    repository:
+      owner: illegalstudio
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/illegalstudio/lazyagent
+    description: A lazy TUI for monitoring coding agent sessions
