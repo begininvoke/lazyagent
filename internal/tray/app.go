@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/illegalstudio/lazyagent/internal/assets"
 	"github.com/illegalstudio/lazyagent/internal/core"
@@ -29,6 +30,27 @@ func Run(demoMode bool, agentMode string) error {
 	if !assets.HasFrontend() {
 		return fmt.Errorf("frontend assets not found — run 'make build' to include the menu bar app")
 	}
+
+	// Bundle installs self-serve the CLI: keep ~/bin/lazyagent-cli
+	// pointing at this binary. Bare dev builds skip it. Errors are
+	// non-fatal — a read-only home must not stop the GUI.
+	go func() {
+		exe, err := os.Executable()
+		if err != nil {
+			return
+		}
+		if rp, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = rp
+		}
+		if !core.InBundlePath(exe) {
+			return
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		_ = core.EnsureCLISymlink(filepath.Join(home, "bin"), exe)
+	}()
 
 	svc := &SessionService{demoMode: demoMode, provider: buildProvider(agentMode)}
 
