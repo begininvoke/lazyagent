@@ -2,7 +2,7 @@
   import {
     sessions, selectedId, activeCount, windowMinutes, activityFilter,
     searchQuery, searching, showLimits, limitsRefreshToken, updateVersion,
-    isPinned, cardDensity,
+    isPinned, cardDensity, detailWidth,
   } from "./stores";
   import type { CardDensity } from "./stores";
   import {
@@ -23,6 +23,37 @@
 
   function select(id: string) {
     $selectedId = $selectedId === id ? null : id;
+  }
+
+  // Detail panel resize: drag the handle on the panel's left edge.
+  // Pointer capture keeps move/up events on the handle even when the
+  // pointer leaves it; the width persists once, on release.
+  let resizing = $state(false);
+  let resizeStartX = 0;
+  let resizeStartWidth = 0;
+
+  function startResize(e: PointerEvent) {
+    resizing = true;
+    resizeStartX = e.clientX;
+    resizeStartWidth = $detailWidth;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function moveResize(e: PointerEvent) {
+    if (!resizing) return;
+    const max = Math.floor(window.innerWidth * 0.6);
+    $detailWidth = Math.min(max, Math.max(300, resizeStartWidth + (resizeStartX - e.clientX)));
+  }
+
+  function endResize() {
+    if (!resizing) return;
+    resizing = false;
+    SessionService.SetDetailWidth($detailWidth).catch(() => {});
+  }
+
+  function resetWidth() {
+    $detailWidth = 400;
+    SessionService.SetDetailWidth(400).catch(() => {});
   }
 
   // Grid j/k navigation while the detail panel is open or closed.
@@ -130,7 +161,21 @@
         {/if}
       </div>
       {#if $selectedId}
-        <div class="w-[400px] shrink-0 min-h-0">
+        <div
+          class="relative shrink-0 min-h-0 max-w-[60vw]"
+          style="width: {$detailWidth}px; min-width: 300px;"
+        >
+          <div
+            class="absolute left-0 top-0 bottom-0 w-[5px] z-10 cursor-col-resize hover:bg-accent/30 {resizing ? 'bg-accent/30' : ''}"
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize, double-click to reset"
+            onpointerdown={startResize}
+            onpointermove={moveResize}
+            onpointerup={endResize}
+            onpointercancel={endResize}
+            ondblclick={resetWidth}
+          ></div>
           <DetailPanel />
         </div>
       {/if}

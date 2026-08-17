@@ -62,6 +62,14 @@ export function GetConfig(): $CancellablePromise<core$0.Config> {
 }
 
 /**
+ * GetDetailWidth returns the persisted desktop detail-panel width in
+ * pixels. Missing or out-of-range values fall back to 400.
+ */
+export function GetDetailWidth(): $CancellablePromise<number> {
+    return $Call.ByID(2792703953);
+}
+
+/**
  * GetLimits fetches all supported providers and returns the computed limits
  * view. The GUI calls it when the limits page opens and on manual refresh; it
  * does not poll. Missing/errored agents are omitted.
@@ -155,6 +163,15 @@ export function SetActivityFilter(f: string): $CancellablePromise<void> {
  */
 export function SetCardDensity(d: string): $CancellablePromise<void> {
     return $Call.ByID(2444020248, d);
+}
+
+/**
+ * SetDetailWidth persists the desktop detail-panel width. Unlike the
+ * density setter it clamps instead of rejecting: the value comes from a
+ * drag gesture, not typed input.
+ */
+export function SetDetailWidth(w: number): $CancellablePromise<void> {
+    return $Call.ByID(3280861733, w);
 }
 
 /**

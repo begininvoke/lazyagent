@@ -460,6 +460,21 @@ func (s *SessionService) SetCardDensity(d string) error {
 	return core.SaveConfig(cfg)
 }
 
+// GetDetailWidth returns the persisted desktop detail-panel width in
+// pixels. Missing or out-of-range values fall back to 400.
+func (s *SessionService) GetDetailWidth() int {
+	return core.NormalizeDetailWidth(core.LoadConfig().DetailWidth)
+}
+
+// SetDetailWidth persists the desktop detail-panel width. Unlike the
+// density setter it clamps instead of rejecting: the value comes from a
+// drag gesture, not typed input.
+func (s *SessionService) SetDetailWidth(w int) error {
+	cfg := core.LoadConfig()
+	cfg.DetailWidth = core.NormalizeDetailWidth(w)
+	return core.SaveConfig(cfg)
+}
+
 // Detach switches from tray panel to a normal detached window.
 func (s *SessionService) Detach() {
 	s.detachMu.Lock()

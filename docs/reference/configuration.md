@@ -145,6 +145,10 @@ Detection is not always possible, and every failure resolves to `dark` — the v
 
 Default: `"live"`. Card density for the GUI's desktop-mode dashboard (the card grid shown after detaching — see [macOS GUI](../interfaces/macos-gui.md)). One of `"compact"`, `"rich"`, or `"live"`. Invalid or missing values fall back to `"live"`.
 
+### `detail_width`
+
+Default: `400`. Width in pixels of the desktop-mode detail panel (drag its left edge to resize, double-click to reset). Values outside 300–2000 fall back to `400`.
+
 ### `webhooks`
 
 Default: `[]` (empty — no outbound webhooks). A list of HTTP endpoints that receive a POST whenever a session changes activity state. Each entry can filter by event type and agent source, and optionally sign requests with HMAC-SHA256.

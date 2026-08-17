@@ -67,6 +67,16 @@ func NormalizeCardDensity(d string) string {
 	return "live"
 }
 
+// NormalizeDetailWidth returns w if it is a plausible desktop detail-panel
+// width in pixels (300–2000), 400 otherwise. The frontend applies the
+// tighter window-relative clamp (60% of window width) at drag time.
+func NormalizeDetailWidth(w int) int {
+	if w < 300 || w > 2000 {
+		return 400
+	}
+	return w
+}
+
 // Validate returns nil if the webhook is well-formed.
 func (w WebhookConfig) Validate() error {
 	if strings.TrimSpace(w.Name) == "" {
@@ -122,6 +132,9 @@ type Config struct {
 	ExcludeCWDSubstrings []string        `json:"exclude_cwd_substrings"`
 	TUI                  TUIConfig       `json:"tui"`
 	CardDensity          string          `json:"card_density,omitempty"`
+	// DetailWidth is the GUI desktop-mode detail panel width in pixels.
+	// 0 or out-of-range values mean the 400px default.
+	DetailWidth          int             `json:"detail_width,omitempty"`
 	Webhooks             []WebhookConfig `json:"webhooks,omitempty"`
 	// APIPassphrase is the secret used to derive the bearer token that
 	// protects the HTTP API. Empty means the API has not been configured yet

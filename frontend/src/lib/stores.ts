@@ -45,6 +45,7 @@ export const searchQuery = writable("");
 
 export type CardDensity = "compact" | "rich" | "live";
 export const cardDensity = writable<CardDensity>("live");
+export const detailWidth = writable(400);
 export const searching = writable(false);
 export const showLimits = writable(false);
 export const limitsRefreshToken = writable(0);

@@ -6,6 +6,7 @@
     windowMinutes,
     cardDensity,
     type CardDensity,
+    detailWidth,
     searching,
     showLimits,
     limitsRefreshToken,
@@ -91,6 +92,10 @@
 
     SessionService.GetCardDensity()
       .then((d) => $cardDensity = d as CardDensity)
+      .catch(() => {});
+
+    SessionService.GetDetailWidth()
+      .then((w) => $detailWidth = w)
       .catch(() => {});
 
     Events.On("sessions:updated", () => {
