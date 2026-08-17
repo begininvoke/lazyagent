@@ -6,7 +6,7 @@ sidebar:
 ---
 
 ```bash
-lazyagent --api
+lazyagent-cli --api
 ```
 
 Starts an HTTP API on `http://127.0.0.1:7421`. If the port is busy the server tries up to 10 sequential ports (7421–7431) and binds to the first available one; the actual address is printed to stderr on startup. Pass `--host` to pin a custom address and disable the fallback.
@@ -20,7 +20,7 @@ All data endpoints under `/api/*` require a Bearer token. The token is **derived
 ### First run
 
 ```bash
-lazyagent --api
+lazyagent-cli --api
 ```
 
 If no passphrase is configured, lazyagent prompts for one (twice, for confirmation), requires at least 12 characters, saves it to `~/.config/lazyagent/config.json` under `api_passphrase`, and prints the derived bearer token to stderr once for the interactive setup:
@@ -31,14 +31,14 @@ Bearer token: zqh9_r0QeYpLiLSQGZMYriIWqNZgZOu3Qc_l7wtraV4
 Use header:   Authorization: Bearer <token>
 ```
 
-On later startups the token is not printed to avoid leaking it into service logs. Use `lazyagent passphrase --show` when you explicitly need the raw token.
+On later startups the token is not printed to avoid leaking it into service logs. Use `lazyagent-cli passphrase --show` when you explicitly need the raw token.
 
 ### Non-interactive setup
 
 If `--api` runs without a TTY (e.g. from `launchd`, a service, CI), set the passphrase via env var instead:
 
 ```bash
-LAZYAGENT_API_PASSPHRASE='your-passphrase' lazyagent --api
+LAZYAGENT_API_PASSPHRASE='your-passphrase' lazyagent-cli --api
 ```
 
 The env var takes precedence over the config file value and is never written to disk.
@@ -46,11 +46,11 @@ The env var takes precedence over the config file value and is never written to 
 ### Rotating the passphrase
 
 ```bash
-lazyagent passphrase             # prompt for a new one and save it
-lazyagent passphrase --show      # print the current bearer token without prompting
+lazyagent-cli passphrase             # prompt for a new one and save it
+lazyagent-cli passphrase --show      # print the current bearer token without prompting
 ```
 
-The `passphrase` subcommand is independent of the server — change credentials any time. Any running `lazyagent --api` keeps the old token until you restart it.
+The `passphrase` subcommand is independent of the server — change credentials any time. Any running `lazyagent-cli --api` keeps the old token until you restart it.
 
 ### Token derivation algorithm
 
@@ -191,7 +191,7 @@ for location, permissions, and cleanup behavior.
 By default the server binds to `127.0.0.1` (localhost only). To expose it on the network — e.g. for a mobile companion app on the same Wi-Fi:
 
 ```bash
-lazyagent --api --host 0.0.0.0:7421
+lazyagent-cli --api --host 0.0.0.0:7421
 ```
 
 The Bearer-token requirement applies regardless of bind address, but the API is **plain HTTP** — anyone on the network can read your traffic. For internet-facing exposure put the server behind an HTTPS reverse proxy (nginx, Caddy, Cloudflare Tunnel).
@@ -208,7 +208,7 @@ List all visible sessions within the configured [time window](../reference/confi
 |-----------|--------|-------------|
 | `search`  | string | Filter by project path (case-insensitive substring match) |
 | `filter`  | string | Filter by activity kind (e.g. `thinking`, `writing`, `idle`) |
-| `dir`     | string | Filter to sessions whose CWD is this directory or a subdirectory of it — the same matching `lazyagent sessions` uses. Must be an **absolute path** (there's no meaningful "current directory" for a remote client). The directory does not need to exist on the machine running the server. |
+| `dir`     | string | Filter to sessions whose CWD is this directory or a subdirectory of it — the same matching `lazyagent-cli sessions` uses. Must be an **absolute path** (there's no meaningful "current directory" for a remote client). The directory does not need to exist on the machine running the server. |
 
 **Response: `200 OK`**
 

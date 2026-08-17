@@ -27,16 +27,16 @@ The prefix appears next to each session in the TUI list, the GUI panel, and the 
 Use `--agent` to scope the scan:
 
 ```bash
-lazyagent --agent claude    # Claude Code CLI + Desktop
-lazyagent --agent cursor
-lazyagent --agent codex
-lazyagent --agent amp
-lazyagent --agent pi
-lazyagent --agent opencode
-lazyagent --agent kilo
-lazyagent --agent grok
-lazyagent --agent kimi
-lazyagent --agent all       # default
+lazyagent-cli --agent claude    # Claude Code CLI + Desktop
+lazyagent-cli --agent cursor
+lazyagent-cli --agent codex
+lazyagent-cli --agent amp
+lazyagent-cli --agent pi
+lazyagent-cli --agent opencode
+lazyagent-cli --agent kilo
+lazyagent-cli --agent grok
+lazyagent-cli --agent kimi
+lazyagent-cli --agent all       # default
 ```
 
 You can also enable/disable agents permanently via the [`agents` block](../reference/configuration.md#agents) in `config.json`. A disabled agent is skipped even when `--agent all` is active.
@@ -55,7 +55,7 @@ Cursor stores everything in a single SQLite database (`state.vscdb`) as key-valu
 
 CWD is inferred from the Cursor workspace URI if available, otherwise from the first file path mentioned in the session.
 
-**Usage limits.** The separate `lazyagent limits` command also reports Cursor's monthly usage, as two rows: `Cursor Models` (the Auto/Composer pool) and `Cursor API` (the usage-based pool). It reuses the same `state.vscdb` — reading the `cursorAuth/accessToken` session token — and queries the Cursor dashboard's usage-summary endpoint. See [Show rate-limit usage](../maintenance/limits.md#cursor).
+**Usage limits.** The separate `lazyagent-cli limits` command also reports Cursor's monthly usage, as two rows: `Cursor Models` (the Auto/Composer pool) and `Cursor API` (the usage-based pool). It reuses the same `state.vscdb` — reading the `cursorAuth/accessToken` session token — and queries the Cursor dashboard's usage-summary endpoint. See [Show rate-limit usage](../maintenance/limits.md#cursor).
 
 ### Codex CLI
 
@@ -81,7 +81,7 @@ Kilo's CLI stores sessions in an OpenCode-compatible SQLite database at `~/.loca
 
 Grok writes one *directory* per session, two levels deep under `~/.grok/sessions/<url-encoded-cwd>/<session-uuid>/`. Each session directory holds a `summary.json` (metadata), a `chat_history.jsonl` (transcript), an `updates.jsonl` stream, and several smaller files. lazyagent reads `summary.json` plus `chat_history.jsonl` and decodes the cwd from the standard URL percent-encoding of the parent directory name.
 
-**No per-session cost.** Grok's on-disk data does not expose an input/output/cache token split, so Grok sessions show no per-session token or cost figures in any interface — those fields are left at zero. (The separate `lazyagent limits` command still reports Grok's monthly billing window; that uses Grok's billing API, not on-disk session data.)
+**No per-session cost.** Grok's on-disk data does not expose an input/output/cache token split, so Grok sessions show no per-session token or cost figures in any interface — those fields are left at zero. (The separate `lazyagent-cli limits` command still reports Grok's monthly billing window; that uses Grok's billing API, not on-disk session data.)
 
 **Subagent sessions** (`session_kind: "subagent"` in `summary.json`) are treated as sidechains and hidden from the default list, the same as Claude's sub-agent sessions.
 
@@ -89,7 +89,7 @@ Grok writes one *directory* per session, two levels deep under `~/.grok/sessions
 
 Kimi writes one directory per session under `~/.kimi-code/sessions/wd_<name>_<hash>/<session-id>/`. lazyagent resolves each session's working directory through `~/.kimi-code/session_index.jsonl`, which maps every session directory to its absolute CWD.
 
-Each session directory carries its main agent's event stream at `agents/main/wire.jsonl` (subagents live under `agents/<id>/wire.jsonl`) plus `state.json` (title and session metadata). lazyagent reads `wire.jsonl` for activity state, tool calls, recent messages, timestamps, and token counters, and also uses it to power `lazyagent search`.
+Each session directory carries its main agent's event stream at `agents/main/wire.jsonl` (subagents live under `agents/<id>/wire.jsonl`) plus `state.json` (title and session metadata). lazyagent reads `wire.jsonl` for activity state, tool calls, recent messages, timestamps, and token counters, and also uses it to power `lazyagent-cli search`.
 
 Two on-disk encodings coexist: sessions imported from the legacy kimi-cli materialize the whole conversation as `context.append_message` events, while native kimi-code sessions stream assistant content, tool calls and token usage through `context.append_loop_event` / `usage.record` events. lazyagent parses both.
 

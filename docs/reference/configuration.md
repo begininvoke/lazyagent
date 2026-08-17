@@ -117,7 +117,7 @@ Substring matching is intentional and broad: `"test"` would also hide `/home/me/
 
 ### `api_passphrase`
 
-Default: `""` (empty — auth not yet configured). The passphrase used with `api_salt` to derive the bearer token that protects the [HTTP API](../interfaces/http-api.md). Created interactively on the first run of `lazyagent --api`; values shorter than 12 characters are rejected. You can edit it manually here at any time, and the next API server startup will derive a new token from it.
+Default: `""` (empty — auth not yet configured). The passphrase used with `api_salt` to derive the bearer token that protects the [HTTP API](../interfaces/http-api.md). Created interactively on the first run of `lazyagent-cli --api`; values shorter than 12 characters are rejected. You can edit it manually here at any time, and the next API server startup will derive a new token from it.
 
 Anyone who can read this file can talk to your API. lazyagent writes the config file with `0600` permissions and the config directory with `0700`, but you should still protect your home directory the same way you protect any other secret-bearing config (`~/.ssh`, `~/.aws`, etc).
 

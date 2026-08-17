@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-`lazyagent sessions` lists every session whose working directory is the
+`lazyagent-cli sessions` lists every session whose working directory is the
 current directory (or a subdirectory of it), across all supported agents,
 newest first. Selecting a session resumes it with the originating agent's
 own CLI.
@@ -13,7 +13,7 @@ own CLI.
 ## Synopsis
 
 ```
-lazyagent sessions [--agent NAME] [--json] [--dir PATH]
+lazyagent-cli sessions [--agent NAME] [--json] [--dir PATH]
 ```
 
 ## The picker
@@ -88,11 +88,11 @@ shape.
 
 ### Progressive picker
 
-When you run `lazyagent sessions`, the picker opens immediately and results stream in as each agent's discovery completes. A footer displays `loading agents… (done/total)` during discovery. Once all agents finish, the footer switches to the normal keybinding hint. If discovery finishes with zero sessions, the command prints "No sessions found in …" and exits.
+When you run `lazyagent-cli sessions`, the picker opens immediately and results stream in as each agent's discovery completes. A footer displays `loading agents… (done/total)` during discovery. Once all agents finish, the footer switches to the normal keybinding hint. If discovery finishes with zero sessions, the command prints "No sessions found in …" and exits.
 
 ### Discovery cache
 
-All session-discovery surfaces — `lazyagent sessions`, the TUI, the macOS GUI,
+All session-discovery surfaces — `lazyagent-cli sessions`, the TUI, the macOS GUI,
 and the HTTP API — maintain persistent discovery caches under your system
 cache directory. They use the same location and file format, so a warm cache
 created by one surface can speed up another:

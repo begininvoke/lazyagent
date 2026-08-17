@@ -1,22 +1,22 @@
 ---
 title: "CLI reference"
-description: "Every `lazyagent` invocation flag, with syntax, defaults, and examples."
+description: "Every `lazyagent-cli` invocation flag, with syntax, defaults, and examples."
 sidebar:
   order: 1
 ---
 
-This page documents the root `lazyagent` command — the one you run to monitor agents. Maintenance and search subcommands live alongside it:
+This page documents the root `lazyagent-cli` command — the one you run to monitor agents. Maintenance and search subcommands live alongside it:
 
-- [`lazyagent prune`](../maintenance/prune.md) — delete old or orphaned chat files
-- [`lazyagent compact`](../maintenance/compact.md) — truncate bulky payloads in place
-- [`lazyagent search`](../maintenance/search.md) — search transcript-file agents with highlighted snippets
-- [`lazyagent limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage summary; add `--detailed` for pace
-- [`lazyagent sessions`](sessions.md) — list sessions for the current directory and reopen one
+- [`lazyagent-cli prune`](../maintenance/prune.md) — delete old or orphaned chat files
+- [`lazyagent-cli compact`](../maintenance/compact.md) — truncate bulky payloads in place
+- [`lazyagent-cli search`](../maintenance/search.md) — search transcript-file agents with highlighted snippets
+- [`lazyagent-cli limits`](../maintenance/limits.md) — show 5-hour, weekly, and monthly usage summary; add `--detailed` for pace
+- [`lazyagent-cli sessions`](sessions.md) — list sessions for the current directory and reopen one
 
 ## Synopsis
 
 ```
-lazyagent [--tui] [--gui] [--api] [--host ADDR]
+lazyagent-cli [--tui] [--gui] [--api] [--host ADDR]
           [--agent NAME] [--demo]
           [--version] [--help]
 ```
@@ -42,10 +42,10 @@ No flag at all is the most common invocation — it opens the TUI with every sup
 Explicitly open the terminal UI. Omitting it is the same as passing it *unless* another mode is specified:
 
 ```bash
-lazyagent                    # implicit --tui
-lazyagent --tui              # explicit, same result
-lazyagent --api              # API only, no TUI
-lazyagent --tui --api        # TUI in foreground, API in background
+lazyagent-cli                    # implicit --tui
+lazyagent-cli --tui              # explicit, same result
+lazyagent-cli --api              # API only, no TUI
+lazyagent-cli --tui --api        # TUI in foreground, API in background
 ```
 
 See [Terminal UI](../interfaces/terminal-ui.md) for keybindings.
@@ -55,9 +55,9 @@ See [Terminal UI](../interfaces/terminal-ui.md) for keybindings.
 Launch the macOS menu bar app. The process detaches from your terminal immediately — the shell prompt returns, and the app appears in the menu bar.
 
 ```bash
-lazyagent --gui              # menu bar only (detached)
-lazyagent --gui --api        # menu bar + API in foreground
-lazyagent --tui --gui --api  # everything (TUI foreground, tray and API in background)
+lazyagent-cli --gui              # menu bar only (detached)
+lazyagent-cli --gui --api        # menu bar + API in foreground
+lazyagent-cli --tui --gui --api  # everything (TUI foreground, tray and API in background)
 ```
 
 On non-macOS systems `--gui` prints an error. See [macOS GUI](../interfaces/macos-gui.md).
@@ -67,12 +67,12 @@ On non-macOS systems `--gui` prints an error. See [macOS GUI](../interfaces/maco
 Start the HTTP API server.
 
 ```bash
-lazyagent --api              # default bind: 127.0.0.1:7421
-lazyagent --api --host :8080 # custom port, localhost only
-lazyagent --api --host 0.0.0.0:7421   # expose on the network
+lazyagent-cli --api              # default bind: 127.0.0.1:7421
+lazyagent-cli --api --host :8080 # custom port, localhost only
+lazyagent-cli --api --host 0.0.0.0:7421   # expose on the network
 ```
 
-On the very first interactive run, `--api` prompts for a passphrase, saves it to `~/.config/lazyagent/config.json`, and prints the derived bearer token to stderr once. On subsequent runs it does not print the token; use `lazyagent passphrase --show` when you explicitly need it. Set `LAZYAGENT_API_PASSPHRASE` in the environment to override the configured value (useful for CI / launchd).
+On the very first interactive run, `--api` prompts for a passphrase, saves it to `~/.config/lazyagent/config.json`, and prints the derived bearer token to stderr once. On subsequent runs it does not print the token; use `lazyagent-cli passphrase --show` when you explicitly need it. Set `LAZYAGENT_API_PASSPHRASE` in the environment to override the configured value (useful for CI / launchd).
 
 If the chosen port is busy, the default bind falls back across `7421`–`7431`; when `--host` is set, there is no fallback. Full reference: [HTTP API](../interfaces/http-api.md).
 
@@ -106,12 +106,12 @@ Restrict monitoring to one agent. Valid values:
 | `all` | Every enabled agent (default) |
 
 ```bash
-lazyagent --agent claude     # only Claude
-lazyagent --agent codex      # only Codex
-lazyagent --agent grok       # only Grok
-lazyagent --agent kilo       # only Kilo
-lazyagent --agent kimi       # only Kimi Code
-lazyagent --agent all        # default — every agent
+lazyagent-cli --agent claude     # only Claude
+lazyagent-cli --agent codex      # only Codex
+lazyagent-cli --agent grok       # only Grok
+lazyagent-cli --agent kilo       # only Kilo
+lazyagent-cli --agent kimi       # only Kimi Code
+lazyagent-cli --agent all        # default — every agent
 ```
 
 To disable agents *permanently* (rather than per-invocation), flip them in the [`agents` map of your config](../reference/configuration.md#agents).
@@ -121,8 +121,8 @@ To disable agents *permanently* (rather than per-invocation), flip them in the [
 Replace real session discovery with a curated fake dataset — useful for screenshots, demos, or debugging the UI without cluttering your actual agent history.
 
 ```bash
-lazyagent --demo             # fake TUI
-lazyagent --demo --gui       # fake tray app
+lazyagent-cli --demo             # fake TUI
+lazyagent-cli --demo --gui       # fake tray app
 ```
 
 Combinable with any interface flag.
@@ -130,7 +130,7 @@ Combinable with any interface flag.
 ### `--version`
 
 ```bash
-lazyagent --version
+lazyagent-cli --version
 ```
 
 Prints the running version and, if a newer release is available on GitHub, a hint to update.
@@ -138,7 +138,7 @@ Prints the running version and, if a newer release is available on GitHub, a hin
 ### `--help`
 
 ```bash
-lazyagent --help
+lazyagent-cli --help
 ```
 
 Prints the full usage text, including short keybinding reference.
@@ -148,13 +148,13 @@ Prints the full usage text, including short keybinding reference.
 When the first positional argument is `prune`, `compact`, `search`, `sessions`, `limits`, or `passphrase`, lazyagent switches into subcommand mode — root-level flags are ignored and the subcommand parses its own set.
 
 ```bash
-lazyagent prune --days 30          # prune subcommand
-lazyagent compact --agent claude   # compact subcommand
-lazyagent search --agent codex api # search subcommand
-lazyagent sessions --agent codex   # sessions subcommand
-lazyagent limits --agent claude    # limits subcommand
-lazyagent passphrase               # rotate the API passphrase
-lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
+lazyagent-cli prune --days 30          # prune subcommand
+lazyagent-cli compact --agent claude   # compact subcommand
+lazyagent-cli search --agent codex api # search subcommand
+lazyagent-cli sessions --agent codex   # sessions subcommand
+lazyagent-cli limits --agent claude    # limits subcommand
+lazyagent-cli passphrase               # rotate the API passphrase
+lazyagent-cli --agent claude prune     # ❌ wrong: prune is not a flag value
 ```
 
 See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), [`search`](../maintenance/search.md), [`sessions`](sessions.md), and [`limits`](../maintenance/limits.md) for their flag tables.
@@ -164,9 +164,9 @@ See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), 
 `search` runs full-text search over local agent transcripts (Claude, Codex, pi, Amp, Grok, Kimi) using an incremental SQLite FTS5 index under the user cache directory. Cursor, OpenCode, and Kilo are excluded because their history lives in third-party SQLite databases.
 
 ```bash
-lazyagent search "race condition"
-lazyagent search --agent codex "parser"
-lazyagent search --reindex "config"
+lazyagent-cli search "race condition"
+lazyagent-cli search --agent codex "parser"
+lazyagent-cli search --reindex "config"
 ```
 
 After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command when lazyagent knows one. Grok sessions are searchable but not directly resumable, because Grok CLI does not expose a resume command. Piped output stays non-interactive.
@@ -178,13 +178,13 @@ Full reference, including the index location, ranking, resume commands, and Grok
 `limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default table labels each 5-hour and weekly/global cell as `used` and `exp`, where `exp` is the linear pace for elapsed window time; `--detailed` prints the full per-window report with reset times and the pace indicator (`underutilizing` / `on track` / `overutilizing`). Claude and Codex each expose a 5-hour and a 7-day window; Grok exposes a single monthly credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes two monthly rows sharing one billing-cycle window — its Auto/Composer pool and its usage-based API pool, each against its own allowance.
 
 ```bash
-lazyagent limits                 # summary table for all supported limits providers
-lazyagent limits --detailed      # detailed report with bars, reset times, and pace
-lazyagent limits --agent claude  # only Claude Code
-lazyagent limits --agent codex   # only Codex
-lazyagent limits --agent grok    # only Grok
-lazyagent limits --agent kimi    # only Kimi Code
-lazyagent limits --agent cursor  # only Cursor (Models + API pools)
+lazyagent-cli limits                 # summary table for all supported limits providers
+lazyagent-cli limits --detailed      # detailed report with bars, reset times, and pace
+lazyagent-cli limits --agent claude  # only Claude Code
+lazyagent-cli limits --agent codex   # only Codex
+lazyagent-cli limits --agent grok    # only Grok
+lazyagent-cli limits --agent kimi    # only Kimi Code
+lazyagent-cli limits --agent cursor  # only Cursor (Models + API pools)
 ```
 
 Claude data comes from `/api/oauth/usage` on `api.anthropic.com` — the same undocumented endpoint Claude Code's `/status` calls. Codex data comes from `/backend-api/wham/usage` on `chatgpt.com` — the same endpoint the Codex CLI's TUI polls for its rate-limit display. Grok data comes from `/v1/billing` on `cli-chat-proxy.grok.com` — the same undocumented endpoint Grok CLI's `/usage show` slash command calls. Kimi data comes from `/coding/v1/usages` on `api.kimi.com`, the endpoint Kimi Code CLI's `/status` slash command calls. Cursor data comes from `/api/usage-summary` on `cursor.com` — the same endpoint the Cursor dashboard uses for its usage headline — read with the session token from Cursor's local `state.vscdb`; it reports the Auto/Composer and usage-based API pools as separate percentages, shown as two rows.
@@ -193,48 +193,48 @@ Full reference, including disclaimers and token-resolution order: [`limits`](../
 
 ### `passphrase`
 
-`passphrase` sets or rotates the passphrase that protects the [HTTP API](../interfaces/http-api.md). It runs without starting the server, so you can change credentials at any time and let any future `lazyagent --api` pick up the new value.
+`passphrase` sets or rotates the passphrase that protects the [HTTP API](../interfaces/http-api.md). It runs without starting the server, so you can change credentials at any time and let any future `lazyagent-cli --api` pick up the new value.
 
 ```bash
-lazyagent passphrase             # interactive prompt and save
-lazyagent passphrase --show      # print the bearer token for the current passphrase
+lazyagent-cli passphrase             # interactive prompt and save
+lazyagent-cli passphrase --show      # print the bearer token for the current passphrase
 ```
 
 `passphrase` (no flags) always prompts (double-entry confirmation), even if a passphrase is already configured — it's a rotation, not a setup. `--show` derives the token from the env var if `LAZYAGENT_API_PASSPHRASE` is set, otherwise from the configured value, without prompting or changing the passphrase.
 
-`--show` writes the raw token to **stdout** (single line, no prefix) so it can be captured in a pipe: `TOKEN=$(lazyagent passphrase --show)`. Diagnostics (passphrase source, missing-config hints) go to stderr. Other invocations do not print the token.
+`--show` writes the raw token to **stdout** (single line, no prefix) so it can be captured in a pipe: `TOKEN=$(lazyagent-cli passphrase --show)`. Diagnostics (passphrase source, missing-config hints) go to stderr. Other invocations do not print the token.
 
-Restart any running `lazyagent --api` after rotating: the server reads the passphrase at startup, so it keeps using the old token until restarted.
+Restart any running `lazyagent-cli --api` after rotating: the server reads the passphrase at startup, so it keeps using the old token until restarted.
 
 ## Common invocations
 
 ```bash
 # Terminal UI, all agents (the default)
-lazyagent
+lazyagent-cli
 
 # Terminal UI but only Claude
-lazyagent --agent claude
+lazyagent-cli --agent claude
 
 # Menu bar app only
-lazyagent --gui
+lazyagent-cli --gui
 
 # Menu bar app + HTTP API (ideal daily-driver combo on macOS)
-lazyagent --gui --api
+lazyagent-cli --gui --api
 
 # HTTP API exposed on the LAN for a mobile client
-lazyagent --api --host 0.0.0.0:7421
+lazyagent-cli --api --host 0.0.0.0:7421
 
 # Everything at once
-lazyagent --tui --gui --api
+lazyagent-cli --tui --gui --api
 
 # Demo mode for screenshots
-lazyagent --demo --gui
+lazyagent-cli --demo --gui
 
 # Search chat history
-lazyagent search "api server"
+lazyagent-cli search "api server"
 
 # List and reopen sessions for the current directory
-lazyagent sessions
+lazyagent-cli sessions
 ```
 
 ## Exit codes
@@ -251,11 +251,11 @@ Subcommands define their own exit codes; see their respective reference pages.
 | Variable | Effect |
 |----------|--------|
 | `CLAUDE_CONFIG_DIR` | Alternate Claude home when `claude_dirs` is not set in the config. Must contain a `projects/` subfolder |
-| `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Claude call. Bypasses the macOS keychain and the credentials file |
-| `GROK_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Grok billing call. Bypasses `~/.grok/auth.json` |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent-cli limits` for the Claude call. Bypasses the macOS keychain and the credentials file |
+| `GROK_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent-cli limits` for the Grok billing call. Bypasses `~/.grok/auth.json` |
 | `KIMI_SHARE_DIR` | Alternate Kimi Code data root. Defaults to `~/.kimi-code` |
-| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent limits` for the Kimi call. Bypasses `~/.kimi-code/credentials/kimi-code.json` |
-| `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL for `lazyagent limits`; `/usages` is appended |
+| `KIMI_CODE_OAUTH_TOKEN` | Override the OAuth token used by `lazyagent-cli limits` for the Kimi call. Bypasses `~/.kimi-code/credentials/kimi-code.json` |
+| `KIMI_CODE_BASE_URL` | Override the Kimi Code API base URL for `lazyagent-cli limits`; `/usages` is appended |
 | `XDG_CONFIG_HOME` | Overrides the default `~/.config` base for `~/.config/lazyagent/` |
 | `VISUAL` | Preferred GUI editor for <kbd>o</kbd> (TUI) / Open (GUI). See [Editor support](../reference/editor-support.md) |
 | `EDITOR` | Fallback terminal editor when `$VISUAL` is unset |

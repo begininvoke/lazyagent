@@ -33,11 +33,11 @@ lazyagent/
 │   ├── ui/                     # TUI rendering (bubbletea + lipgloss, dark/light themes)
 │   ├── tray/                   # macOS menu bar (Wails v3, build-tagged)
 │   ├── chatops/                # Shared CLI helpers: agent picker, tables, notices, safety
-│   ├── prune/                  # `lazyagent prune` — delete old or orphaned chat files
-│   ├── compact/                # `lazyagent compact` — truncate oversized session payloads
-│   ├── search/                 # `lazyagent search` — local transcript full-text search
-│   ├── sessions/               # `lazyagent sessions` — directory-scoped listing and picker
-│   ├── limits/                 # `lazyagent limits` — rate-limit / billing snapshots
+│   ├── prune/                  # `lazyagent-cli prune` — delete old or orphaned chat files
+│   ├── compact/                # `lazyagent-cli compact` — truncate oversized session payloads
+│   ├── search/                 # `lazyagent-cli search` — local transcript full-text search
+│   ├── sessions/               # `lazyagent-cli sessions` — directory-scoped listing and picker
+│   ├── limits/                 # `lazyagent-cli limits` — rate-limit / billing snapshots
 │   ├── demo/                   # Fake session data for screenshots
 │   └── assets/                 # Embedded frontend dist (go:embed)
 ├── frontend/                   # Svelte 5 + Tailwind 4 (menu bar UI)
@@ -82,7 +82,7 @@ concurrently.
 
 ### `internal/sessions`
 
-Implements `lazyagent sessions`: directory matching, deterministic sorting,
+Implements `lazyagent-cli sessions`: directory matching, deterministic sorting,
 the progressive Bubble Tea picker, stable JSON output, resume/copy behavior,
 and the one-shot command's cache lifecycle. Directory matching helpers live
 in `internal/core` so the HTTP API's `GET /api/sessions?dir=` filter uses the

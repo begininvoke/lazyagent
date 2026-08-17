@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-`lazyagent limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default output is optimized for a quick scan: one row per agent — two for Cursor, whose Auto/Composer and API pools are metered independently — with a **5-hour** column and a **weekly/global** column. Each populated cell labels both **used** and **expected**, where expected is the linear usage pace for elapsed window time. `--detailed` prints the full per-window report with reset times, source notes, and the *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
+`lazyagent-cli limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default output is optimized for a quick scan: one row per agent — two for Cursor, whose Auto/Composer and API pools are metered independently — with a **5-hour** column and a **weekly/global** column. Each populated cell labels both **used** and **expected**, where expected is the linear usage pace for elapsed window time. `--detailed` prints the full per-window report with reset times, source notes, and the *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
 
 Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single **monthly** credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes two **monthly** rows sharing one billing-cycle window — its Auto/Composer pool and its usage-based API pool, each against its own allowance.
 
@@ -16,7 +16,7 @@ The same limits are viewable interactively without leaving lazyagent: in the **T
 ## Synopsis
 
 ```
-lazyagent limits [--agent claude|codex|grok|kimi|cursor|all] [--detailed]
+lazyagent-cli limits [--agent claude|codex|grok|kimi|cursor|all] [--detailed]
 ```
 
 ## Flags
@@ -32,14 +32,14 @@ Only `claude`, `codex`, `grok`, `kimi`, and `cursor` are supported — they're t
 ## Quick reference
 
 ```bash
-lazyagent limits                   # summary table for all supported limits providers (default)
-lazyagent limits --detailed        # detailed report with bars, reset times, and pace
-lazyagent limits --agent claude    # only Claude Code
-lazyagent limits --agent codex     # only Codex
-lazyagent limits --agent grok      # only Grok
-lazyagent limits --agent kimi      # only Kimi Code
-lazyagent limits --agent cursor    # only Cursor (Models + API pools)
-lazyagent limits --help            # full usage + disclaimers
+lazyagent-cli limits                   # summary table for all supported limits providers (default)
+lazyagent-cli limits --detailed        # detailed report with bars, reset times, and pace
+lazyagent-cli limits --agent claude    # only Claude Code
+lazyagent-cli limits --agent codex     # only Codex
+lazyagent-cli limits --agent grok      # only Grok
+lazyagent-cli limits --agent kimi      # only Kimi Code
+lazyagent-cli limits --agent cursor    # only Cursor (Models + API pools)
+lazyagent-cli limits --help            # full usage + disclaimers
 ```
 
 ## Output
@@ -216,7 +216,7 @@ The default `--agent all` mode is forgiving: a missing agent is not an error, it
 - **No stability guarantee** — the endpoint, response shape, or beta header may change without notice. lazyagent fails gracefully when this happens (clear error, exit code 1).
 - **Subscription scope** — the endpoint reflects the limits of the Claude.ai Pro/Max plan associated with the OAuth token. API-key users (Console, Bedrock, Vertex) won't see meaningful data here.
 
-If you're distributing lazyagent or building automation on top of it, prefer running `lazyagent limits` only when a human has asked for it. Don't put it in a `watch` loop.
+If you're distributing lazyagent or building automation on top of it, prefer running `lazyagent-cli limits` only when a human has asked for it. Don't put it in a `watch` loop.
 
 For **Grok**, `/v1/billing` is similarly **not** part of xAI's documented public API. As of this writing it is used internally by the Grok CLI's `/usage show` slash command and is subject to:
 
@@ -236,7 +236,7 @@ For **Cursor**, `/api/usage-summary` on `cursor.com` is not documented as a publ
 - **Vendor-computed percentages** — the figures come from Cursor's own `autoPercentUsed` / `apiPercentUsed`, so they track whatever allowances Cursor applies to your plan. If Cursor renames or restructures those fields, lazyagent fails gracefully rather than reporting a stale number.
 - **Session-token reuse** — lazyagent reads the session token from Cursor's local `state.vscdb` and sends it as the dashboard's cookie. Treat it as a credential; it is not refreshed.
 
-The "don't poll" guidance applies equally to Grok, Kimi, and Cursor: run `lazyagent limits` interactively, not in a `watch` loop.
+The "don't poll" guidance applies equally to Grok, Kimi, and Cursor: run `lazyagent-cli limits` interactively, not in a `watch` loop.
 
 ## Exit codes
 
@@ -260,5 +260,5 @@ Even on partial failure (`1`), the successful agents' output is printed to stdou
 ## See also
 
 - [Roadmap](../reference/roadmap.md) — shipped features per version
-- [`lazyagent prune`](prune.md) — delete chat files (destructive, complementary)
-- [`lazyagent compact`](compact.md) — shrink chat files in place (destructive, complementary)
+- [`lazyagent-cli prune`](prune.md) — delete chat files (destructive, complementary)
+- [`lazyagent-cli compact`](compact.md) — shrink chat files in place (destructive, complementary)

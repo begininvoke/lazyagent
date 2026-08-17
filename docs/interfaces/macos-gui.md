@@ -19,7 +19,7 @@ The GUI ships as `Lazyagent.app`, a real macOS bundle (`brew install --cask ille
 
 Because it's a proper bundle, the app carries a real LaunchServices identity: Cmd-Tab and the Dock show the Lazyagent icon and name, not a generic Unix-executable icon. This fixes a previous limitation where the app's Cmd-Tab presentation fell back to the generic icon since a bare Mach-O binary has no bundle identifier.
 
-From a terminal, `lazyagent-cli --gui` inside the bundle relaunches the app via LaunchServices (`open -b com.illegalstudio.lazyagent`) rather than forking a child process, forwarding along `--demo` and `--agent`. This keeps the GUI process under the bundle's identity even when launched indirectly. On the CLI-only build (`lazyagent-cli` installed via the `lazyagent-cli` formula, no tray support), `--gui` still errors as before — that build never had a GUI to launch.
+From a terminal, `lazyagent-cli --gui` inside the bundle relaunches the app via LaunchServices (`open -b com.illegalstudio.lazyagent`) rather than forking a child process, forwarding along `--demo` and `--agent`. This keeps the GUI process under the bundle's identity even when launched indirectly. The forwarded flags only take effect on a **fresh launch** — if the app is already running, LaunchServices just activates the existing instance and the new `--demo`/`--agent` values are ignored, since no new process starts to read them. On the CLI-only build (`lazyagent-cli` installed via the `lazyagent-cli` formula, no tray support), `--gui` still errors as before — that build never had a GUI to launch.
 
 ## The self-linked CLI
 
