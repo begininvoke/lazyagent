@@ -54,6 +54,19 @@ var knownAgentNames = map[string]struct{}{
 	"grok": {}, "kimi": {}, "kilo": {},
 }
 
+// validCardDensities lists the accepted desktop card density values.
+var validCardDensities = map[string]struct{}{
+	"compact": {}, "rich": {}, "live": {},
+}
+
+// NormalizeCardDensity returns d if it is a valid card density, "live" otherwise.
+func NormalizeCardDensity(d string) string {
+	if _, ok := validCardDensities[d]; ok {
+		return d
+	}
+	return "live"
+}
+
 // Validate returns nil if the webhook is well-formed.
 func (w WebhookConfig) Validate() error {
 	if strings.TrimSpace(w.Name) == "" {
@@ -108,6 +121,7 @@ type Config struct {
 	ClaudeDirs           []string        `json:"claude_dirs,omitempty"`
 	ExcludeCWDSubstrings []string        `json:"exclude_cwd_substrings"`
 	TUI                  TUIConfig       `json:"tui"`
+	CardDensity          string          `json:"card_density,omitempty"`
 	Webhooks             []WebhookConfig `json:"webhooks,omitempty"`
 	// APIPassphrase is the secret used to derive the bearer token that
 	// protects the HTTP API. Empty means the API has not been configured yet

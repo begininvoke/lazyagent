@@ -443,6 +443,22 @@ func (s *SessionService) GetConfig() core.Config {
 	return cfg
 }
 
+// GetCardDensity returns the persisted desktop card density. Missing or
+// invalid values fall back to "live".
+func (s *SessionService) GetCardDensity() string {
+	return core.NormalizeCardDensity(core.LoadConfig().CardDensity)
+}
+
+// SetCardDensity persists the desktop card density choice.
+func (s *SessionService) SetCardDensity(d string) error {
+	if core.NormalizeCardDensity(d) != d {
+		return fmt.Errorf("invalid card density %q", d)
+	}
+	cfg := core.LoadConfig()
+	cfg.CardDensity = d
+	return core.SaveConfig(cfg)
+}
+
 // Detach switches from tray panel to a normal detached window.
 func (s *SessionService) Detach() {
 	s.detachMu.Lock()

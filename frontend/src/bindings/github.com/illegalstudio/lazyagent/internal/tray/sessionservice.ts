@@ -43,6 +43,14 @@ export function GetActiveCount(): $CancellablePromise<number> {
 }
 
 /**
+ * GetCardDensity returns the persisted desktop card density. Missing or
+ * invalid values fall back to "live".
+ */
+export function GetCardDensity(): $CancellablePromise<string> {
+    return $Call.ByID(2985488372);
+}
+
+/**
  * GetConfig returns the current config. The API passphrase is scrubbed
  * before returning so the secret never crosses the Wails IPC boundary into
  * the frontend (mirrors what /api/config does for HTTP callers).
@@ -140,6 +148,13 @@ export function OpenReleases(): $CancellablePromise<void> {
  */
 export function SetActivityFilter(f: string): $CancellablePromise<void> {
     return $Call.ByID(3837448025, f);
+}
+
+/**
+ * SetCardDensity persists the desktop card density choice.
+ */
+export function SetCardDensity(d: string): $CancellablePromise<void> {
+    return $Call.ByID(2444020248, d);
 }
 
 /**
