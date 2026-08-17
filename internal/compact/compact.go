@@ -1,4 +1,4 @@
-// Package compact implements the `lazyagent compact` subcommand, which
+// Package compact implements the `lazyagent-cli compact` subcommand, which
 // shrinks chat session files in place by truncating oversized tool results,
 // thinking blocks, and image payloads. The conversation text, message
 // structure, and tool call metadata are preserved so sessions remain
@@ -73,10 +73,10 @@ func Run(args []string) int {
 	fs.BoolVar(&noBackup, "no-backup", false, "Skip writing a .bak sidecar before rewriting (default: write it)")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `lazyagent compact — shrink chat session files by truncating bulky payloads
+		fmt.Fprintf(os.Stderr, `lazyagent-cli compact — shrink chat session files by truncating bulky payloads
 
 Usage:
-  lazyagent compact [flags]
+  lazyagent-cli compact [flags]
 
 Compact rewrites each JSONL line, truncating tool outputs, thinking blocks
 and image data above the threshold. The conversation text and structure are

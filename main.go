@@ -32,6 +32,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/ui"
 	"github.com/illegalstudio/lazyagent/internal/version"
 	"github.com/illegalstudio/lazyagent/internal/webhook"
+	"golang.org/x/term"
 )
 
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
@@ -154,8 +155,13 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 		exePath = rp
 	}
 	inBundle := core.InBundlePath(exePath)
+	// A LaunchServices launch (Finder, login item) has no controlling
+	// terminal on stdin; a user typing the self-linked lazyagent-cli in a
+	// shell does. Bundle + no mode flags + no TTY = GUI launch; with a
+	// TTY the default stays the TUI, as documented.
 	runDirectGUI := inBundle && tray.Available() &&
-		!*guiMode && !*trayMode && !*tuiMode && !*apiMode
+		!*guiMode && !*trayMode && !*tuiMode && !*apiMode &&
+		!term.IsTerminal(int(os.Stdin.Fd()))
 
 	runGUI := *guiMode || *trayMode || runDirectGUI
 	// Default: TUI if no other mode explicitly requested.

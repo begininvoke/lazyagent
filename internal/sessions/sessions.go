@@ -18,7 +18,7 @@ var validAgents = map[string]bool{
 	"codex": true, "amp": true, "grok": true, "kimi": true, "all": true,
 }
 
-// Run implements `lazyagent sessions`. It lists the sessions recorded for
+// Run implements `lazyagent-cli sessions`. It lists the sessions recorded for
 // the current (or --dir) directory across agents and reopens the chosen one.
 func Run(args []string) int {
 	fs := flag.NewFlagSet("sessions", flag.ContinueOnError)
@@ -29,17 +29,17 @@ func Run(args []string) int {
 	dirFlag := fs.String("dir", "", "List sessions for this directory instead of the current one")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `lazyagent sessions — list sessions for a directory and reopen one
+		fmt.Fprintf(os.Stderr, `lazyagent-cli sessions — list sessions for a directory and reopen one
 
 Lists every recorded session whose working directory is the current
 directory (or --dir) or a subdirectory of it, across all agents.
 Selecting a session resumes it with the originating agent's CLI.
 
 Usage:
-  lazyagent sessions
-  lazyagent sessions --agent claude
-  lazyagent sessions --json
-  lazyagent sessions --dir ~/projects/foo
+  lazyagent-cli sessions
+  lazyagent-cli sessions --agent claude
+  lazyagent-cli sessions --json
+  lazyagent-cli sessions --dir ~/projects/foo
 
 Flags:
 `)

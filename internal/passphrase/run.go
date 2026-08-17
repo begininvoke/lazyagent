@@ -1,4 +1,4 @@
-// Package passphrase implements the `lazyagent passphrase` subcommand:
+// Package passphrase implements the `lazyagent-cli passphrase` subcommand:
 // a small interactive utility to set or rotate the API passphrase without
 // having to start the server. Useful when the user wants to change their
 // passphrase, share the bearer token with a new device, or recover the
@@ -15,7 +15,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/core"
 )
 
-// Run is the entry point invoked by main.go for `lazyagent passphrase ...`.
+// Run is the entry point invoked by main.go for `lazyagent-cli passphrase ...`.
 func Run(args []string) int {
 	fs := flag.NewFlagSet("passphrase", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -24,11 +24,11 @@ func Run(args []string) int {
 	fs.BoolVar(&showOnly, "show", false, "Print the bearer token for the current passphrase and exit (no prompt)")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `lazyagent passphrase — set or rotate the HTTP API passphrase
+		fmt.Fprint(os.Stderr, `lazyagent-cli passphrase — set or rotate the HTTP API passphrase
 
 Usage:
-  lazyagent passphrase           Prompt for a new passphrase and save it
-  lazyagent passphrase --show    Print the current bearer token without prompting
+  lazyagent-cli passphrase           Prompt for a new passphrase and save it
+  lazyagent-cli passphrase --show    Print the current bearer token without prompting
 
 The passphrase lives in ~/.config/lazyagent/config.json under "api_passphrase".
 The public per-install salt lives next to it under "api_salt".
@@ -56,7 +56,7 @@ Flags:
 // runShow prints the bearer token for the current passphrase. The raw token
 // goes to stdout (single line, no prefix) so it can be captured in a pipe:
 //
-//	TOKEN=$(lazyagent passphrase --show)
+//	TOKEN=$(lazyagent-cli passphrase --show)
 //
 // All diagnostic context (source of the passphrase, hints on missing config)
 // goes to stderr and never pollutes stdout.
@@ -72,12 +72,12 @@ func runShow(cfg core.Config) int {
 	}
 	if pp == "" {
 		fmt.Fprintln(os.Stderr, "No passphrase configured.")
-		fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase` to set one.")
+		fmt.Fprintln(os.Stderr, "Run `lazyagent-cli passphrase` to set one.")
 		return 1
 	}
 	if err := apiauth.ValidatePassphrase(pp); err != nil {
 		fmt.Fprintf(os.Stderr, "Configured passphrase is invalid: %v\n", err)
-		fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase` to set a stronger one.")
+		fmt.Fprintln(os.Stderr, "Run `lazyagent-cli passphrase` to set a stronger one.")
 		return 1
 	}
 	fmt.Println(apiauth.DeriveToken(pp, cfg.APISalt))
@@ -122,7 +122,7 @@ func runRotate(cfg *core.Config) int {
 		return 1
 	}
 	fmt.Fprintf(os.Stderr, "Passphrase saved to %s\n", core.ConfigPath())
-	fmt.Fprintln(os.Stderr, "Run `lazyagent passphrase --show` to print the bearer token.")
-	fmt.Fprintln(os.Stderr, "Restart `lazyagent --api` for the new token to take effect.")
+	fmt.Fprintln(os.Stderr, "Run `lazyagent-cli passphrase --show` to print the bearer token.")
+	fmt.Fprintln(os.Stderr, "Restart `lazyagent-cli --api` for the new token to take effect.")
 	return 0
 }

@@ -1,4 +1,4 @@
-// Package prune implements the `lazyagent prune` subcommand, which deletes
+// Package prune implements the `lazyagent-cli prune` subcommand, which deletes
 // old or orphaned chat sessions from supported coding agents.
 //
 // Supported agents (v1): claude, pi, codex, grok, kimi. Amp is skipped because local
@@ -52,12 +52,12 @@ func Run(args []string) int {
 	fs.BoolVar(&opts.yes, "yes", false, "Skip confirmation prompt")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `lazyagent prune — delete old or orphaned chat sessions
+		fmt.Fprintf(os.Stderr, `lazyagent-cli prune — delete old or orphaned chat sessions
 
 Usage:
-  lazyagent prune --days N [flags]
-  lazyagent prune --orphaned [flags]
-  lazyagent prune --days N --orphaned [flags]
+  lazyagent-cli prune --days N [flags]
+  lazyagent-cli prune --orphaned [flags]
+  lazyagent-cli prune --days N --orphaned [flags]
 
 At least one of --days or --orphaned is required.
 

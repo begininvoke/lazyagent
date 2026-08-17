@@ -36,13 +36,13 @@ func Run(args []string) int {
 	fs.StringVar(&opts.dbPath, "db", "", "Override search index path (for testing)")
 
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, `lazyagent search — search chat transcripts
+		fmt.Fprintf(os.Stderr, `lazyagent-cli search — search chat transcripts
 
 Usage:
-  lazyagent search [query] [flags]
-  lazyagent search --agent codex "parser bug"
-  lazyagent search --agent grok "parser bug"
-  lazyagent search --agent kimi "parser bug"
+  lazyagent-cli search [query] [flags]
+  lazyagent-cli search --agent codex "parser bug"
+  lazyagent-cli search --agent grok "parser bug"
+  lazyagent-cli search --agent kimi "parser bug"
 
 If query is omitted, lazyagent prompts for it.
 

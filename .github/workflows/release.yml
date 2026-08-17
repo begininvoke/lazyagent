@@ -45,6 +45,10 @@ jobs:
             -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
 
+      # make-app.sh rasterizes the app icon; qlmanage is unreliable headless
+      - name: Install SVG rasterizer
+        run: brew install librsvg
+
       # Build, sign, archive, publish release, and update Homebrew cask
       - uses: goreleaser/goreleaser-action@v6
         with:
@@ -127,6 +131,14 @@ jobs:
           # goreleaser OSS unconditionally emits a `binary "lazyagent"` stanza;
           # the lazyagent command is retired (CLI ships as lazyagent-cli).
           sed -i '' '/^  binary "lazyagent"$/d' Casks/lazyagent.rb
+          if grep -q 'binary "lazyagent"' Casks/lazyagent.rb; then
+            echo "ERROR: binary stanza survived the strip — goreleaser cask template changed?" >&2
+            exit 1
+          fi
+          if ! grep -q "sha256 \"${NEW_SHA}\"" Casks/lazyagent.rb; then
+            echo "ERROR: sha256 patch did not land in the cask" >&2
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -am "lazyagent: patch cask after notarization (sha256 + drop binary stanza) (${TAG})"

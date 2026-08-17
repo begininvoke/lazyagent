@@ -74,6 +74,7 @@ universal_binaries:
     replace: true
     hooks:
       post:
+        - scripts/codesign.sh "{{ .Path }}"
         - scripts/make-app.sh "{{ .Path }}" "{{ .Version }}" dist
 
 archives:

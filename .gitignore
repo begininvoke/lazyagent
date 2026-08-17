@@ -3,6 +3,7 @@
 /lazyagent-app
 /tui
 /app
+dist-app/
 
 # Frontend build
 frontend/node_modules/
