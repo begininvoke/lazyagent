@@ -179,7 +179,24 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			if inBundle {
 				// Relaunch through LaunchServices so the GUI process
 				// keeps the bundle identity (Cmd-Tab icon and name).
-				if err := exec.Command("open", "-b", "com.illegalstudio.lazyagent").Run(); err != nil {
+				// --demo/--agent are forwarded via `open`'s --args
+				// passthrough; --gui is never forwarded, so the
+				// relaunched bundle process enters with no mode flags
+				// (plus these passthrough flags) and becomes
+				// runDirectGUI on its own — no recursion possible.
+				openArgs := []string{"-b", "com.illegalstudio.lazyagent"}
+				var passthrough []string
+				if *demoMode {
+					passthrough = append(passthrough, "--demo")
+				}
+				if *agentMode != "all" {
+					passthrough = append(passthrough, "--agent", *agentMode)
+				}
+				if len(passthrough) > 0 {
+					openArgs = append(openArgs, "--args")
+					openArgs = append(openArgs, passthrough...)
+				}
+				if err := exec.Command("open", openArgs...).Run(); err != nil {
 					// Dev copies moved outside a registered bundle can
 					// fail `open`; the bare fork still works, minus the
 					// LaunchServices identity.
@@ -308,7 +325,7 @@ func setupAPIAuth(cfg *core.Config) (string, error) {
 	if err != nil {
 		if err == apiauth.ErrNoTTY {
 			fmt.Fprintln(os.Stderr, "Error: API passphrase not configured.")
-			fmt.Fprintln(os.Stderr, "Run `lazyagent --api` from a terminal to set one,")
+			fmt.Fprintln(os.Stderr, "Run `lazyagent-cli --api` from a terminal to set one,")
 			fmt.Fprintf(os.Stderr, "or set the %s environment variable.\n", apiauth.EnvVar)
 			return "", fmt.Errorf("no passphrase available")
 		}
@@ -334,7 +351,7 @@ func setupAPIAuth(cfg *core.Config) (string, error) {
 		fmt.Fprintf(os.Stderr, "Bearer token: %s\n", token)
 		fmt.Fprintln(os.Stderr, "Use header:   Authorization: Bearer <token>")
 	} else {
-		fmt.Fprintln(os.Stderr, "Use `lazyagent passphrase --show` to print the bearer token.")
+		fmt.Fprintln(os.Stderr, "Use `lazyagent-cli passphrase --show` to print the bearer token.")
 	}
 	fmt.Fprintln(os.Stderr)
 	return token, nil
