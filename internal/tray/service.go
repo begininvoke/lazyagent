@@ -474,6 +474,9 @@ func (s *SessionService) Detach() {
 		s.app.SetIcon(appIcon)
 		installAppMenu(s.app)
 	})
+	// Load-bearing order: the activation policy switch is dispatched to the
+	// main queue before Show(), so the window appears as a normal desktop-app
+	// window (Dock icon, Cmd-Tab) rather than briefly showing as an accessory.
 	setDesktopActivation(true)
 	s.detachedWindow.Show().Focus()
 	s.detachedWindow.Center()

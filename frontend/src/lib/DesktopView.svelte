@@ -29,6 +29,7 @@
   function handleKeydown(e: KeyboardEvent) {
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if ($showLimits) return;
     const list = $sessions;
     if (!list.length) return;
     const idx = list.findIndex((s) => s.sessionId === $selectedId);

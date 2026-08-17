@@ -35,7 +35,8 @@ sidebar:
 - ✅ Core library extraction
 - ✅ Shared config system
 - ✅ Wails v3 + Svelte 5 + Tailwind 4 frontend
-- ✅ System tray with attached panel
+- ✅ System tray with attached panel (menu bar accessory app, no Dock icon)
+- ✅ Detachable desktop mode: card-grid dashboard with compact/rich/live density switch (persisted via `card_density`), push-in detail panel, Dock icon + Cmd-Tab + native App/Edit/Window menus while detached; reattaching returns to accessory mode
 - ✅ Real-time session updates
 - ✅ SVG sparkline, activity badges
 - ✅ Keyboard shortcuts

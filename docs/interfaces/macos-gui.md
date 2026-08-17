@@ -9,19 +9,21 @@ sidebar:
 lazyagent --gui
 ```
 
-The GUI process detaches from your terminal — the shell returns immediately and the app lives in your menu bar. There's no Dock icon (it's registered as a macOS *accessory* app). Click the tray icon to toggle the panel.
+The GUI process detaches from your terminal — the shell returns immediately and the app lives in your menu bar. In its default attached mode there's no Dock icon (it's registered as a macOS *accessory* app). Click the tray icon to toggle the panel.
 
 ![lazyagent macOS menu bar app](../../assets/tray.png)
 
-## The detachable panel
+## Attached panel vs. detached desktop mode
 
-The panel defaults to an attached popover below the menu bar icon. Press <kbd>d</kbd> (or click the detach button in the header) to pop it out into a standalone resizable window. Once detached you can:
+The panel defaults to an attached popover below the menu bar icon. Press <kbd>d</kbd> (or click the detach button in the header) to pop it out.
 
-- **Move it** anywhere on your screen.
+Detaching turns lazyagent into a full desktop app: a Dock icon appears, it shows up in Cmd-Tab, and native macOS menus (App, Edit, Window) are installed. The compact popover is replaced by a card-grid dashboard, with a density switch — **compact**, **rich**, or **live** — that controls how much detail each session card shows; your choice is persisted across launches. Selecting a card pushes in a detail panel alongside the grid rather than covering it. Once detached you can also:
+
+- **Move the window** anywhere on your screen.
 - **Resize it** to whatever dimensions you want.
 - **Pin it always-on-top** so it stays visible while you work.
 
-Press <kbd>d</kbd> again or close the window to snap it back to the menu bar.
+Press <kbd>d</kbd> again or close the window to reattach — the Dock icon goes away and lazyagent returns to menu bar accessory mode.
 
 ## Keybindings
 

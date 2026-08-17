@@ -43,5 +43,10 @@ func installAppMenu(app *application.App) {
 	menu.AddRole(application.EditMenu)
 	menu.AddRole(application.WindowMenu)
 
-	app.Menu.SetApplicationMenu(menu)
+	// AppKit requires [NSApp setMainMenu:] to run on the main thread, and
+	// Wails v3.0.0-alpha.74's macosApp.setApplicationMenu calls it directly
+	// on the caller's goroutine with no internal dispatch. Detach() runs on
+	// a Wails binding-call goroutine, so this must be forced onto the main
+	// thread explicitly.
+	application.InvokeSync(func() { app.Menu.SetApplicationMenu(menu) })
 }
