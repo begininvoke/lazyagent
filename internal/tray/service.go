@@ -37,6 +37,7 @@ type SessionService struct {
 	detachMu       sync.RWMutex
 	detached       bool
 	pinned         bool
+	desktopOnce    sync.Once // one-time desktop setup: app icon + native menu
 }
 
 // ServiceStartup is called by Wails when the app starts.
@@ -469,6 +470,11 @@ func (s *SessionService) Detach() {
 	s.detached = true
 	s.detachMu.Unlock()
 	s.panelWindow.Hide()
+	s.desktopOnce.Do(func() {
+		s.app.SetIcon(appIcon)
+		installAppMenu(s.app)
+	})
+	setDesktopActivation(true)
 	s.detachedWindow.Show().Focus()
 	s.detachedWindow.Center()
 	s.emitDetachChanged()
@@ -489,6 +495,7 @@ func (s *SessionService) Attach() {
 		s.detachedWindow.SetAlwaysOnTop(false)
 	}
 	s.detachedWindow.Hide()
+	setDesktopActivation(false)
 	s.emitDetachChanged()
 }
 
