@@ -60,6 +60,8 @@ export class SessionFull {
     "lastActivity": time$0.Time;
     "totalMessages": number;
     "sparklineData": number[];
+    "currentTool": string;
+    "lastMessage": string;
     "version": string;
     "isWorktree": boolean;
     "mainRepo": string;
@@ -69,7 +71,6 @@ export class SessionFull {
     "cacheReadTokens": number;
     "userMessages": number;
     "assistantMessages": number;
-    "currentTool": string;
     "lastFileWrite": string;
     "lastFileWriteAt": time$0.Time;
     "recentTools": ToolItem[];
@@ -127,6 +128,12 @@ export class SessionFull {
         if (!("sparklineData" in $$source)) {
             this["sparklineData"] = [];
         }
+        if (!("currentTool" in $$source)) {
+            this["currentTool"] = "";
+        }
+        if (!("lastMessage" in $$source)) {
+            this["lastMessage"] = "";
+        }
         if (!("version" in $$source)) {
             this["version"] = "";
         }
@@ -154,9 +161,6 @@ export class SessionFull {
         if (!("assistantMessages" in $$source)) {
             this["assistantMessages"] = 0;
         }
-        if (!("currentTool" in $$source)) {
-            this["currentTool"] = "";
-        }
         if (!("lastFileWrite" in $$source)) {
             this["lastFileWrite"] = "";
         }
@@ -178,17 +182,17 @@ export class SessionFull {
      */
     static createFrom($$source: any = {}): SessionFull {
         const $$createField14_0 = $$createType0;
-        const $$createField27_0 = $$createType2;
-        const $$createField28_0 = $$createType4;
+        const $$createField28_0 = $$createType2;
+        const $$createField29_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("sparklineData" in $$parsedSource) {
             $$parsedSource["sparklineData"] = $$createField14_0($$parsedSource["sparklineData"]);
         }
         if ("recentTools" in $$parsedSource) {
-            $$parsedSource["recentTools"] = $$createField27_0($$parsedSource["recentTools"]);
+            $$parsedSource["recentTools"] = $$createField28_0($$parsedSource["recentTools"]);
         }
         if ("recentMessages" in $$parsedSource) {
-            $$parsedSource["recentMessages"] = $$createField28_0($$parsedSource["recentMessages"]);
+            $$parsedSource["recentMessages"] = $$createField29_0($$parsedSource["recentMessages"]);
         }
         return new SessionFull($$parsedSource as Partial<SessionFull>);
     }
@@ -213,6 +217,8 @@ export class SessionItem {
     "lastActivity": time$0.Time;
     "totalMessages": number;
     "sparklineData": number[];
+    "currentTool": string;
+    "lastMessage": string;
 
     /** Creates a new SessionItem instance. */
     constructor($$source: Partial<SessionItem> = {}) {
@@ -260,6 +266,12 @@ export class SessionItem {
         }
         if (!("sparklineData" in $$source)) {
             this["sparklineData"] = [];
+        }
+        if (!("currentTool" in $$source)) {
+            this["currentTool"] = "";
+        }
+        if (!("lastMessage" in $$source)) {
+            this["lastMessage"] = "";
         }
 
         Object.assign(this, $$source);

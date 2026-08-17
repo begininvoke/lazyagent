@@ -161,6 +161,8 @@ type SessionItem struct {
 	LastActivity  time.Time `json:"lastActivity"`
 	TotalMessages int       `json:"totalMessages"`
 	SparklineData []int     `json:"sparklineData"`
+	CurrentTool   string    `json:"currentTool"`
+	LastMessage   string    `json:"lastMessage"`
 }
 
 // SessionFull is the detailed session representation.
@@ -175,7 +177,6 @@ type SessionFull struct {
 	CacheReadTokens     int                `json:"cacheReadTokens"`
 	UserMessages        int                `json:"userMessages"`
 	AssistantMessages   int                `json:"assistantMessages"`
-	CurrentTool         string             `json:"currentTool"`
 	LastFileWrite       string             `json:"lastFileWrite"`
 	LastFileWriteAt     time.Time          `json:"lastFileWriteAt"`
 	RecentTools         []ToolItem         `json:"recentTools"`
@@ -222,6 +223,8 @@ func (s *SessionService) buildSessionItem(sess *model.Session, activity core.Act
 		LastActivity:  sess.LastActivity,
 		TotalMessages: sess.TotalMessages,
 		SparklineData: core.BucketTimestamps(sess.EntryTimestamps, time.Duration(wm)*time.Minute, 20),
+		CurrentTool:   sess.CurrentTool,
+		LastMessage:   lastMessageSnippet(sess),
 	}
 }
 
@@ -281,7 +284,6 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 		CacheReadTokens:     sess.CacheReadTokens,
 		UserMessages:        sess.UserMessages,
 		AssistantMessages:   sess.AssistantMessages,
-		CurrentTool:         sess.CurrentTool,
 		LastFileWrite:       sess.LastFileWrite,
 		LastFileWriteAt:     sess.LastFileWriteAt,
 		RecentTools:         tools,
@@ -506,4 +508,16 @@ func (s *SessionService) emitDetachChanged() {
 	if s.app != nil {
 		s.app.Event.Emit("detach:changed")
 	}
+}
+
+// lastMessageSnippet returns a short single-line snippet of the newest
+// recent message, shown on the desktop "live" card. RecentMessages is
+// chronological, so the newest entry is the last one.
+func lastMessageSnippet(sess *model.Session) string {
+	if len(sess.RecentMessages) == 0 {
+		return ""
+	}
+	text := sess.RecentMessages[len(sess.RecentMessages)-1].Text
+	text = strings.Join(strings.Fields(text), " ")
+	return core.TruncateRunes(text, 140)
 }

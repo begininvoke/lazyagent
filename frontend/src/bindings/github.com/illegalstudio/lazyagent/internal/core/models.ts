@@ -102,7 +102,7 @@ export class Config {
  */
 export class TUIConfig {
     /**
-     * "dark" (default) or "light"
+     * "auto" (default), "dark", or "light"
      */
     "theme": string;
 
