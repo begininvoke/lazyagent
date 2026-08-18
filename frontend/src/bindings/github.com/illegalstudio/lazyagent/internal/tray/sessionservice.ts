@@ -152,6 +152,23 @@ export function OpenReleases(): $CancellablePromise<void> {
 }
 
 /**
+ * Refresh forces a session reload. Bound to the toolbar refresh button and
+ * the View menu.
+ */
+export function Refresh(): $CancellablePromise<void> {
+    return $Call.ByID(310175433);
+}
+
+/**
+ * ResumeInTerminal opens a new Terminal window in the session's working
+ * directory running the agent's resume command. No-op for agents without
+ * an executable resume command (core.ResumeArgv returns nil for those).
+ */
+export function ResumeInTerminal(sessionID: string): $CancellablePromise<void> {
+    return $Call.ByID(1408127766, sessionID);
+}
+
+/**
  * SetActivityFilter sets the activity filter.
  */
 export function SetActivityFilter(f: string): $CancellablePromise<void> {
@@ -160,6 +177,9 @@ export function SetActivityFilter(f: string): $CancellablePromise<void> {
 
 /**
  * SetCardDensity persists the desktop card density choice.
+ * core.UpdateConfig holds a file lock for the whole read-modify-write, so
+ * concurrent writers (this process or another lazyagent process) cannot
+ * clobber each other's config fields.
  */
 export function SetCardDensity(d: string): $CancellablePromise<void> {
     return $Call.ByID(2444020248, d);

@@ -23,10 +23,10 @@ func quitWithWatchdog(app *application.App) {
 
 // installAppMenu installs the native application menu used in desktop
 // (detached) mode: App menu with standard roles, Edit (clipboard support
-// for the search field), and Window. The built-in Quit role calls
-// app.Quit() directly and would bypass the deadlock watchdog, so the
-// Quit item is custom.
-func installAppMenu(app *application.App) {
+// for the search field), View (density, limits, refresh), and Window.
+// The built-in Quit role calls app.Quit() directly and would bypass the
+// deadlock watchdog, so the Quit item is custom.
+func installAppMenu(app *application.App, svc *SessionService) {
 	menu := application.NewMenu()
 
 	appMenu := menu.AddSubmenu("lazyagent")
@@ -41,6 +41,32 @@ func installAppMenu(app *application.App) {
 		OnClick(func(ctx *application.Context) { quitWithWatchdog(app) })
 
 	menu.AddRole(application.EditMenu)
+
+	// View menu: density is persisted Go-side, then broadcast so the
+	// frontend store follows; limits is pure frontend state, so the menu
+	// only emits and the webview flips it.
+	viewMenu := menu.AddSubmenu("View")
+	for i, d := range []string{"compact", "rich", "live"} {
+		density := d
+		viewMenu.Add("Density: "+density).
+			SetAccelerator("CmdOrCtrl+" + string(rune('1'+i))).
+			OnClick(func(ctx *application.Context) {
+				_ = svc.SetCardDensity(density)
+				app.Event.Emit("density:changed", density)
+			})
+	}
+	viewMenu.AddSeparator()
+	viewMenu.Add("Toggle Limits").
+		SetAccelerator("CmdOrCtrl+l").
+		OnClick(func(ctx *application.Context) {
+			app.Event.Emit("menu:toggleLimits")
+		})
+	viewMenu.Add("Refresh Sessions").
+		SetAccelerator("CmdOrCtrl+r").
+		OnClick(func(ctx *application.Context) {
+			svc.Refresh()
+		})
+
 	menu.AddRole(application.WindowMenu)
 
 	// AppKit requires [NSApp setMainMenu:] to run on the main thread, and

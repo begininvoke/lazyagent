@@ -109,6 +109,15 @@
       syncDetachState();
     });
 
+    // Native View-menu events (desktop mode).
+    Events.On("density:changed", (ev: any) => {
+      const d = Array.isArray(ev?.data) ? ev.data[0] : ev?.data;
+      if (d === "compact" || d === "rich" || d === "live") $cardDensity = d;
+    });
+    Events.On("menu:toggleLimits", () => {
+      $showLimits = !$showLimits;
+    });
+
     // Check for updates after a short delay (gives the backend time to fetch)
     setTimeout(async () => {
       try {

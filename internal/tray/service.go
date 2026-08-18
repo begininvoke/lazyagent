@@ -391,15 +391,47 @@ func launchGUI(editor, cwd string) {
 
 // launchInTerminal opens a terminal editor inside a new macOS Terminal.app window.
 func launchInTerminal(editor, cwd string) {
+	launchCommandInTerminal([]string{editor}, cwd)
+}
+
+// launchCommandInTerminal opens a new macOS Terminal.app window in cwd and
+// runs argv, shell-quoting every element.
+func launchCommandInTerminal(argv []string, cwd string) {
+	parts := make([]string, len(argv))
+	for i, a := range argv {
+		parts[i] = shellQuote(a)
+	}
 	script := fmt.Sprintf(`tell application "Terminal"
 	activate
 	do script "cd %s && %s"
-end tell`, shellQuote(cwd), shellQuote(editor))
+end tell`, shellQuote(cwd), strings.Join(parts, " "))
 	c := exec.Command("osascript", "-e", script)
 	c.Stdin = nil
 	c.Stdout = nil
 	c.Stderr = nil
 	_ = c.Start()
+}
+
+// Refresh forces a session reload. Bound to the toolbar refresh button and
+// the View menu.
+func (s *SessionService) Refresh() {
+	_ = s.manager.Reload()
+	s.emitUpdate()
+}
+
+// ResumeInTerminal opens a new Terminal window in the session's working
+// directory running the agent's resume command. No-op for agents without
+// an executable resume command (core.ResumeArgv returns nil for those).
+func (s *SessionService) ResumeInTerminal(sessionID string) {
+	detail := s.manager.SessionDetail(sessionID)
+	if detail == nil {
+		return
+	}
+	argv := core.ResumeArgv(detail.Session.Agent, sessionID)
+	if argv == nil || detail.Session.CWD == "" {
+		return
+	}
+	launchCommandInTerminal(argv, detail.Session.CWD)
 }
 
 // shellQuote returns a single-quoted string safe for embedding in AppleScript shell commands.
@@ -488,7 +520,7 @@ func (s *SessionService) Detach() {
 	s.panelWindow.Hide()
 	s.desktopOnce.Do(func() {
 		s.app.SetIcon(appIcon)
-		installAppMenu(s.app)
+		installAppMenu(s.app, s)
 	})
 	// Load-bearing order: the activation policy switch is dispatched to the
 	// main queue before Show(), so the window appears as a normal desktop-app
