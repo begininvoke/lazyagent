@@ -45,10 +45,6 @@ jobs:
             -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
 
-      # make-app.sh rasterizes the app icon; qlmanage is unreliable headless
-      - name: Install SVG rasterizer
-        run: brew install librsvg
-
       # Build, sign, archive, publish release, and update Homebrew cask
       - uses: goreleaser/goreleaser-action@v6
         with:

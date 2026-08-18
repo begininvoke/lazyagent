@@ -21,27 +21,19 @@ APP="$OUTDIR/Lazyagent.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-# --- Icon: rasterize assets/appicon.svg into an .icns -------------------
+# --- Icon: build the .icns from the pre-rendered PNG --------------------
+# assets/appicon.png is committed, rendered from assets/appicon.svg with a
+# TRANSPARENT background (runtime rasterizers diverge: qlmanage flattens
+# SVGs onto opaque white, which shipped as a white border around the icon).
+# When the SVG artwork changes, regenerate with scripts/render-appicon.sh.
 ICONSET="$(mktemp -d)/Lazyagent.iconset"
 mkdir -p "$ICONSET"
-SVG="$REPO_ROOT/assets/appicon.svg"
 
-render() { # render SIZE OUTPNG
-  local size="$1" out="$2"
-  if command -v rsvg-convert >/dev/null 2>&1; then
-    rsvg-convert -w "$size" -h "$size" "$SVG" -o "$out"
-  else
-    # qlmanage names its output <basename>.svg.png in the target dir.
-    local tmp
-    tmp="$(mktemp -d)"
-    qlmanage -t -s "$size" -o "$tmp" "$SVG" >/dev/null
-    mv "$tmp"/*.png "$out"
-    rm -rf "$tmp"
-  fi
-}
-
-BASE_PNG="$(mktemp -d)/appicon_1024.png"
-render 1024 "$BASE_PNG"
+BASE_PNG="$REPO_ROOT/assets/appicon.png"
+if [[ ! -f "$BASE_PNG" ]]; then
+  echo "error: $BASE_PNG missing — run scripts/render-appicon.sh" >&2
+  exit 1
+fi
 for size in 16 32 64 128 256 512; do
   sips -z "$size" "$size" "$BASE_PNG" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
   double=$((size * 2))
