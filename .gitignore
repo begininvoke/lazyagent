@@ -4,6 +4,8 @@
 /tui
 /app
 dist-app/
+# goreleaser output (snapshot runs)
+dist/
 
 # Frontend build
 frontend/node_modules/
