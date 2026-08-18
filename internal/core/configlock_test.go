@@ -1,6 +1,8 @@
 package core
 
 import (
+	"encoding/json"
+	"os"
 	"sync"
 	"testing"
 )
@@ -47,5 +49,38 @@ func TestUpdateConfig_ConcurrentWritersLoseNoUpdates(t *testing.T) {
 
 	if got := LoadConfig().DetailWidth; got != 300+n {
 		t.Errorf("DetailWidth = %d, want %d (lost %d updates)", got, 300+n, 300+n-got)
+	}
+}
+
+func TestReadConfig_DoesNotTouchDisk(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	cfg, needsSave := readConfig()
+	if !needsSave {
+		t.Errorf("needsSave = false for a missing config file, want true")
+	}
+	if cfg.APISalt == "" {
+		t.Errorf("APISalt not backfilled in memory")
+	}
+	if _, err := os.Stat(ConfigPath()); !os.IsNotExist(err) {
+		t.Errorf("readConfig wrote to disk: %v", err)
+	}
+}
+
+func TestLoadConfig_FirstRunPersistsMatchingSalt(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	cfg := LoadConfig()
+	data, err := os.ReadFile(ConfigPath())
+	if err != nil {
+		t.Fatalf("config not persisted on first run: %v", err)
+	}
+	var onDisk Config
+	if err := json.Unmarshal(data, &onDisk); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.APISalt == "" || onDisk.APISalt != cfg.APISalt {
+		t.Errorf("salt mismatch: returned %q, on disk %q", cfg.APISalt, onDisk.APISalt)
 	}
 }

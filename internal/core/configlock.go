@@ -31,7 +31,11 @@ func UpdateConfig(mutate func(*Config)) error {
 	}
 	defer flockUnlock(lock)
 
-	cfg := LoadConfig()
+	// readConfig, not LoadConfig: LoadConfig routes its backfill save
+	// through UpdateConfig, so calling it here would recurse. readConfig
+	// recomputes any needed backfill in memory and it gets persisted with
+	// this save, under the same lock.
+	cfg, _ := readConfig()
 	mutate(&cfg)
 	return SaveConfig(cfg)
 }
