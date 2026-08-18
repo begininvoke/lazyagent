@@ -117,7 +117,10 @@ func runRotate(cfg *core.Config) int {
 	}
 	cfg.APIPassphrase = pp
 	core.EnsureAPISalt(cfg)
-	if err := core.SaveConfig(*cfg); err != nil {
+	if err := core.UpdateConfig(func(c *core.Config) {
+		c.APIPassphrase = cfg.APIPassphrase
+		c.APISalt = cfg.APISalt
+	}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 		return 1
 	}

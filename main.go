@@ -343,7 +343,10 @@ func setupAPIAuth(cfg *core.Config) (string, error) {
 		cfg.APIPassphrase = passphrase
 	}
 	if fromPrompt || saltChanged {
-		if err := core.SaveConfig(*cfg); err != nil {
+		if err := core.UpdateConfig(func(c *core.Config) {
+			c.APIPassphrase = cfg.APIPassphrase
+			c.APISalt = cfg.APISalt
+		}); err != nil {
 			return "", fmt.Errorf("save config: %w", err)
 		}
 	}

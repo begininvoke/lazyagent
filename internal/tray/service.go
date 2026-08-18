@@ -38,11 +38,6 @@ type SessionService struct {
 	detached       bool
 	pinned         bool
 	desktopOnce    sync.Once // one-time desktop setup: app icon + native menu
-	// prefMu serializes preference writes: the setters below do a
-	// load-modify-save of the whole config file, and each Wails binding
-	// call runs on its own goroutine — unsynchronized overlap would let
-	// the later save clobber the other setter's field.
-	prefMu sync.Mutex
 }
 
 // ServiceStartup is called by Wails when the app starts.
@@ -456,15 +451,14 @@ func (s *SessionService) GetCardDensity() string {
 }
 
 // SetCardDensity persists the desktop card density choice.
+// core.UpdateConfig holds a file lock for the whole read-modify-write, so
+// concurrent writers (this process or another lazyagent process) cannot
+// clobber each other's config fields.
 func (s *SessionService) SetCardDensity(d string) error {
 	if core.NormalizeCardDensity(d) != d {
 		return fmt.Errorf("invalid card density %q", d)
 	}
-	s.prefMu.Lock()
-	defer s.prefMu.Unlock()
-	cfg := core.LoadConfig()
-	cfg.CardDensity = d
-	return core.SaveConfig(cfg)
+	return core.UpdateConfig(func(c *core.Config) { c.CardDensity = d })
 }
 
 // GetDetailWidth returns the persisted desktop detail-panel width in
@@ -477,11 +471,9 @@ func (s *SessionService) GetDetailWidth() int {
 // density setter it clamps instead of rejecting: the value comes from a
 // drag gesture, not typed input.
 func (s *SessionService) SetDetailWidth(w int) error {
-	s.prefMu.Lock()
-	defer s.prefMu.Unlock()
-	cfg := core.LoadConfig()
-	cfg.DetailWidth = core.NormalizeDetailWidth(w)
-	return core.SaveConfig(cfg)
+	return core.UpdateConfig(func(c *core.Config) {
+		c.DetailWidth = core.NormalizeDetailWidth(w)
+	})
 }
 
 // Detach switches from tray panel to a normal detached window.
