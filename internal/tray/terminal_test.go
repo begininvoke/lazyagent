@@ -25,26 +25,15 @@ func TestTerminalCommand_DirectLaunchers(t *testing.T) {
 		t.Errorf("kitty args = %v, want %v", kittyGot[1:], kittyTail)
 	}
 
-	cases := []struct {
-		term string
-		want []string
-	}{
-		{"ghostty", []string{"open", "-na", "Ghostty", "--args", "--working-directory=" + cwd, "-e", "codex", "resume", "abc-123"}},
-		{"wezterm", []string{"open", "-na", "WezTerm", "--args", "start", "--cwd", cwd, "--", "codex", "resume", "abc-123"}},
-		{"alacritty", []string{"open", "-na", "Alacritty", "--args", "--working-directory", cwd, "-e", "codex", "resume", "abc-123"}},
-	}
-	for _, c := range cases {
-		if got := terminalCommand(c.term, cwd, argv); !reflect.DeepEqual(got, c.want) {
-			t.Errorf("terminalCommand(%q) = %v, want %v", c.term, got, c.want)
-		}
-	}
+	// ghostty/wezterm/alacritty expectations are parked with their
+	// implementations — restore them here when the presets return.
 }
 
 func TestTerminalCommand_AppleScriptLaunchers(t *testing.T) {
 	cwd := "/tmp/pro j"
 	argv := []string{"claude", "--resume", "id-1"}
 
-	for term, marker := range map[string]string{"terminal": `"Terminal"`, "iterm2": `"iTerm"`} {
+	for term, marker := range map[string]string{"terminal": `"Terminal"`} {
 		got := terminalCommand(term, cwd, argv)
 		if len(got) < 3 || got[0] != "osascript" || got[1] != "-e" {
 			t.Fatalf("terminalCommand(%q) = %v, want osascript -e <script>", term, got)

@@ -33,12 +33,14 @@ func TestCardDensityJSONKey(t *testing.T) {
 }
 
 func TestNormalizeTerminal(t *testing.T) {
-	for _, valid := range []string{"terminal", "iterm2", "kitty", "ghostty", "wezterm", "alacritty"} {
+	for _, valid := range []string{"terminal", "kitty"} {
 		if got := NormalizeTerminal(valid); got != valid {
 			t.Errorf("NormalizeTerminal(%q) = %q, want passthrough", valid, got)
 		}
 	}
-	for _, invalid := range []string{"", "xterm", "Kitty"} {
+	// iterm2/ghostty/wezterm/alacritty are parked until their launch
+	// incantations are verified on real setups.
+	for _, invalid := range []string{"", "xterm", "Kitty", "iterm2", "ghostty", "wezterm", "alacritty"} {
 		if got := NormalizeTerminal(invalid); got != "terminal" {
 			t.Errorf("NormalizeTerminal(%q) = %q, want \"terminal\"", invalid, got)
 		}

@@ -28,19 +28,23 @@ func terminalCommand(term, cwd string, argv []string) []string {
 		// instance cannot raise itself, so launchCommandInTerminal activates
 		// it after the spawn (see activateSpawnedTerminal).
 		return append([]string{kittyBinary(), "--single-instance", "--instance-group", "lazyagent", "--directory", cwd}, argv...)
-	case "ghostty":
-		return append([]string{"open", "-na", "Ghostty", "--args", "--working-directory=" + cwd, "-e"}, argv...)
-	case "wezterm":
-		return append([]string{"open", "-na", "WezTerm", "--args", "start", "--cwd", cwd, "--"}, argv...)
-	case "alacritty":
-		return append([]string{"open", "-na", "Alacritty", "--args", "--working-directory", cwd, "-e"}, argv...)
-	case "iterm2":
-		return []string{"osascript", "-e", fmt.Sprintf(`tell application "iTerm"
-	create window with default profile
-	tell current session of current window
-		write text "cd %s && %s"
-	end tell
-end tell`, shellQuote(cwd), quotedJoin(argv))}
+	// Parked until verified on real setups (they also need re-enabling in
+	// core.validTerminals and the Settings panel; ghostty/wezterm/alacritty
+	// may share kitty's second-instance focus problem and need the same
+	// direct-binary + activation treatment):
+	// case "ghostty":
+	// 	return append([]string{"open", "-na", "Ghostty", "--args", "--working-directory=" + cwd, "-e"}, argv...)
+	// case "wezterm":
+	// 	return append([]string{"open", "-na", "WezTerm", "--args", "start", "--cwd", cwd, "--"}, argv...)
+	// case "alacritty":
+	// 	return append([]string{"open", "-na", "Alacritty", "--args", "--working-directory", cwd, "-e"}, argv...)
+	// case "iterm2":
+	// 	return []string{"osascript", "-e", fmt.Sprintf(`tell application "iTerm"
+	// create window with default profile
+	// tell current session of current window
+	// 	write text "cd %s && %s"
+	// end tell
+	// end tell`, shellQuote(cwd), quotedJoin(argv))}
 	default: // "terminal" — macOS Terminal.app
 		return []string{"osascript", "-e", fmt.Sprintf(`tell application "Terminal"
 	activate

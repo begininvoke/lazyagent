@@ -9,11 +9,13 @@
 
   const terminals: [string, string][] = [
     ["terminal", "Terminal.app"],
-    ["iterm2", "iTerm2"],
     ["kitty", "Kitty"],
-    ["ghostty", "Ghostty"],
-    ["wezterm", "WezTerm"],
-    ["alacritty", "Alacritty"],
+    // Parked until their launch incantations are verified on real setups
+    // (also re-enable in core.validTerminals and tray/terminal.go):
+    // ["iterm2", "iTerm2"],
+    // ["ghostty", "Ghostty"],
+    // ["wezterm", "WezTerm"],
+    // ["alacritty", "Alacritty"],
   ];
 
   let terminal = $state("terminal");

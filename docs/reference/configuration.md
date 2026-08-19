@@ -147,7 +147,7 @@ Default: `"live"`. Card density for the GUI's desktop-mode dashboard (the card g
 
 ### `terminal`
 
-Default: `"terminal"` (macOS Terminal.app). Terminal emulator used by actions that open a terminal window (Resume, terminal `$EDITOR`). One of `"terminal"`, `"iterm2"`, `"kitty"`, `"ghostty"`, `"wezterm"`, `"alacritty"`; unknown values fall back to Terminal.app. Also editable from the desktop app's Settings panel.
+Default: `"terminal"` (macOS Terminal.app). Terminal emulator used by actions that open a terminal window (Resume, terminal `$EDITOR`). One of `"terminal"` or `"kitty"` (more emulators will be enabled as their launch flows are verified); unknown values fall back to Terminal.app. Also editable from the desktop app's Settings panel.
 
 Kitty note: macOS kitty cannot share windows across instances, so lazyagent keeps its terminal windows in a dedicated kitty instance (instance group `lazyagent`) and raises it automatically after each launch. No kitty configuration is required.
 

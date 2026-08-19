@@ -68,9 +68,13 @@ func NormalizeCardDensity(d string) string {
 }
 
 // validTerminals lists the terminal emulators lazyagent knows how to
-// launch commands in (Resume, terminal $EDITOR, …).
+// launch commands in (Resume, terminal $EDITOR, …). Only presets whose
+// launch incantation has been verified on a real setup are enabled;
+// re-add the parked ones here (and in tray/terminal.go and the Settings
+// panel) once tested.
 var validTerminals = map[string]struct{}{
-	"terminal": {}, "iterm2": {}, "kitty": {}, "ghostty": {}, "wezterm": {}, "alacritty": {},
+	"terminal": {}, "kitty": {},
+	// "iterm2": {}, "ghostty": {}, "wezterm": {}, "alacritty": {},
 }
 
 // NormalizeTerminal returns t if it is a supported terminal preset,

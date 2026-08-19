@@ -48,7 +48,7 @@ func installAppMenu(app *application.App, svc *SessionService) {
 	viewMenu := menu.AddSubmenu("View")
 	for i, d := range []string{"compact", "rich", "live"} {
 		density := d
-		viewMenu.Add("Density: "+density).
+		viewMenu.Add("Density: " + density).
 			SetAccelerator("CmdOrCtrl+" + string(rune('1'+i))).
 			OnClick(func(ctx *application.Context) {
 				_ = svc.SetCardDensity(density)
