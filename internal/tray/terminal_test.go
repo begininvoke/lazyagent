@@ -12,11 +12,21 @@ func TestTerminalCommand_DirectLaunchers(t *testing.T) {
 	cwd := "/tmp/proj"
 	argv := []string{"codex", "resume", "abc-123"}
 
+	// kitty joins the running instance via --single-instance (a second
+	// `open -n` instance has broken keyboard focus and its own Cmd-Tab
+	// icon); the binary path is resolved, so assert on suffix + tail.
+	kittyGot := terminalCommand("kitty", cwd, argv)
+	kittyTail := []string{"--single-instance", "--directory", cwd, "codex", "resume", "abc-123"}
+	if len(kittyGot) < 1 || !strings.HasSuffix(kittyGot[0], "kitty") {
+		t.Errorf("kitty argv[0] = %v, want a kitty binary path", kittyGot)
+	} else if !reflect.DeepEqual(kittyGot[1:], kittyTail) {
+		t.Errorf("kitty args = %v, want %v", kittyGot[1:], kittyTail)
+	}
+
 	cases := []struct {
 		term string
 		want []string
 	}{
-		{"kitty", []string{"open", "-na", "kitty", "--args", "--directory", cwd, "codex", "resume", "abc-123"}},
 		{"ghostty", []string{"open", "-na", "Ghostty", "--args", "--working-directory=" + cwd, "-e", "codex", "resume", "abc-123"}},
 		{"wezterm", []string{"open", "-na", "WezTerm", "--args", "start", "--cwd", cwd, "--", "codex", "resume", "abc-123"}},
 		{"alacritty", []string{"open", "-na", "Alacritty", "--args", "--working-directory", cwd, "-e", "codex", "resume", "abc-123"}},
