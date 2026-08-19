@@ -12,6 +12,8 @@
 
 **A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents from a single place.**
 
+> **lazyagent is transitioning to a full desktop application.** The macOS build now ships as `Lazyagent.app` (`brew install --cask illegalstudio/tap/lazyagent`), which bundles the familiar `lazyagent` command alongside the GUI. Only interested in the CLI? Install the standalone build with `brew install illegalstudio/tap/lazyagent-cli` — same `lazyagent` command, TUI and HTTP API included, no GUI.
+
 Watch sessions from [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Grok CLI](https://x.ai/cli), [Kilo](https://kilo.ai/), Kimi Code CLI, [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — no lock-in, no server, purely observational.
 
 Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
@@ -34,11 +36,11 @@ That said, lazyagent and its API are **fully open source**. If you'd rather not 
 
 📢 **Session tools are here!** Commands to find, reopen, search, and maintain your agent sessions — plus keep rate-limit usage visible:
 
-- **[`lazyagent-cli prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
-- **[`lazyagent-cli compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, Codex, Grok, and Kimi.
-- **[`lazyagent-cli search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp, Grok, Kimi) with highlighted snippets and an incremental local index.
-- **[`lazyagent-cli limits`](docs/maintenance/limits.md)** — on-demand rate-limit / billing summary for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), Kimi Code, and Cursor (monthly, Models + API pools), with a detailed pace view available via `--detailed`.
-- **[`lazyagent-cli sessions`](docs/usage/sessions.md)** — list every session recorded for the current directory — across all agents — and reopen one with the originating agent's CLI. Interactive picker, `--json` for scripts.
+- **[`lazyagent prune`](docs/maintenance/prune.md)** — delete chat files older than N days or whose project folder no longer exists. Interactive agent picker, dry-run previews, and per-project row selection at the confirmation prompt.
+- **[`lazyagent compact`](docs/maintenance/compact.md)** — shrink session files in place by truncating bulky tool outputs, thinking blocks, and embedded images — sessions stay resumable with the originating agent. Supports Claude Code, pi, Codex, Grok, and Kimi.
+- **[`lazyagent search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp, Grok, Kimi) with highlighted snippets and an incremental local index.
+- **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand rate-limit / billing summary for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), Kimi Code, and Cursor (monthly, Models + API pools), with a detailed pace view available via `--detailed`.
+- **[`lazyagent sessions`](docs/usage/sessions.md)** — list every session recorded for the current directory — across all agents — and reopen one with the originating agent's CLI. Interactive picker, `--json` for scripts.
 - **Outbound webhooks on session state transitions** — send a signed JSON payload to Slack, a custom dashboard, or a CI endpoint whenever a session goes idle, waits for input, or changes state. See [Webhooks](docs/reference/webhooks.md).
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across the cleanup commands, with every rewrite validated and backed up by default.
@@ -60,7 +62,7 @@ Detach the panel and lazyagent becomes a full desktop app — Dock icon, Cmd-Tab
 
 ## Install
 
-> **Breaking change:** the `lazyagent` command has been retired. The CLI is now `lazyagent-cli`, and the macOS desktop app is `Lazyagent.app`.
+> **Packaging change:** the macOS cask now installs `Lazyagent.app` instead of a bare binary; the `lazyagent` command still works — linked by the cask (and self-linked into `~/bin` by the app), or installed by the new `lazyagent-cli` formula. The cask and the formula conflict on purpose: the app already includes the CLI.
 
 ### Homebrew
 
@@ -70,7 +72,7 @@ Detach the panel and lazyagent becomes a full desktop app — Dock icon, Cmd-Tab
 brew install --cask illegalstudio/tap/lazyagent
 ```
 
-Installs `Lazyagent.app`. On each GUI launch, the app self-links `~/bin/lazyagent-cli` to its inner binary (creating `~/bin` if it doesn't exist, and never overwriting a file that isn't already a symlink) — add `~/bin` to your `PATH` to use it from the terminal.
+Installs `Lazyagent.app`. On each GUI launch, the app self-links `~/bin/lazyagent` to its inner binary (creating `~/bin` if it doesn't exist, and never overwriting a file that isn't already a symlink) — add `~/bin` to your `PATH` to use it from the terminal.
 
 **CLI only** (macOS, Linux — TUI + HTTP API, no GUI):
 
@@ -101,20 +103,20 @@ make build
 ## Launch
 
 ```
-lazyagent-cli                    Launch the terminal UI (monitors all agents)
-lazyagent-cli --agent claude     Monitor only Claude Code sessions
-lazyagent-cli --agent grok       Monitor only Grok CLI sessions
-lazyagent-cli --agent kimi       Monitor only Kimi Code CLI sessions
-lazyagent-cli --api              Start the HTTP API (Bearer-token protected)
-lazyagent-cli --gui              Launch the desktop app (menu bar)
-lazyagent-cli --tui --gui --api  Run everything together
-lazyagent-cli prune --days N     Delete chat sessions older than N days
-lazyagent-cli compact            Shrink chat files by truncating bulky payloads
-lazyagent-cli search "query"     Search chat transcripts with snippets
-lazyagent-cli sessions           List and reopen sessions for the current directory
-lazyagent-cli limits             Show 5h / weekly / monthly usage summary
-lazyagent-cli passphrase         Set or rotate the HTTP API passphrase
-lazyagent-cli --help             Show full help
+lazyagent                    Launch the terminal UI (monitors all agents)
+lazyagent --agent claude     Monitor only Claude Code sessions
+lazyagent --agent grok       Monitor only Grok CLI sessions
+lazyagent --agent kimi       Monitor only Kimi Code CLI sessions
+lazyagent --api              Start the HTTP API (Bearer-token protected)
+lazyagent --gui              Launch the desktop app (menu bar)
+lazyagent --tui --gui --api  Run everything together
+lazyagent prune --days N     Delete chat sessions older than N days
+lazyagent compact            Shrink chat files by truncating bulky payloads
+lazyagent search "query"     Search chat transcripts with snippets
+lazyagent sessions           List and reopen sessions for the current directory
+lazyagent limits             Show 5h / weekly / monthly usage summary
+lazyagent passphrase         Set or rotate the HTTP API passphrase
+lazyagent --help             Show full help
 ```
 
 ## Documentation

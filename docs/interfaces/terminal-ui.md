@@ -8,7 +8,7 @@ sidebar:
 The TUI is what you get with no flags:
 
 ```bash
-lazyagent-cli
+lazyagent
 ```
 
 It's the default because it's the most information-dense interface. The layout is two panels: a session list on the left and a detail view on the right, plus a bottom help bar.
@@ -88,13 +88,13 @@ Detection does not always succeed, and every failure resolves to `dark` — what
 The TUI can run side by side with the HTTP API:
 
 ```bash
-lazyagent-cli --tui --api
+lazyagent --tui --api
 ```
 
 On macOS you can also combine it with the menu bar app:
 
 ```bash
-lazyagent-cli --tui --gui --api
+lazyagent --tui --gui --api
 ```
 
 The GUI detaches into its own process so the terminal stays interactive. See [macOS GUI](macos-gui.md) and [HTTP API](http-api.md) for the companion interfaces.

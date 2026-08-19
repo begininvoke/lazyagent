@@ -30,7 +30,7 @@ builds:
   # macOS: CLI/TUI only (no Wails, no CGo) — ships as lazyagent-cli
   - id: darwin-cli
     main: .
-    binary: lazyagent-cli
+    binary: lazyagent
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -51,7 +51,7 @@ builds:
   # Linux: TUI only, no GUI (no CGo needed)
   - id: linux
     main: .
-    binary: lazyagent-cli
+    binary: lazyagent
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -134,20 +134,15 @@ homebrew_casks:
     # Cask `app` stanza directly.
     custom_block: |
       app "Lazyagent.app"
-    # DEVIATION (documented in task-5-report.md, fix round 1): goreleaser
-    # OSS unconditionally emits a top-level `binary "lazyagent"` stanza
-    # here — internal/pipe/cask/cask.go's Default() forces
-    # homebrew_casks[].binaries to [name] whenever it's empty or its
-    # first entry is "" (confirmed identical in installed v2.14.2 and
-    # latest goreleaser main; `binaries: []` was tested and has no
-    # effect — Default() re-populates it). There is no config-only way
-    # to suppress it, and the `lazyagent` command is retired (CLI ships
-    # only as `lazyagent-cli`, via the app's ~/bin self-link and the
-    # separate `brews` formula below) — linking it into PATH would also
-    # collide with the `lazyagent-cli` formula on co-install. The release
-    # CI workflow must strip this `binary "lazyagent"` line from the
-    # generated tap cask after goreleaser writes it (before/instead of
-    # publishing), same place notarization already patches the cask.
+      conflicts_with formula: "lazyagent-cli"
+    # goreleaser OSS always emits a `binary` stanza (Default() populates
+    # binaries when empty); instead of stripping it in CI we point it at
+    # the binary INSIDE the app bundle, so `brew install --cask` links
+    # the `lazyagent` command without ever launching the app. Conflicts
+    # with the lazyagent-cli formula, which installs the same command
+    # name — declared below so brew refuses the pointless co-install.
+    binaries:
+      - '#{appdir}/Lazyagent.app/Contents/MacOS/lazyagent'
     repository:
       owner: illegalstudio
       name: homebrew-tap
@@ -166,3 +161,4 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/illegalstudio/lazyagent
     description: A lazy TUI for monitoring coding agent sessions
+    caveats: "Installs the `lazyagent` command (CLI-only build, no GUI)."

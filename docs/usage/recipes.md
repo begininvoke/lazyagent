@@ -13,10 +13,10 @@ You want the menu bar app always running, the API available for a mobile compani
 
 ```bash
 # In a LaunchAgent or at terminal startup — detaches immediately
-lazyagent-cli --gui --api
+lazyagent --gui --api
 
 # When you want a denser session list in the terminal:
-lazyagent-cli --tui
+lazyagent --tui
 ```
 
 The tray and API share the same engine, so the TUI sees the same data they do. Quitting the TUI doesn't touch the tray or API. See [macOS GUI](../interfaces/macos-gui.md) and [HTTP API](../interfaces/http-api.md).
@@ -26,11 +26,11 @@ The tray and API share the same engine, so the TUI sees the same data they do. Q
 Scope the scan to a single agent with `--agent`:
 
 ```bash
-lazyagent-cli --agent claude   # Claude Code CLI and Desktop
-lazyagent-cli --agent codex    # Codex CLI only
-lazyagent-cli --agent grok     # Grok CLI only
-lazyagent-cli --agent kilo     # Kilo only
-lazyagent-cli --agent kimi     # Kimi Code CLI only
+lazyagent --agent claude   # Claude Code CLI and Desktop
+lazyagent --agent codex    # Codex CLI only
+lazyagent --agent grok     # Grok CLI only
+lazyagent --agent kilo     # Kilo only
+lazyagent --agent kimi     # Kimi Code CLI only
 ```
 
 To permanently hide an agent without passing `--agent` every time, set it to `false` in the [`agents` config block](../reference/configuration.md#agents).
@@ -39,7 +39,7 @@ To permanently hide an agent without passing `--agent` every time, set it to `fa
 
 ```bash
 # On your laptop
-lazyagent-cli --api --host 0.0.0.0:7421
+lazyagent --api --host 0.0.0.0:7421
 
 # On your phone (same network)
 # Connect to http://<laptop-ip>:7421/api/events
@@ -54,12 +54,12 @@ The mobile app fetches the public salt from `/api/auth`, then derives the bearer
 Before starting an agent task that might burn through quota, snapshot where you stand across the supported providers (Claude/Codex on 5h + 7d windows, Grok on the monthly billing window, Kimi on the windows returned by Kimi Code, Cursor on its two monthly pools — Models and API):
 
 ```bash
-lazyagent-cli limits                 # summary table for all supported limits providers
-lazyagent-cli limits --detailed      # detailed report with reset times and pace
-lazyagent-cli limits --agent claude  # just Claude
-lazyagent-cli limits --agent grok    # just Grok (monthly billing)
-lazyagent-cli limits --agent kimi    # just Kimi Code
-lazyagent-cli limits --agent cursor  # just Cursor (Models + API pools)
+lazyagent limits                 # summary table for all supported limits providers
+lazyagent limits --detailed      # detailed report with reset times and pace
+lazyagent limits --agent claude  # just Claude
+lazyagent limits --agent grok    # just Grok (monthly billing)
+lazyagent limits --agent kimi    # just Kimi Code
+lazyagent limits --agent cursor  # just Cursor (Models + API pools)
 ```
 
 In the `--detailed` output, the `Pace` line tells you whether you're consuming faster than linear (`overutilizing`), in line, or slower (`underutilizing`). If Claude reports `overutilizing` on the 5-hour window with hours still to go, that's a strong hint to defer the run or fan it out across days.
@@ -72,7 +72,7 @@ When you just want to see active sessions without opening a full UI:
 
 ```bash
 # Print the bearer token explicitly, then reuse it.
-TOKEN=$(lazyagent-cli passphrase --show)
+TOKEN=$(lazyagent passphrase --show)
 
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7421/api/stats
 # → {"total_sessions":5,"active_sessions":2,"window_minutes":30}
@@ -84,7 +84,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 # → writing   …/projects/worker
 ```
 
-Requires that `lazyagent-cli --api` is running somewhere on your machine and that you've configured an API passphrase. See [HTTP API → Authentication](../interfaces/http-api.md#authentication).
+Requires that `lazyagent --api` is running somewhere on your machine and that you've configured an API passphrase. See [HTTP API → Authentication](../interfaces/http-api.md#authentication).
 
 ## Find sessions waiting for your input
 
@@ -105,16 +105,16 @@ The [Maintenance](../maintenance/prune.md) commands shine when run on a cadence.
 
 ```bash
 # 1. Preview what's stale — projects you haven't touched in a month
-lazyagent-cli prune --days 30 --orphaned --dry-run
+lazyagent prune --days 30 --orphaned --dry-run
 
 # 2. If you like what you see, actually delete
-lazyagent-cli prune --days 30 --orphaned
+lazyagent prune --days 30 --orphaned
 
 # 3. Shrink whatever's left but still bulky (>512 KiB)
-lazyagent-cli compact --days 14 --dry-run
+lazyagent compact --days 14 --dry-run
 
 # 4. Commit to it
-lazyagent-cli compact --days 14
+lazyagent compact --days 14
 ```
 
 Each step asks for confirmation before mutating anything. Compact writes `.bak` sidecars by default — if a specific rewrite causes trouble, `mv session.jsonl.bak session.jsonl` rolls it back.
@@ -124,7 +124,7 @@ Each step asks for confirmation before mutating anything. Compact writes `.bak` 
 For maximum savings on Claude transcripts with large embedded images and tool snapshots:
 
 ```bash
-lazyagent-cli compact \
+lazyagent compact \
   --agent claude \
   --min-size-kb 100 \
   --threshold-kb 5 \
@@ -139,10 +139,10 @@ You deleted `~/projects/abandoned-app` and want every session associated with it
 
 ```bash
 # Preview
-lazyagent-cli prune --orphaned --dry-run-verbose | grep abandoned-app
+lazyagent prune --orphaned --dry-run-verbose | grep abandoned-app
 
 # Commit
-lazyagent-cli prune --orphaned --agent claude,codex,pi,grok,kimi
+lazyagent prune --orphaned --agent claude,codex,pi,grok,kimi
 ```
 
 `--orphaned` catches anything whose CWD no longer resolves — the exact case here.
@@ -153,7 +153,7 @@ lazyagent-cli prune --orphaned --agent claude,codex,pi,grok,kimi
 
 ```bash
 # In crontab: compact Claude sessions every Sunday at 03:00
-0 3 * * 0  /usr/local/bin/lazyagent-cli compact --agent claude --days 7 --yes >> ~/.local/state/lazyagent-compact.log 2>&1
+0 3 * * 0  /usr/local/bin/lazyagent compact --agent claude --days 7 --yes >> ~/.local/state/lazyagent-compact.log 2>&1
 ```
 
 Script-friendly invariants:

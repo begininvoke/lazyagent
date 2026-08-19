@@ -31,7 +31,7 @@ func Run(demoMode bool, agentMode string) error {
 		return fmt.Errorf("frontend assets not found — run 'make build' to include the menu bar app")
 	}
 
-	// Bundle installs self-serve the CLI: keep ~/bin/lazyagent-cli
+	// Bundle installs self-serve the CLI: keep ~/bin/lazyagent
 	// pointing at this binary. Bare dev builds skip it. Errors are
 	// non-fatal — a read-only home must not stop the GUI.
 	go func() {

@@ -70,37 +70,37 @@ func main() {
 		fmt.Fprintf(os.Stderr, `%s — monitor all running coding agent sessions
 
 Usage:
-  lazyagent-cli                     Launch the terminal UI (default, monitors all agents)
-  lazyagent-cli --agent claude      Monitor only Claude Code sessions
-  lazyagent-cli --agent pi          Monitor only pi coding agent sessions
-  lazyagent-cli --agent opencode    Monitor only OpenCode sessions
-  lazyagent-cli --agent kilo        Monitor only Kilo sessions
-  lazyagent-cli --agent cursor      Monitor only Cursor sessions
-  lazyagent-cli --agent codex       Monitor only Codex CLI sessions
-  lazyagent-cli --agent amp         Monitor only Amp CLI sessions
-  lazyagent-cli --agent grok        Monitor only Grok CLI sessions
-  lazyagent-cli --agent kimi        Monitor only Kimi Code CLI sessions
-  lazyagent-cli --agent all         Monitor all agents (default)
-  lazyagent-cli --api               Start the API server (http://127.0.0.1:7421)
-  lazyagent-cli --api --host :7421  Start the API server on custom address
-  lazyagent-cli --tui --api         Launch TUI + API server
-  lazyagent-cli --gui               Launch the desktop app (menu bar)
-  lazyagent-cli --gui --api         Launch GUI + API server (foreground)
-  lazyagent-cli --tui --gui --api   Launch everything
-  lazyagent-cli --demo              Launch with fake data (for screenshots)
+  lazyagent                     Launch the terminal UI (default, monitors all agents)
+  lazyagent --agent claude      Monitor only Claude Code sessions
+  lazyagent --agent pi          Monitor only pi coding agent sessions
+  lazyagent --agent opencode    Monitor only OpenCode sessions
+  lazyagent --agent kilo        Monitor only Kilo sessions
+  lazyagent --agent cursor      Monitor only Cursor sessions
+  lazyagent --agent codex       Monitor only Codex CLI sessions
+  lazyagent --agent amp         Monitor only Amp CLI sessions
+  lazyagent --agent grok        Monitor only Grok CLI sessions
+  lazyagent --agent kimi        Monitor only Kimi Code CLI sessions
+  lazyagent --agent all         Monitor all agents (default)
+  lazyagent --api               Start the API server (http://127.0.0.1:7421)
+  lazyagent --api --host :7421  Start the API server on custom address
+  lazyagent --tui --api         Launch TUI + API server
+  lazyagent --gui               Launch the desktop app (menu bar)
+  lazyagent --gui --api         Launch GUI + API server (foreground)
+  lazyagent --tui --gui --api   Launch everything
+  lazyagent --demo              Launch with fake data (for screenshots)
 
 Subcommands:
-  lazyagent-cli prune --days N      Delete chat sessions older than N days
-  lazyagent-cli prune --help        Show prune options (--orphaned, --dry-run, ...)
-  lazyagent-cli compact             Shrink sessions by truncating bulky tool outputs
-  lazyagent-cli compact --help      Show compact options (--threshold-kb, --dry-run, ...)
-  lazyagent-cli search "query"      Search chat transcripts with highlighted snippets
-  lazyagent-cli sessions            List sessions for the current directory and reopen one
-  lazyagent-cli sessions --help     Show sessions options (--agent, --json, --dir)
-  lazyagent-cli limits              Show rate-limit / billing usage summary
-  lazyagent-cli limits --help       Show limits options (--agent claude|codex|grok|kimi|all, --detailed)
-  lazyagent-cli passphrase          Set or rotate the HTTP API passphrase
-  lazyagent-cli passphrase --show   Print the current bearer token without prompting
+  lazyagent prune --days N      Delete chat sessions older than N days
+  lazyagent prune --help        Show prune options (--orphaned, --dry-run, ...)
+  lazyagent compact             Shrink sessions by truncating bulky tool outputs
+  lazyagent compact --help      Show compact options (--threshold-kb, --dry-run, ...)
+  lazyagent search "query"      Search chat transcripts with highlighted snippets
+  lazyagent sessions            List sessions for the current directory and reopen one
+  lazyagent sessions --help     Show sessions options (--agent, --json, --dir)
+  lazyagent limits              Show rate-limit / billing usage summary
+  lazyagent limits --help       Show limits options (--agent claude|codex|grok|kimi|all, --detailed)
+  lazyagent passphrase          Set or rotate the HTTP API passphrase
+  lazyagent passphrase --show   Print the current bearer token without prompting
 
 Flags:
 `, version.String())
@@ -156,7 +156,7 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	}
 	inBundle := core.InBundlePath(exePath)
 	// A LaunchServices launch (Finder, login item) has no controlling
-	// terminal on stdin; a user typing the self-linked lazyagent-cli in a
+	// terminal on stdin; a user typing the self-linked lazyagent in a
 	// shell does. Bundle + no mode flags + no TTY = GUI launch; with a
 	// TTY the default stays the TUI, as documented.
 	runDirectGUI := inBundle && tray.Available() &&
@@ -331,7 +331,7 @@ func setupAPIAuth(cfg *core.Config) (string, error) {
 	if err != nil {
 		if err == apiauth.ErrNoTTY {
 			fmt.Fprintln(os.Stderr, "Error: API passphrase not configured.")
-			fmt.Fprintln(os.Stderr, "Run `lazyagent-cli --api` from a terminal to set one,")
+			fmt.Fprintln(os.Stderr, "Run `lazyagent --api` from a terminal to set one,")
 			fmt.Fprintf(os.Stderr, "or set the %s environment variable.\n", apiauth.EnvVar)
 			return "", fmt.Errorf("no passphrase available")
 		}
@@ -360,7 +360,7 @@ func setupAPIAuth(cfg *core.Config) (string, error) {
 		fmt.Fprintf(os.Stderr, "Bearer token: %s\n", token)
 		fmt.Fprintln(os.Stderr, "Use header:   Authorization: Bearer <token>")
 	} else {
-		fmt.Fprintln(os.Stderr, "Use `lazyagent-cli passphrase --show` to print the bearer token.")
+		fmt.Fprintln(os.Stderr, "Use `lazyagent passphrase --show` to print the bearer token.")
 	}
 	fmt.Fprintln(os.Stderr)
 	return token, nil

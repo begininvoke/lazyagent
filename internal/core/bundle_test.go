@@ -13,7 +13,7 @@ func TestInBundlePath(t *testing.T) {
 	}{
 		{"/Applications/Lazyagent.app/Contents/MacOS/lazyagent", true},
 		{"/Users/x/Library/Lazyagent.app/Contents/MacOS/lazyagent", true},
-		{"/opt/homebrew/bin/lazyagent-cli", false},
+		{"/opt/homebrew/bin/lazyagent", false},
 		{"/Users/x/dev/lazyagent/lazyagent", false},
 		{"", false},
 		// ".app" must be the bundle directory, not a substring elsewhere.
@@ -36,7 +36,7 @@ func TestEnsureCLISymlink_Creates(t *testing.T) {
 	if err := EnsureCLISymlink(binDir, target); err != nil {
 		t.Fatal(err)
 	}
-	got, err := os.Readlink(filepath.Join(binDir, "lazyagent-cli"))
+	got, err := os.Readlink(filepath.Join(binDir, "lazyagent"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestEnsureCLISymlink_RefreshesStale(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(binDir, "lazyagent-cli")
+	link := filepath.Join(binDir, "lazyagent")
 	if err := os.Symlink(filepath.Join(dir, "old-target"), link); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestEnsureCLISymlink_NoClobber(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(binDir, "lazyagent-cli")
+	link := filepath.Join(binDir, "lazyagent")
 	if err := os.WriteFile(link, []byte("user script"), 0o755); err != nil {
 		t.Fatal(err)
 	}

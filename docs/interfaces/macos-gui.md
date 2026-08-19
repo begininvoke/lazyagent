@@ -6,7 +6,7 @@ sidebar:
 ---
 
 ```bash
-lazyagent-cli --gui
+lazyagent --gui
 ```
 
 The GUI process detaches from your terminal — the shell returns immediately and the app lives in your menu bar. In its default attached mode there's no Dock icon (it's registered as a macOS *accessory* app). Click the tray icon to toggle the panel.
@@ -19,16 +19,16 @@ The GUI ships as `Lazyagent.app`, a real macOS bundle (`brew install --cask ille
 
 Because it's a proper bundle, the app carries a real LaunchServices identity: Cmd-Tab and the Dock show the Lazyagent icon and name, not a generic Unix-executable icon. This fixes a previous limitation where the app's Cmd-Tab presentation fell back to the generic icon since a bare Mach-O binary has no bundle identifier.
 
-From a terminal, `lazyagent-cli --gui` inside the bundle relaunches the app via LaunchServices (`open -b com.illegalstudio.lazyagent`) rather than forking a child process, forwarding along `--demo` and `--agent`. This keeps the GUI process under the bundle's identity even when launched indirectly. The forwarded flags only take effect on a **fresh launch** — if the app is already running, LaunchServices just activates the existing instance and the new `--demo`/`--agent` values are ignored, since no new process starts to read them. On the CLI-only build (`lazyagent-cli` installed via the `lazyagent-cli` formula, no tray support), `--gui` still errors as before — that build never had a GUI to launch.
+From a terminal, `lazyagent --gui` inside the bundle relaunches the app via LaunchServices (`open -b com.illegalstudio.lazyagent`) rather than forking a child process, forwarding along `--demo` and `--agent`. This keeps the GUI process under the bundle's identity even when launched indirectly. The forwarded flags only take effect on a **fresh launch** — if the app is already running, LaunchServices just activates the existing instance and the new `--demo`/`--agent` values are ignored, since no new process starts to read them. On the CLI-only build (`lazyagent` installed via the `lazyagent-cli` formula, no tray support), `--gui` still errors as before — that build never had a GUI to launch.
 
 ## The self-linked CLI
 
-On every GUI startup, `Lazyagent.app` maintains a symlink at `~/bin/lazyagent-cli` pointing at its own inner binary:
+On every GUI startup, `Lazyagent.app` maintains a symlink at `~/bin/lazyagent` pointing at its own inner binary:
 
 - `~/bin` is created if it doesn't exist.
 - An existing symlink is refreshed if it points somewhere stale (an older app version, a moved bundle) or is broken.
-- A `~/bin/lazyagent-cli` that isn't a symlink — your own file or script — is never touched or overwritten.
-- If a `lazyagent-cli` from the separate Homebrew formula is also installed, both can coexist; which one runs is simply a matter of `PATH` order. This is by design, not a bug.
+- A `~/bin/lazyagent` that isn't a symlink — your own file or script — is never touched or overwritten.
+- If a `lazyagent` from the separate Homebrew formula is also installed, both can coexist; which one runs is simply a matter of `PATH` order. This is by design, not a bug.
 - If `~/bin` isn't on your `PATH`, the symlink is created but has no effect until you add it — this is documented behavior, not something the app detects or warns about.
 
 ## Attached panel vs. detached desktop mode
@@ -103,8 +103,8 @@ for location, permissions, and cleanup behavior.
 ## Combining with other interfaces
 
 ```bash
-lazyagent-cli --gui --api            # menu bar + HTTP API
-lazyagent-cli --tui --gui --api      # everything
+lazyagent --gui --api            # menu bar + HTTP API
+lazyagent --tui --gui --api      # everything
 ```
 
 The GUI always runs in its own OS process (Cocoa requires ownership of the main thread), so combined launches fork it transparently. Quitting via the tray menu kills the tray process only — any TUI or API in the same parent invocation keeps running.

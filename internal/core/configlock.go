@@ -11,7 +11,7 @@ import (
 // whole load-mutate-save sequence. Every explicit config writer must go
 // through it: a bare LoadConfig/SaveConfig pair races with other writers —
 // across goroutines AND across processes (GUI preferences vs a concurrent
-// `lazyagent-cli passphrase`, for example) — and the last writer silently
+// `lazyagent passphrase`, for example) — and the last writer silently
 // clobbers the other's fields.
 func UpdateConfig(mutate func(*Config)) error {
 	dir := ConfigDir()

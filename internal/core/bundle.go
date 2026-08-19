@@ -14,15 +14,15 @@ func InBundlePath(exePath string) bool {
 	return strings.Contains(exePath, ".app/Contents/MacOS/")
 }
 
-// EnsureCLISymlink idempotently maintains binDir/lazyagent-cli as a
-// symlink to target. It creates binDir when missing and refreshes a
-// symlink that is stale or broken, but never replaces a non-symlink:
-// a user's own file at that path wins.
+// EnsureCLISymlink idempotently maintains binDir/lazyagent as a symlink
+// to target. It creates binDir when missing and refreshes a symlink that
+// is stale or broken, but never replaces a non-symlink: a user's own
+// file at that path wins.
 func EnsureCLISymlink(binDir, target string) error {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		return err
 	}
-	link := filepath.Join(binDir, "lazyagent-cli")
+	link := filepath.Join(binDir, "lazyagent")
 	if fi, err := os.Lstat(link); err == nil {
 		if fi.Mode()&os.ModeSymlink == 0 {
 			return nil // not ours — never clobber

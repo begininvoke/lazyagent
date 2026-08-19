@@ -5,14 +5,14 @@ sidebar:
   order: 4
 ---
 
-`lazyagent-cli search` finds messages across every chat transcript on your machine. Run a query, get a ranked list of sessions with highlighted snippets, optionally pick one and reopen it when the originating agent exposes a resume command.
+`lazyagent search` finds messages across every chat transcript on your machine. Run a query, get a ranked list of sessions with highlighted snippets, optionally pick one and reopen it when the originating agent exposes a resume command.
 
 It works with the agents that store transcripts as plain text files: **Claude Code** (CLI and Desktop), **Codex CLI**, **pi**, **Amp**, **Grok**, and **Kimi Code**. Cursor, OpenCode, and Kilo are excluded because they keep history inside third-party SQLite databases that lazyagent doesn't index.
 
 ## Synopsis
 
 ```
-lazyagent-cli search [QUERY] [--agent LIST]
+lazyagent search [QUERY] [--agent LIST]
                  [--limit N] [--snippets N]
                  [--reindex]
 ```
@@ -32,13 +32,13 @@ lazyagent-cli search [QUERY] [--agent LIST]
 ## Quick reference
 
 ```bash
-lazyagent-cli search "race condition"               # all agents
-lazyagent-cli search --agent codex "parser bug"     # one agent
-lazyagent-cli search --agent claude,codex,kimi "auth" # subset
-lazyagent-cli search --limit 5 "regex"              # tighter result list
-lazyagent-cli search --snippets 4 "OAuth"           # more context per session
-lazyagent-cli search --reindex "config"             # force a full rebuild
-echo "deadlock" | lazyagent-cli search              # query from stdin
+lazyagent search "race condition"               # all agents
+lazyagent search --agent codex "parser bug"     # one agent
+lazyagent search --agent claude,codex,kimi "auth" # subset
+lazyagent search --limit 5 "regex"              # tighter result list
+lazyagent search --snippets 4 "OAuth"           # more context per session
+lazyagent search --reindex "config"             # force a full rebuild
+echo "deadlock" | lazyagent search              # query from stdin
 ```
 
 ## How it works
@@ -56,7 +56,7 @@ Ranking uses FTS5's built-in `bm25(chunks)` — the most relevant matches appear
 
 For each matching session lazyagent prints a header (agent, project path, session name) and up to `--snippets` highlighted snippets — pieces of the conversation that contain the query terms. The agent is shown with its single-letter prefix (C, X, π, A, G, K) for visual scanning across mixed result sets.
 
-Pipe-safe behavior: when stdout is not a terminal the interactive resume prompt is skipped, so `lazyagent-cli search query | grep ...` and `| jq` work cleanly. Headers and snippets still go to stdout; warnings (e.g. "indexing failed for X session: …") go to stderr.
+Pipe-safe behavior: when stdout is not a terminal the interactive resume prompt is skipped, so `lazyagent search query | grep ...` and `| jq` work cleanly. Headers and snippets still go to stdout; warnings (e.g. "indexing failed for X session: …") go to stderr.
 
 ## Interactive resume
 
@@ -88,7 +88,7 @@ The index updates *incrementally* on every run — there's normally no reason to
 - If the index gets corrupted (rare) and queries return errors
 
 ```bash
-lazyagent-cli search --reindex "anything"
+lazyagent search --reindex "anything"
 ```
 
 `--reindex` drops every row in the index, walks every supported agent from scratch, and re-tokenizes every transcript. On a year of accumulated history this can take 30 seconds or so; subsequent runs are back to milliseconds.
@@ -100,7 +100,7 @@ rm ~/.cache/lazyagent/search.sqlite                   # Linux
 rm ~/Library/Caches/lazyagent/search.sqlite           # macOS
 ```
 
-The next `lazyagent-cli search` invocation will rebuild it.
+The next `lazyagent search` invocation will rebuild it.
 
 ## Supported agents
 
@@ -119,19 +119,19 @@ Not supported:
 
 ```bash
 # Quick lookup with the default 20-result limit
-lazyagent-cli search "websocket reconnect"
+lazyagent search "websocket reconnect"
 
 # Narrow to one agent and pull more context per session
-lazyagent-cli search --agent claude --snippets 5 "OAuth flow"
+lazyagent search --agent claude --snippets 5 "OAuth flow"
 
 # Pipe results to jq-style processing (no resume prompt)
-lazyagent-cli search "TODO" | grep -i security
+lazyagent search "TODO" | grep -i security
 
 # Read query from stdin
-fzf --print-query | lazyagent-cli search
+fzf --print-query | lazyagent search
 
 # Force a full rebuild before searching (after a major version bump)
-lazyagent-cli search --reindex "anything"
+lazyagent search --reindex "anything"
 ```
 
 ## Exit codes
@@ -144,6 +144,6 @@ lazyagent-cli search --reindex "anything"
 
 ## See also
 
-- [`lazyagent-cli prune`](prune.md) — delete entire chat files (destructive, complementary)
-- [`lazyagent-cli compact`](compact.md) — shrink chat files in place (destructive, complementary)
-- [`lazyagent-cli limits`](limits.md) — show 5-hour, weekly, and monthly usage summary
+- [`lazyagent prune`](prune.md) — delete entire chat files (destructive, complementary)
+- [`lazyagent compact`](compact.md) — shrink chat files in place (destructive, complementary)
+- [`lazyagent limits`](limits.md) — show 5-hour, weekly, and monthly usage summary

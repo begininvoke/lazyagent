@@ -9,10 +9,10 @@ Once lazyagent is [installed](installation.md), a five-minute tour gets you orie
 
 ## First launch
 
-With no arguments, lazyagent-cli opens the terminal UI and scans every supported agent:
+With no arguments, lazyagent opens the terminal UI and scans every supported agent:
 
 ```bash
-lazyagent-cli
+lazyagent
 ```
 
 You'll see a list of sessions on the left and a detail panel on the right. Use <kbd>↑</kbd>/<kbd>↓</kbd> to navigate, <kbd>tab</kbd> to switch focus between panels, and <kbd>q</kbd> to quit. The full keybinding list lives in [Terminal UI](../interfaces/terminal-ui.md).
@@ -22,15 +22,15 @@ You'll see a list of sessions on the left and a detail panel on the right. Use <
 lazyagent has three interfaces, selectable by flag (the desktop app bundles all three; the `lazyagent-cli` formula ships the TUI and API only):
 
 ```bash
-lazyagent-cli              # Terminal UI (default)
-lazyagent-cli --gui        # macOS menu bar app (detaches from the terminal)
-lazyagent-cli --api        # HTTP API on http://127.0.0.1:7421 (Bearer-token protected)
+lazyagent              # Terminal UI (default)
+lazyagent --gui        # macOS menu bar app (detaches from the terminal)
+lazyagent --api        # HTTP API on http://127.0.0.1:7421 (Bearer-token protected)
 ```
 
 They're combinable — on a typical macOS setup:
 
 ```bash
-lazyagent-cli --gui --api
+lazyagent --gui --api
 ```
 
 runs the menu bar app and the API side by side from a single process. See [Recipes](../usage/recipes.md) for more combinations.
@@ -40,12 +40,12 @@ The first time you launch `--api`, lazyagent prompts for a passphrase, derives a
 ## Scope to one agent
 
 ```bash
-lazyagent-cli --agent claude    # Claude Code CLI + Desktop
-lazyagent-cli --agent codex     # Codex CLI only
-lazyagent-cli --agent grok      # Grok CLI only
-lazyagent-cli --agent kilo      # Kilo only
-lazyagent-cli --agent kimi      # Kimi Code CLI only
-lazyagent-cli --agent all       # every agent (default)
+lazyagent --agent claude    # Claude Code CLI + Desktop
+lazyagent --agent codex     # Codex CLI only
+lazyagent --agent grok      # Grok CLI only
+lazyagent --agent kilo      # Kilo only
+lazyagent --agent kimi      # Kimi Code CLI only
+lazyagent --agent all       # every agent (default)
 ```
 
 Every value for `--agent` is documented in [CLI reference](../usage/cli.md#-agent-name).
@@ -55,11 +55,11 @@ Every value for `--agent` is documented in [CLI reference](../usage/cli.md#-agen
 The companion commands let you reopen, search, and maintain sessions or inspect usage windows:
 
 ```bash
-lazyagent-cli sessions               # list and reopen sessions for this directory
-lazyagent-cli prune --days 30        # delete sessions idle for >30 days
-lazyagent-cli compact                # shrink session files in place
-lazyagent-cli search "query"         # search local transcripts
-lazyagent-cli limits                 # show rate-limit / billing usage summary
+lazyagent sessions               # list and reopen sessions for this directory
+lazyagent prune --days 30        # delete sessions idle for >30 days
+lazyagent compact                # shrink session files in place
+lazyagent search "query"         # search local transcripts
+lazyagent limits                 # show rate-limit / billing usage summary
 ```
 
 `prune` and `compact` support `--dry-run` and an interactive agent picker. Full reference:

@@ -5,14 +5,14 @@ sidebar:
   order: 2
 ---
 
-`lazyagent-cli compact` **shrinks** session files in place without deleting them. Tool outputs, embedded images, terminal logs, and long thinking blocks are truncated above a threshold; the message graph, prompts, and tool call metadata are preserved so compacted sessions stay usable with the originating agent.
+`lazyagent compact` **shrinks** session files in place without deleting them. Tool outputs, embedded images, terminal logs, and long thinking blocks are truncated above a threshold; the message graph, prompts, and tool call metadata are preserved so compacted sessions stay usable with the originating agent.
 
 For *deleting* entire sessions, see [Prune](prune.md) instead.
 
 ## Synopsis
 
 ```
-lazyagent-cli compact  [--days N] [--agent LIST]
+lazyagent compact  [--days N] [--agent LIST]
                    [--threshold-kb N] [--min-size-kb N]
                    [--dry-run | --dry-run-verbose]
                    [--no-backup] [--yes]
@@ -36,14 +36,14 @@ All flags are optional. With no flags, compact opens the interactive agent picke
 ## Quick reference
 
 ```bash
-lazyagent-cli compact                                     # interactive picker + dry-run summary
-lazyagent-cli compact --agent claude --dry-run            # preview group totals before/after
-lazyagent-cli compact --agent claude --dry-run-verbose    # one row per file
-lazyagent-cli compact --agent claude --days 14            # only sessions idle ≥14 days
-lazyagent-cli compact --threshold-kb 20                   # looser cut (default 10 KiB)
-lazyagent-cli compact --min-size-kb 2048                  # only files ≥2 MiB (default 512 KiB)
-lazyagent-cli compact --no-backup                         # skip the .bak sidecar
-lazyagent-cli compact --yes                               # skip the destructive-op disclaimer
+lazyagent compact                                     # interactive picker + dry-run summary
+lazyagent compact --agent claude --dry-run            # preview group totals before/after
+lazyagent compact --agent claude --dry-run-verbose    # one row per file
+lazyagent compact --agent claude --days 14            # only sessions idle ≥14 days
+lazyagent compact --threshold-kb 20                   # looser cut (default 10 KiB)
+lazyagent compact --min-size-kb 2048                  # only files ≥2 MiB (default 512 KiB)
+lazyagent compact --no-backup                         # skip the .bak sidecar
+lazyagent compact --yes                               # skip the destructive-op disclaimer
 ```
 
 ## How it works
@@ -192,19 +192,19 @@ Not supported:
 
 ```bash
 # Default sweep with an interactive picker
-lazyagent-cli compact
+lazyagent compact
 
 # Preview what would happen for Claude only — no writes
-lazyagent-cli compact --agent claude --dry-run-verbose
+lazyagent compact --agent claude --dry-run-verbose
 
 # Aggressive cut: everything ≥100 KiB, with a tight 5 KiB threshold
-lazyagent-cli compact --min-size-kb 100 --threshold-kb 5 --agent claude
+lazyagent compact --min-size-kb 100 --threshold-kb 5 --agent claude
 
 # Conservative cut: only old, only big, keep everything resumable
-lazyagent-cli compact --days 14 --min-size-kb 2048 --threshold-kb 20
+lazyagent compact --days 14 --min-size-kb 2048 --threshold-kb 20
 
 # Script-friendly run: no prompt, no .bak, log the summary
-lazyagent-cli compact --agent claude --days 7 --yes --no-backup > ~/.local/state/la-compact.log 2>&1
+lazyagent compact --agent claude --days 7 --yes --no-backup > ~/.local/state/la-compact.log 2>&1
 
 # Undo a specific compaction
 mv path/to/session.jsonl.bak path/to/session.jsonl

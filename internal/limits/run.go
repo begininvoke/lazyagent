@@ -1,4 +1,4 @@
-// Package limits implements the `lazyagent-cli limits` subcommand: a one-shot
+// Package limits implements the `lazyagent limits` subcommand: a one-shot
 // summary of the user's Claude Code, Codex, Grok, Kimi, and Cursor rate-limit /
 // billing windows. The --detailed view also includes a "pace" indicator that
 // compares actual consumption to a perfectly linear consumption rate.
@@ -64,7 +64,7 @@ type options struct {
 	detailed bool
 }
 
-// Run is the entry point invoked by main.go for `lazyagent-cli limits ...`.
+// Run is the entry point invoked by main.go for `lazyagent limits ...`.
 func Run(args []string) int {
 	fs := flag.NewFlagSet("limits", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -74,16 +74,16 @@ func Run(args []string) int {
 	fs.BoolVar(&opts.detailed, "detailed", false, "Show the detailed per-window report with bars, reset times, sources, and notes")
 
 	fs.Usage = func() {
-		fmt.Fprint(os.Stderr, `lazyagent-cli limits — show rate-limit usage
+		fmt.Fprint(os.Stderr, `lazyagent limits — show rate-limit usage
 
 Usage:
-  lazyagent-cli limits                  Show a summary table for Claude Code, Codex, Grok, Kimi, and Cursor
-  lazyagent-cli limits --detailed       Show detailed per-window reports with pace and reset times
-  lazyagent-cli limits --agent claude   Show only Claude Code limits
-  lazyagent-cli limits --agent codex    Show only Codex limits
-  lazyagent-cli limits --agent grok     Show only Grok limits
-  lazyagent-cli limits --agent kimi     Show only Kimi Code limits
-  lazyagent-cli limits --agent cursor   Show only Cursor limits (Models + API pools)
+  lazyagent limits                  Show a summary table for Claude Code, Codex, Grok, Kimi, and Cursor
+  lazyagent limits --detailed       Show detailed per-window reports with pace and reset times
+  lazyagent limits --agent claude   Show only Claude Code limits
+  lazyagent limits --agent codex    Show only Codex limits
+  lazyagent limits --agent grok     Show only Grok limits
+  lazyagent limits --agent kimi     Show only Kimi Code limits
+  lazyagent limits --agent cursor   Show only Cursor limits (Models + API pools)
 
 Summary output:
   The default table shows used % and expected % for the 5-hour window and the
@@ -141,7 +141,7 @@ Flags:
 	agents, err := resolveAgents(opts.agent)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		fmt.Fprintln(os.Stderr, "Run `lazyagent-cli limits --help` for usage.")
+		fmt.Fprintln(os.Stderr, "Run `lazyagent limits --help` for usage.")
 		return 2
 	}
 

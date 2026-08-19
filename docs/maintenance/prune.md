@@ -5,14 +5,14 @@ sidebar:
   order: 1
 ---
 
-`lazyagent-cli prune` deletes entire chat sessions: files for JSONL-backed agents, directories for Grok and Kimi. It's the right tool when you want to **get rid of** sessions you no longer care about — old conversations for projects you've archived, orphaned transcripts whose folders you deleted months ago, or just the oldest N% of everything.
+`lazyagent prune` deletes entire chat sessions: files for JSONL-backed agents, directories for Grok and Kimi. It's the right tool when you want to **get rid of** sessions you no longer care about — old conversations for projects you've archived, orphaned transcripts whose folders you deleted months ago, or just the oldest N% of everything.
 
 For *shrinking* sessions you want to keep, see [Compact](compact.md) instead.
 
 ## Synopsis
 
 ```
-lazyagent-cli prune  [--days N] [--orphaned]
+lazyagent prune  [--days N] [--orphaned]
                  [--agent LIST]
                  [--dry-run | --dry-run-verbose]
                  [--yes]
@@ -34,13 +34,13 @@ At least one of `--days` or `--orphaned` is required.
 ## Quick reference
 
 ```bash
-lazyagent-cli prune --days 30                       # sessions idle >30 days
-lazyagent-cli prune --orphaned                      # sessions whose project folder is gone
-lazyagent-cli prune --days 30 --orphaned            # both filters (OR)
-lazyagent-cli prune --days 30 --dry-run             # preview: group by project
-lazyagent-cli prune --days 30 --dry-run-verbose     # preview: one row per file
-lazyagent-cli prune --days 30 --agent claude,codex,grok,kimi  # limit to specific agents
-lazyagent-cli prune --days 30 --yes                 # skip the confirmation prompt
+lazyagent prune --days 30                       # sessions idle >30 days
+lazyagent prune --orphaned                      # sessions whose project folder is gone
+lazyagent prune --days 30 --orphaned            # both filters (OR)
+lazyagent prune --days 30 --dry-run             # preview: group by project
+lazyagent prune --days 30 --dry-run-verbose     # preview: one row per file
+lazyagent prune --days 30 --agent claude,codex,grok,kimi  # limit to specific agents
+lazyagent prune --days 30 --yes                 # skip the confirmation prompt
 ```
 
 ## Filters
@@ -151,20 +151,20 @@ Not supported:
 
 ```bash
 # Delete anything idle for more than a quarter
-lazyagent-cli prune --days 90
+lazyagent prune --days 90
 
 # Kill orphans across every supported agent, but preview first
-lazyagent-cli prune --orphaned --dry-run-verbose
+lazyagent prune --orphaned --dry-run-verbose
 
 # Scheduled weekly sweep (script-safe)
-lazyagent-cli prune --days 30 --orphaned --agent claude,codex,pi,grok,kimi --yes
+lazyagent prune --days 30 --orphaned --agent claude,codex,pi,grok,kimi --yes
 
 # Target a single noisy agent
-lazyagent-cli prune --agent codex --days 14
+lazyagent prune --agent codex --days 14
 
 # See per-file details before committing
-lazyagent-cli prune --days 30 --dry-run-verbose
-lazyagent-cli prune --days 30                          # the real run
+lazyagent prune --days 30 --dry-run-verbose
+lazyagent prune --days 30                          # the real run
 ```
 
 See [Recipes](../usage/recipes.md) for automation tips, including cron examples.

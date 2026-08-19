@@ -124,11 +124,11 @@ jobs:
           cd tap
           # goreleaser writes the cask with the pre-staple sha256; fix it.
           sed -i '' -E "s/sha256 \"[0-9a-f]{64}\"/sha256 \"${NEW_SHA}\"/" Casks/lazyagent.rb
-          # goreleaser OSS unconditionally emits a `binary "lazyagent"` stanza;
-          # the lazyagent command is retired (CLI ships as lazyagent-cli).
-          sed -i '' '/^  binary "lazyagent"$/d' Casks/lazyagent.rb
-          if grep -q 'binary "lazyagent"' Casks/lazyagent.rb; then
-            echo "ERROR: binary stanza survived the strip — goreleaser cask template changed?" >&2
+          # The cask must link the app-internal binary as the `lazyagent`
+          # command (configured via homebrew_casks[].binaries) — fail loudly
+          # if a goreleaser bump regresses the stanza.
+          if ! grep -q 'binary "#{appdir}/Lazyagent.app/Contents/MacOS/lazyagent"' Casks/lazyagent.rb; then
+            echo "ERROR: appdir binary stanza missing from the cask — goreleaser template changed?" >&2
             exit 1
           fi
           if ! grep -q "sha256 \"${NEW_SHA}\"" Casks/lazyagent.rb; then
@@ -137,7 +137,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -am "lazyagent: patch cask after notarization (sha256 + drop binary stanza) (${TAG})"
+          git commit -am "lazyagent: update cask sha256 after notarization staple (${TAG})"
           git push
 
       # Clean up keychain

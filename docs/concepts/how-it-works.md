@@ -29,7 +29,7 @@ Sessions are cached by transcript path + mtime + size, so subsequent scans only 
 
 ### Persistent discovery cache
 
-The TUI, macOS GUI, HTTP API, and `lazyagent-cli sessions` persist supported
+The TUI, macOS GUI, HTTP API, and `lazyagent sessions` persist supported
 providers' discovery caches between process runs. The files live under the
 system cache directory (`~/Library/Caches/lazyagent/` on macOS and normally
 `~/.cache/lazyagent/` on Linux), are advisory, and can be deleted safely; the
@@ -56,7 +56,7 @@ lazyagent classifies each session into a state (`idle`, `thinking`, `writing`, `
 
 ## What lazyagent never does
 
-- It doesn't talk to any LLM. The only outbound network calls lazyagent makes are explicit `lazyagent-cli limits` checks for Claude, Codex, Grok, Kimi, and Cursor billing/rate-limit data. Everything else (monitoring, sessions, prune, compact, and search) is purely local.
+- It doesn't talk to any LLM. The only outbound network calls lazyagent makes are explicit `lazyagent limits` checks for Claude, Codex, Grok, Kimi, and Cursor billing/rate-limit data. Everything else (monitoring, sessions, prune, compact, and search) is purely local.
 - It doesn't interrupt or control agents. You can't kill a session from lazyagent; it only watches.
 - It doesn't move or copy session files — except when you explicitly run `prune` or `compact`, which operate on the same files the agents read.
 - It doesn't send telemetry. No analytics, no crash reporter, no phone-home.
