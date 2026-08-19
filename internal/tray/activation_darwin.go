@@ -22,8 +22,19 @@ static void lazyagent_activatePid(int pid) {
 	dispatch_async(dispatch_get_main_queue(), ^{
 		NSRunningApplication *app =
 			[NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
-		if (app != nil) {
+		if (app == nil) {
+			return;
+		}
+		if (@available(macOS 14.0, *)) {
+			// Cooperative activation: the frontmost app (us — the user just
+			// clicked Resume) must yield, or activate is a no-op on 14+.
+			[NSApp yieldActivationToApplication:app];
+			[app activateWithOptions:0];
+		} else {
+			#pragma clang diagnostic push
+			#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 			[app activateWithOptions:NSApplicationActivateIgnoringOtherApps];
+			#pragma clang diagnostic pop
 		}
 	});
 }
