@@ -1,20 +1,38 @@
-# lazyagent
+<p align="center">
+  <img src="assets/appicon.png" alt="lazyagent logo" width="120">
+</p>
 
-![GitHub Downloads](https://img.shields.io/github/downloads/illegalstudio/lazyagent/total?v=1)
-![License: MIT](https://img.shields.io/badge/license-MIT-blue)
-[![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Launch-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/lazy-agent)
-[![Download on the App Store](https://img.shields.io/badge/App%20Store-Download-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/us/app/lazyagent/id6773359156)
-[![Follow @nahime0 on X](https://img.shields.io/badge/Follow%20%40nahime0-000000?logo=x&logoColor=white)](https://x.com/nahime0)
+<h1 align="center">lazyagent</h1>
 
-> 🐦 **[Follow me on X (@nahime0)](https://x.com/nahime0) for updates, new features, and behind-the-scenes development.**
+<p align="center">
+  <em>One lazy eye on all your coding agents.</em>
+</p>
+
+<p align="center">
+  <a href="https://github.com/illegalstudio/lazyagent/stargazers"><img src="https://img.shields.io/github/stars/illegalstudio/lazyagent?style=flat-square&logo=github&logoColor=white&label=stars&color=CBA6F7" alt="Stars"></a>
+  <a href="https://github.com/illegalstudio/lazyagent/releases"><img src="https://img.shields.io/github/downloads/illegalstudio/lazyagent/total?style=flat-square&logo=github&logoColor=white&label=downloads&color=CBA6F7" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/illegalstudio/lazyagent?style=flat-square&color=CBA6F7" alt="License: MIT"></a>
+  <a href="https://www.producthunt.com/products/lazy-agent"><img src="https://img.shields.io/badge/Product%20Hunt-Launch-CBA6F7?style=flat-square&logo=producthunt&logoColor=white" alt="Product Hunt"></a>
+  <a href="https://apps.apple.com/us/app/lazyagent/id6773359156"><img src="https://img.shields.io/badge/App%20Store-iOS-CBA6F7?style=flat-square&logo=apple&logoColor=white" alt="Download on the App Store"></a>
+  <a href="https://x.com/nahime0"><img src="https://img.shields.io/badge/Follow-%40nahime0-CBA6F7?style=flat-square&logo=x&logoColor=white" alt="Follow @nahime0 on X"></a>
+</p>
+
+<p align="center">
+  <strong>9 agents supported &middot; TUI + desktop app + HTTP API &middot; No server, no lock-in &middot; MIT</strong>
+</p>
+
+<p align="center">
+  A terminal UI, a macOS desktop app, and an HTTP API for monitoring all your coding agents from a single place.
+  Watch sessions from <a href="https://claude.ai/code">Claude Code</a>, <a href="https://cursor.com/">Cursor</a>, <a href="https://developers.openai.com/codex/">Codex</a>, <a href="https://x.ai/cli">Grok CLI</a>, <a href="https://kilo.ai/">Kilo</a>, Kimi Code CLI, <a href="https://ampcode.com/">Amp</a>, <a href="https://github.com/badlogic/pi-mono">pi</a>, and <a href="https://opencode.ai/">OpenCode</a> — lazyagent doesn't replace your workflow, it watches it.
+</p>
+
+<p align="center">
+  <a href="https://lazyagent.dev"><strong>Official Website</strong></a>
+</p>
 
 ---
 
-**A terminal UI, macOS menu bar app, and HTTP API for monitoring all your coding agents from a single place.**
-
 > **lazyagent is transitioning to a full desktop application.** The macOS build now ships as `Lazyagent.app` (`brew install --cask illegalstudio/tap/lazyagent`), which bundles the familiar `lazyagent` command alongside the GUI. Only interested in the CLI? Install the standalone build with `brew install illegalstudio/tap/lazyagent-cli` — same `lazyagent` command, TUI and HTTP API included, no GUI.
-
-Watch sessions from [Claude Code](https://claude.ai/code), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Grok CLI](https://x.ai/cli), [Kilo](https://kilo.ai/), Kimi Code CLI, [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — no lock-in, no server, purely observational.
 
 Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
