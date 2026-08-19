@@ -4,9 +4,6 @@ package tray
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -18,10 +15,14 @@ import (
 func terminalCommand(term, cwd string, argv []string) []string {
 	switch term {
 	case "kitty":
-		// Direct binary + --single-instance: the window opens inside the
-		// already-running kitty. A second instance via `open -n` gets its
-		// own Cmd-Tab icon and broken keyboard focus (kitty issue #385).
-		return append([]string{kittyBinary(), "--single-instance", "--directory", cwd}, argv...)
+		// --single-instance forwards the window into the running kitty,
+		// PROVIDED the user's kitty owns the single-instance socket (put
+		// `--single-instance` in kitty's macos-launch-services-cmdline —
+		// see docs). macOS kitty cannot run a functional second instance:
+		// its windows never receive keyboard focus. The `open -na` wrapper
+		// covers the kitty-not-running case with a proper LaunchServices
+		// activation.
+		return append([]string{"open", "-na", "kitty", "--args", "--single-instance", "--directory", cwd}, argv...)
 	case "ghostty":
 		return append([]string{"open", "-na", "Ghostty", "--args", "--working-directory=" + cwd, "-e"}, argv...)
 	case "wezterm":
@@ -41,21 +42,6 @@ end tell`, shellQuote(cwd), quotedJoin(argv))}
 	do script "cd %s && %s"
 end tell`, shellQuote(cwd), quotedJoin(argv))}
 	}
-}
-
-// kittyBinary resolves the kitty executable: PATH first (brew installs a
-// symlink), then the standard app bundle locations.
-func kittyBinary() string {
-	if p, err := exec.LookPath("kitty"); err == nil {
-		return p
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		p := filepath.Join(home, "Applications/kitty.app/Contents/MacOS/kitty")
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return "/Applications/kitty.app/Contents/MacOS/kitty"
 }
 
 // quotedJoin shell-quotes every argv element and joins them with spaces.
