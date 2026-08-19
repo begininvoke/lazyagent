@@ -31,3 +31,16 @@ func TestCardDensityJSONKey(t *testing.T) {
 		t.Errorf("card_density key missing or wrong: %v", m)
 	}
 }
+
+func TestNormalizeTerminal(t *testing.T) {
+	for _, valid := range []string{"terminal", "iterm2", "kitty", "ghostty", "wezterm", "alacritty"} {
+		if got := NormalizeTerminal(valid); got != valid {
+			t.Errorf("NormalizeTerminal(%q) = %q, want passthrough", valid, got)
+		}
+	}
+	for _, invalid := range []string{"", "xterm", "Kitty"} {
+		if got := NormalizeTerminal(invalid); got != "terminal" {
+			t.Errorf("NormalizeTerminal(%q) = %q, want \"terminal\"", invalid, got)
+		}
+	}
+}

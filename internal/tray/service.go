@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/limits"
@@ -394,18 +395,13 @@ func launchInTerminal(editor, cwd string) {
 	launchCommandInTerminal([]string{editor}, cwd)
 }
 
-// launchCommandInTerminal opens a new macOS Terminal.app window in cwd and
-// runs argv, shell-quoting every element.
+// launchCommandInTerminal opens a new window of the configured terminal
+// emulator (config key "terminal") in cwd and runs argv, shell-quoting
+// every element.
 func launchCommandInTerminal(argv []string, cwd string) {
-	parts := make([]string, len(argv))
-	for i, a := range argv {
-		parts[i] = shellQuote(a)
-	}
-	script := fmt.Sprintf(`tell application "Terminal"
-	activate
-	do script "cd %s && %s"
-end tell`, shellQuote(cwd), strings.Join(parts, " "))
-	c := exec.Command("osascript", "-e", script)
+	term := core.NormalizeTerminal(core.LoadConfig().Terminal)
+	full := terminalCommand(term, cwd, argv)
+	c := exec.Command(full[0], full[1:]...)
 	c.Stdin = nil
 	c.Stdout = nil
 	c.Stderr = nil
@@ -506,6 +502,73 @@ func (s *SessionService) SetDetailWidth(w int) error {
 	return core.UpdateConfig(func(c *core.Config) {
 		c.DetailWidth = core.NormalizeDetailWidth(w)
 	})
+}
+
+// Settings is the GUI-editable subset of the config.
+type Settings struct {
+	Terminal             string          `json:"terminal"`
+	Editor               string          `json:"editor"`
+	Agents               map[string]bool `json:"agents"`
+	ExcludeCWDSubstrings []string        `json:"excludeCwdSubstrings"`
+}
+
+// GetSettings returns the GUI-editable settings.
+func (s *SessionService) GetSettings() Settings {
+	cfg := core.LoadConfig()
+	return Settings{
+		Terminal:             core.NormalizeTerminal(cfg.Terminal),
+		Editor:               cfg.Editor,
+		Agents:               cfg.Agents,
+		ExcludeCWDSubstrings: cfg.ExcludeCWDSubstrings,
+	}
+}
+
+// SaveSettings persists the GUI-editable settings. Exclude filters apply
+// immediately; agent toggles take effect at the next launch (the session
+// provider is built at startup).
+func (s *SessionService) SaveSettings(st Settings) error {
+	if err := core.UpdateConfig(func(c *core.Config) {
+		c.Terminal = core.NormalizeTerminal(st.Terminal)
+		c.Editor = strings.TrimSpace(st.Editor)
+		if st.Agents != nil {
+			c.Agents = st.Agents
+		}
+		c.ExcludeCWDSubstrings = st.ExcludeCWDSubstrings
+	}); err != nil {
+		return err
+	}
+	s.manager.SetExcludeCWDSubstrings(st.ExcludeCWDSubstrings)
+	_ = s.manager.Reload()
+	s.emitUpdate()
+	return nil
+}
+
+// IsAPIConfigured reports whether an API passphrase is set. The passphrase
+// itself never crosses the IPC boundary (GetConfig scrubs it).
+func (s *SessionService) IsAPIConfigured() bool {
+	return core.LoadConfig().APIPassphrase != ""
+}
+
+// SetAPIPassphrase sets — or, with an empty string, clears — the API
+// passphrase, ensuring a salt exists. A running --api server picks the
+// change up at its next restart.
+func (s *SessionService) SetAPIPassphrase(p string) error {
+	return core.UpdateConfig(func(c *core.Config) {
+		c.APIPassphrase = strings.TrimSpace(p)
+		if c.APIPassphrase != "" {
+			core.EnsureAPISalt(c)
+		}
+	})
+}
+
+// GetAPIToken derives and returns the API bearer token. It exists for the
+// explicit "copy token" action in Settings; empty when unconfigured.
+func (s *SessionService) GetAPIToken() string {
+	cfg := core.LoadConfig()
+	if cfg.APIPassphrase == "" {
+		return ""
+	}
+	return apiauth.DeriveToken(cfg.APIPassphrase, cfg.APISalt)
 }
 
 // Detach switches from tray panel to a normal detached window.

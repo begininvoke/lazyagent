@@ -67,6 +67,21 @@ func NormalizeCardDensity(d string) string {
 	return "live"
 }
 
+// validTerminals lists the terminal emulators lazyagent knows how to
+// launch commands in (Resume, terminal $EDITOR, …).
+var validTerminals = map[string]struct{}{
+	"terminal": {}, "iterm2": {}, "kitty": {}, "ghostty": {}, "wezterm": {}, "alacritty": {},
+}
+
+// NormalizeTerminal returns t if it is a supported terminal preset,
+// "terminal" (macOS Terminal.app) otherwise.
+func NormalizeTerminal(t string) string {
+	if _, ok := validTerminals[t]; ok {
+		return t
+	}
+	return "terminal"
+}
+
 // NormalizeDetailWidth returns w if it is a plausible desktop detail-panel
 // width in pixels (300–2000), 400 otherwise. The frontend applies the
 // tighter window-relative clamp (60% of window width) at drag time.
@@ -134,8 +149,12 @@ type Config struct {
 	CardDensity          string          `json:"card_density,omitempty"`
 	// DetailWidth is the GUI desktop-mode detail panel width in pixels.
 	// 0 or out-of-range values mean the 400px default.
-	DetailWidth int             `json:"detail_width,omitempty"`
-	Webhooks    []WebhookConfig `json:"webhooks,omitempty"`
+	DetailWidth int `json:"detail_width,omitempty"`
+	// Terminal picks the terminal emulator for actions that open one
+	// (Resume, terminal $EDITOR): terminal, iterm2, kitty, ghostty,
+	// wezterm or alacritty. Empty/unknown means Terminal.app.
+	Terminal string          `json:"terminal,omitempty"`
+	Webhooks []WebhookConfig `json:"webhooks,omitempty"`
 	// APIPassphrase is the secret used to derive the bearer token that
 	// protects the HTTP API. Empty means the API has not been configured yet
 	// — `lazyagent --api` will prompt for one on first run.

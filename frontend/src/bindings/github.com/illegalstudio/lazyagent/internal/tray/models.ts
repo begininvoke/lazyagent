@@ -291,6 +291,50 @@ export class SessionItem {
 }
 
 /**
+ * Settings is the GUI-editable subset of the config.
+ */
+export class Settings {
+    "terminal": string;
+    "editor": string;
+    "agents": { [_ in string]?: boolean };
+    "excludeCwdSubstrings": string[];
+
+    /** Creates a new Settings instance. */
+    constructor($$source: Partial<Settings> = {}) {
+        if (!("terminal" in $$source)) {
+            this["terminal"] = "";
+        }
+        if (!("editor" in $$source)) {
+            this["editor"] = "";
+        }
+        if (!("agents" in $$source)) {
+            this["agents"] = {};
+        }
+        if (!("excludeCwdSubstrings" in $$source)) {
+            this["excludeCwdSubstrings"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Settings instance from a string or object.
+     */
+    static createFrom($$source: any = {}): Settings {
+        const $$createField2_0 = $$createType5;
+        const $$createField3_0 = $$createType6;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("agents" in $$parsedSource) {
+            $$parsedSource["agents"] = $$createField2_0($$parsedSource["agents"]);
+        }
+        if ("excludeCwdSubstrings" in $$parsedSource) {
+            $$parsedSource["excludeCwdSubstrings"] = $$createField3_0($$parsedSource["excludeCwdSubstrings"]);
+        }
+        return new Settings($$parsedSource as Partial<Settings>);
+    }
+}
+
+/**
  * ToolItem is a tool call for the detail view.
  */
 export class ToolItem {
@@ -328,3 +372,5 @@ const $$createType1 = ToolItem.createFrom;
 const $$createType2 = $Create.Array($$createType1);
 const $$createType3 = ConversationItem.createFrom;
 const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = $Create.Map($Create.Any, $Create.Any);
+const $$createType6 = $Create.Array($Create.Any);

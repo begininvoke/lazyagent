@@ -10,5 +10,6 @@ export {
     ConversationItem,
     SessionFull,
     SessionItem,
+    Settings,
     ToolItem
 } from "./models.js";

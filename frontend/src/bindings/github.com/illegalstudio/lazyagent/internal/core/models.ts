@@ -26,6 +26,13 @@ export class Config {
      * 0 or out-of-range values mean the 400px default.
      */
     "detail_width"?: number;
+
+    /**
+     * Terminal picks the terminal emulator for actions that open one
+     * (Resume, terminal $EDITOR): terminal, iterm2, kitty, ghostty,
+     * wezterm or alacritty. Empty/unknown means Terminal.app.
+     */
+    "terminal"?: string;
     "webhooks"?: WebhookConfig[];
 
     /**
@@ -83,7 +90,7 @@ export class Config {
         const $$createField7_0 = $$createType1;
         const $$createField8_0 = $$createType1;
         const $$createField9_0 = $$createType2;
-        const $$createField12_0 = $$createType4;
+        const $$createField13_0 = $$createType4;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("agents" in $$parsedSource) {
             $$parsedSource["agents"] = $$createField6_0($$parsedSource["agents"]);
@@ -98,7 +105,7 @@ export class Config {
             $$parsedSource["tui"] = $$createField9_0($$parsedSource["tui"]);
         }
         if ("webhooks" in $$parsedSource) {
-            $$parsedSource["webhooks"] = $$createField12_0($$parsedSource["webhooks"]);
+            $$parsedSource["webhooks"] = $$createField13_0($$parsedSource["webhooks"]);
         }
         return new Config($$parsedSource as Partial<Config>);
     }

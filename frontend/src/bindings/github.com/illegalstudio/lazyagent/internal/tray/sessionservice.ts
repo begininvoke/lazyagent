@@ -36,6 +36,14 @@ export function Detach(): $CancellablePromise<void> {
 }
 
 /**
+ * GetAPIToken derives and returns the API bearer token. It exists for the
+ * explicit "copy token" action in Settings; empty when unconfigured.
+ */
+export function GetAPIToken(): $CancellablePromise<string> {
+    return $Call.ByID(1795248511);
+}
+
+/**
  * GetActiveCount returns the number of sessions with active work.
  */
 export function GetActiveCount(): $CancellablePromise<number> {
@@ -106,6 +114,15 @@ export function GetSessions(): $CancellablePromise<$models.SessionItem[]> {
 }
 
 /**
+ * GetSettings returns the GUI-editable settings.
+ */
+export function GetSettings(): $CancellablePromise<$models.Settings> {
+    return $Call.ByID(1562138763).then(($result: any) => {
+        return $$createType6($result);
+    });
+}
+
+/**
  * GetUpdateVersion returns the newer version available, or empty if up-to-date.
  */
 export function GetUpdateVersion(): $CancellablePromise<string> {
@@ -117,6 +134,14 @@ export function GetUpdateVersion(): $CancellablePromise<string> {
  */
 export function GetWindowMinutes(): $CancellablePromise<number> {
     return $Call.ByID(4178116159);
+}
+
+/**
+ * IsAPIConfigured reports whether an API passphrase is set. The passphrase
+ * itself never crosses the IPC boundary (GetConfig scrubs it).
+ */
+export function IsAPIConfigured(): $CancellablePromise<boolean> {
+    return $Call.ByID(3199271690);
 }
 
 /**
@@ -166,6 +191,24 @@ export function Refresh(): $CancellablePromise<void> {
  */
 export function ResumeInTerminal(sessionID: string): $CancellablePromise<void> {
     return $Call.ByID(1408127766, sessionID);
+}
+
+/**
+ * SaveSettings persists the GUI-editable settings. Exclude filters apply
+ * immediately; agent toggles take effect at the next launch (the session
+ * provider is built at startup).
+ */
+export function SaveSettings(st: $models.Settings): $CancellablePromise<void> {
+    return $Call.ByID(848560626, st);
+}
+
+/**
+ * SetAPIPassphrase sets — or, with an empty string, clears — the API
+ * passphrase, ensuring a salt exists. A running --api server picks the
+ * change up at its next restart.
+ */
+export function SetAPIPassphrase(p: string): $CancellablePromise<void> {
+    return $Call.ByID(1598448106, p);
 }
 
 /**
@@ -229,3 +272,4 @@ const $$createType2 = $models.SessionFull.createFrom;
 const $$createType3 = $Create.Nullable($$createType2);
 const $$createType4 = $models.SessionItem.createFrom;
 const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $models.Settings.createFrom;
