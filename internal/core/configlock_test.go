@@ -84,3 +84,57 @@ func TestLoadConfig_FirstRunPersistsMatchingSalt(t *testing.T) {
 		t.Errorf("salt mismatch: returned %q, on disk %q", cfg.APISalt, onDisk.APISalt)
 	}
 }
+
+func TestPersistAPIAuth_KeepsFreshSaltAndPassphrase(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	// A concurrent writer already persisted a passphrase and salt.
+	if err := UpdateConfig(func(c *Config) {
+		c.APIPassphrase = "fresh-pass"
+		c.APISalt = "fresh-salt"
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty passphrase = keep whatever is on disk; the salt returned must
+	// be the fresh one, not a newly generated value from a stale snapshot.
+	salt, err := PersistAPIAuth("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if salt != "fresh-salt" {
+		t.Errorf("salt = %q, want the fresh on-disk salt", salt)
+	}
+	cfg := LoadConfig()
+	if cfg.APIPassphrase != "fresh-pass" || cfg.APISalt != "fresh-salt" {
+		t.Errorf("fresh auth clobbered: pass=%q salt=%q", cfg.APIPassphrase, cfg.APISalt)
+	}
+
+	// A new passphrase replaces the old one but still keeps the fresh salt.
+	salt, err = PersistAPIAuth("rotated")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if salt != "fresh-salt" {
+		t.Errorf("salt = %q, want unchanged fresh salt", salt)
+	}
+	if got := LoadConfig().APIPassphrase; got != "rotated" {
+		t.Errorf("passphrase = %q, want \"rotated\"", got)
+	}
+}
+
+func TestPersistAPIAuth_GeneratesSaltWhenMissing(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	salt, err := PersistAPIAuth("first-pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if salt == "" {
+		t.Fatal("no salt generated")
+	}
+	cfg := LoadConfig()
+	if cfg.APISalt != salt {
+		t.Errorf("returned salt %q differs from persisted %q", salt, cfg.APISalt)
+	}
+}

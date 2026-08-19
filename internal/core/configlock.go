@@ -39,3 +39,21 @@ func UpdateConfig(mutate func(*Config)) error {
 	mutate(&cfg)
 	return SaveConfig(cfg)
 }
+
+// PersistAPIAuth saves the API passphrase (empty = keep whatever is on
+// disk) and ensures a salt exists, computing BOTH on the freshest config
+// under the lock, and returns the persisted salt. Callers must not write
+// passphrase or salt values captured from an earlier LoadConfig snapshot:
+// that reintroduces the stale-overwrite race the lock exists to prevent
+// (a concurrent rotation would be silently reverted).
+func PersistAPIAuth(passphrase string) (string, error) {
+	var salt string
+	err := UpdateConfig(func(c *Config) {
+		if passphrase != "" {
+			c.APIPassphrase = passphrase
+		}
+		EnsureAPISalt(c)
+		salt = c.APISalt
+	})
+	return salt, err
+}

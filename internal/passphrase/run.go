@@ -115,12 +115,10 @@ func runRotate(cfg *core.Config) int {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
 	}
-	cfg.APIPassphrase = pp
-	core.EnsureAPISalt(cfg)
-	if err := core.UpdateConfig(func(c *core.Config) {
-		c.APIPassphrase = cfg.APIPassphrase
-		c.APISalt = cfg.APISalt
-	}); err != nil {
+	// Persist on the freshest config under the lock — using this
+	// function's earlier snapshot would clobber a concurrent writer's
+	// salt or passphrase.
+	if _, err := core.PersistAPIAuth(pp); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 		return 1
 	}

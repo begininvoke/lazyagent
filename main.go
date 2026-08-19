@@ -343,12 +343,18 @@ func setupAPIAuth(cfg *core.Config) (string, error) {
 		cfg.APIPassphrase = passphrase
 	}
 	if fromPrompt || saltChanged {
-		if err := core.UpdateConfig(func(c *core.Config) {
-			c.APIPassphrase = cfg.APIPassphrase
-			c.APISalt = cfg.APISalt
-		}); err != nil {
+		// PersistAPIAuth recomputes passphrase/salt on the freshest config
+		// under the lock — writing this function's earlier snapshot would
+		// silently revert a concurrent rotation.
+		newPass := ""
+		if fromPrompt {
+			newPass = passphrase
+		}
+		salt, err := core.PersistAPIAuth(newPass)
+		if err != nil {
 			return "", fmt.Errorf("save config: %w", err)
 		}
+		cfg.APISalt = salt
 	}
 	if fromPrompt {
 		fmt.Fprintf(os.Stderr, "Passphrase saved to %s\n\n", core.ConfigPath())
