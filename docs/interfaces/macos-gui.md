@@ -35,13 +35,27 @@ On every GUI startup, `Lazyagent.app` maintains a symlink at `~/bin/lazyagent-cl
 
 The panel defaults to an attached popover below the menu bar icon. Press <kbd>d</kbd> (or click the detach button in the header) to pop it out.
 
-Detaching turns lazyagent into a full desktop app: a Dock icon appears, it shows up in Cmd-Tab, and native macOS menus (App, Edit, Window) are installed. The compact popover is replaced by a card-grid dashboard, with a density switch — **compact**, **rich**, or **live** — that controls how much detail each session card shows; your choice is persisted across launches. Selecting a card pushes in a detail panel alongside the grid rather than covering it. Once detached you can also:
+Detaching turns lazyagent into a full desktop app: a Dock icon appears, it shows up in Cmd-Tab, and native macOS menus (App, Edit, View, Window) are installed. The compact popover is replaced by a card-grid dashboard with a proper app toolbar:
 
-- **Move the window** anywhere on your screen.
-- **Resize it** to whatever dimensions you want.
-- **Pin it always-on-top** so it stays visible while you work.
+- **Search** is always visible (<kbd>/</kbd> focuses it, <kbd>esc</kbd> clears it).
+- A **density switch** — **compact**, **rich**, or **live** (also <kbd>⌘1</kbd>/<kbd>⌘2</kbd>/<kbd>⌘3</kbd> from the View menu) — controls how much detail each session card shows; your choice is persisted.
+- Toolbar buttons for the time window, **Limits**, **refresh** (<kbd>⌘R</kbd>), **pin always-on-top**, **Settings** (gear), and reattach.
 
-Press <kbd>d</kbd> again or close the window to reattach — the Dock icon goes away and lazyagent returns to menu bar accessory mode.
+Each card carries an action bar: **Resume** opens the session's resume command in a new window of your configured terminal, **Editor** opens the project in your editor, and **✎** renames inline. Right-clicking a card (or the **⋯** button) opens a context menu with the same actions plus *Copy resume command* and *Copy project path*. Selecting a card pushes in a detail panel alongside the grid — drag its left edge to resize it (double-click resets), navigate with <kbd>j</kbd>/<kbd>k</kbd> while it's open.
+
+The bottom status bar shows session counts and the window's total cost; **? shortcuts** (or the <kbd>?</kbd> key) opens the keyboard-shortcut reference. Press <kbd>d</kbd> again or close the window to reattach — the Dock icon goes away and lazyagent returns to menu bar accessory mode.
+
+## Settings
+
+The gear icon opens the Settings panel:
+
+- **Terminal** — which emulator Resume and other terminal actions use: Terminal.app (default) or Kitty for now (more will be enabled as their launch flows are verified). Kitty windows open in a dedicated lazyagent instance group and are raised automatically; no kitty configuration is needed.
+- **Editor** — the GUI editor command for "Open in editor"; empty falls back to `$VISUAL`, then `$EDITOR` in a terminal.
+- **Agents** — which agents to monitor (applies at the next launch).
+- **Hide projects containing** — path fragments to exclude, one per line (applies immediately).
+- **API authentication** — set, rotate, or clear the HTTP API passphrase and copy the derived bearer token. The current passphrase is never displayed; a running `--api` server picks changes up at its next restart.
+
+Everything saves to the same `config.json` the CLI uses — see [Configuration](../reference/configuration.md).
 
 ## Keybindings
 
@@ -56,6 +70,10 @@ Press <kbd>d</kbd> again or close the window to reattach — the Dock icon goes 
 | <kbd>r</kbd> | Rename session; refresh while the limits view is open |
 | <kbd>d</kbd> | Detach / reattach panel |
 | <kbd>esc</kbd> | Close detail / dismiss search |
+| <kbd>?</kbd> | Keyboard-shortcut reference (desktop mode) |
+| <kbd>⌘1</kbd>–<kbd>⌘3</kbd> | Card density (desktop mode) |
+| <kbd>⌘L</kbd> | Toggle limits (desktop mode) |
+| <kbd>⌘R</kbd> | Refresh sessions (desktop mode) |
 
 ## Right-click menu
 
