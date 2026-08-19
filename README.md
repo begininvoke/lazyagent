@@ -62,7 +62,7 @@ Detach the panel and lazyagent becomes a full desktop app — Dock icon, Cmd-Tab
 
 ## Install
 
-> **Packaging change:** the macOS cask now installs `Lazyagent.app` instead of a bare binary; the `lazyagent` command still works — linked by the cask (and self-linked into `~/bin` by the app), or installed by the new `lazyagent-cli` formula. The cask and the formula conflict on purpose: the app already includes the CLI.
+> **Packaging change:** the macOS cask now installs `Lazyagent.app` instead of a bare binary; the `lazyagent` command still works — the cask links it into Homebrew's bin at install time, and the `lazyagent-cli` formula provides the same command for CLI-only setups. The cask and the formula conflict on purpose: the app already includes the CLI.
 
 ### Homebrew
 
@@ -72,7 +72,7 @@ Detach the panel and lazyagent becomes a full desktop app — Dock icon, Cmd-Tab
 brew install --cask illegalstudio/tap/lazyagent
 ```
 
-Installs `Lazyagent.app`. On each GUI launch, the app self-links `~/bin/lazyagent` to its inner binary (creating `~/bin` if it doesn't exist, and never overwriting a file that isn't already a symlink) — add `~/bin` to your `PATH` to use it from the terminal.
+Installs `Lazyagent.app` and links the `lazyagent` command into Homebrew's bin — the CLI works immediately, no first launch required.
 
 **CLI only** (macOS, Linux — TUI + HTTP API, no GUI):
 

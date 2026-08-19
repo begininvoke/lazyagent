@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-lazyagent ships as two artifacts: a macOS desktop app (`Lazyagent.app`, includes a self-linked CLI) and a standalone CLI (`lazyagent`, TUI + HTTP API, no GUI). The `lazyagent` command itself has been retired — see below.
+lazyagent ships as two artifacts: the macOS desktop app (`Lazyagent.app`, which bundles the CLI) and a standalone CLI build (TUI + HTTP API, no GUI). Both provide the same `lazyagent` command, so install one or the other — Homebrew refuses to install both at once.
 
 ## Homebrew
 
@@ -17,7 +17,11 @@ The recommended way on macOS and Linux.
 brew install --cask illegalstudio/tap/lazyagent
 ```
 
-Installs `Lazyagent.app`. On each GUI launch, the app self-links `~/bin/lazyagent` to its inner binary (creating `~/bin` if it doesn't exist, and never overwriting a file that isn't already a symlink) — add `~/bin` to your `PATH` to use it from the terminal.
+Installs `Lazyagent.app` and links the `lazyagent` command into Homebrew's bin. Installing the app zip manually instead (from GitHub releases)? Link the CLI yourself:
+
+```bash
+ln -s /Applications/Lazyagent.app/Contents/MacOS/lazyagent /usr/local/bin/lazyagent
+```
 
 **CLI only** (macOS, Linux — TUI + HTTP API, no GUI):
 

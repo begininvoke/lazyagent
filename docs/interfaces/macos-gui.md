@@ -21,15 +21,15 @@ Because it's a proper bundle, the app carries a real LaunchServices identity: Cm
 
 From a terminal, `lazyagent --gui` inside the bundle relaunches the app via LaunchServices (`open -b com.illegalstudio.lazyagent`) rather than forking a child process, forwarding along `--demo` and `--agent`. This keeps the GUI process under the bundle's identity even when launched indirectly. The forwarded flags only take effect on a **fresh launch** — if the app is already running, LaunchServices just activates the existing instance and the new `--demo`/`--agent` values are ignored, since no new process starts to read them. On the CLI-only build (`lazyagent` installed via the `lazyagent-cli` formula, no tray support), `--gui` still errors as before — that build never had a GUI to launch.
 
-## The self-linked CLI
+## The `lazyagent` command
 
-On every GUI startup, `Lazyagent.app` maintains a symlink at `~/bin/lazyagent` pointing at its own inner binary:
+The Homebrew cask links the app's inner binary into Homebrew's bin as `lazyagent` at install time — the CLI works without ever launching the app, and `brew uninstall --cask lazyagent` removes it cleanly. If you installed the app zip manually, create the link yourself:
 
-- `~/bin` is created if it doesn't exist.
-- An existing symlink is refreshed if it points somewhere stale (an older app version, a moved bundle) or is broken.
-- A `~/bin/lazyagent` that isn't a symlink — your own file or script — is never touched or overwritten.
-- If a `lazyagent` from the separate Homebrew formula is also installed, both can coexist; which one runs is simply a matter of `PATH` order. This is by design, not a bug.
-- If `~/bin` isn't on your `PATH`, the symlink is created but has no effect until you add it — this is documented behavior, not something the app detects or warns about.
+```bash
+ln -s /Applications/Lazyagent.app/Contents/MacOS/lazyagent /usr/local/bin/lazyagent
+```
+
+The separate `lazyagent-cli` formula installs the same command from the CLI-only build; the cask and the formula conflict on purpose, since the app already includes the CLI.
 
 ## Attached panel vs. detached desktop mode
 
