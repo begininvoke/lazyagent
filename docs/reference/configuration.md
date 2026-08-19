@@ -149,7 +149,7 @@ Default: `"live"`. Card density for the GUI's desktop-mode dashboard (the card g
 
 Default: `"terminal"` (macOS Terminal.app). Terminal emulator used by actions that open a terminal window (Resume, terminal `$EDITOR`). One of `"terminal"`, `"iterm2"`, `"kitty"`, `"ghostty"`, `"wezterm"`, `"alacritty"`; unknown values fall back to Terminal.app. Also editable from the desktop app's Settings panel.
 
-Kitty note: macOS kitty cannot run a working second instance, so lazyagent opens windows in your running kitty via `--single-instance`. For that to work, kitty itself must own the single-instance socket: put `--single-instance` in `~/.config/kitty/macos-launch-services-cmdline` (create the file if missing) and restart kitty once.
+Kitty note: macOS kitty cannot share windows across instances, so lazyagent keeps its terminal windows in a dedicated kitty instance (instance group `lazyagent`) and raises it automatically after each launch. No kitty configuration is required.
 
 ### `detail_width`
 

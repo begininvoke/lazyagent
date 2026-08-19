@@ -17,6 +17,16 @@ static void lazyagent_setActivationPolicy(bool regular) {
 		}
 	});
 }
+
+static void lazyagent_activatePid(int pid) {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		NSRunningApplication *app =
+			[NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+		if (app != nil) {
+			[app activateWithOptions:NSApplicationActivateIgnoringOtherApps];
+		}
+	});
+}
 */
 import "C"
 
@@ -28,4 +38,12 @@ import "C"
 // window comes to the foreground with keyboard focus.
 func setDesktopActivation(regular bool) {
 	C.lazyagent_setActivationPolicy(C.bool(regular))
+}
+
+// activateProcess brings another application's windows to the foreground
+// by pid. Unlike scripting System Events, NSRunningApplication needs no
+// Automation/TCC permission. Used after spawning terminal windows whose
+// process cannot activate itself (e.g. a second kitty instance).
+func activateProcess(pid int) {
+	C.lazyagent_activatePid(C.int(pid))
 }

@@ -12,15 +12,23 @@ func TestTerminalCommand_DirectLaunchers(t *testing.T) {
 	cwd := "/tmp/proj"
 	argv := []string{"codex", "resume", "abc-123"}
 
+	// kitty: direct binary (never `open` — kitty's launch-services cmdline
+	// file, if the user has one, replaces `open --args` arguments) in a
+	// dedicated lazyagent instance group. The first window creates the
+	// group's instance, later ones join it. Path is resolved, so assert
+	// suffix + tail.
+	kittyGot := terminalCommand("kitty", cwd, argv)
+	kittyTail := []string{"--single-instance", "--instance-group", "lazyagent", "--directory", cwd, "codex", "resume", "abc-123"}
+	if len(kittyGot) < 1 || !strings.HasSuffix(kittyGot[0], "kitty") {
+		t.Errorf("kitty argv[0] = %v, want a kitty binary path", kittyGot)
+	} else if !reflect.DeepEqual(kittyGot[1:], kittyTail) {
+		t.Errorf("kitty args = %v, want %v", kittyGot[1:], kittyTail)
+	}
+
 	cases := []struct {
 		term string
 		want []string
 	}{
-		// --single-instance forwards the window into the running kitty
-		// (which must own the single-instance socket — see the kitty
-		// launch-services note in docs); macOS kitty does not support a
-		// functional second instance, so plain `open -n` is wrong.
-		{"kitty", []string{"open", "-na", "kitty", "--args", "--single-instance", "--directory", cwd, "codex", "resume", "abc-123"}},
 		{"ghostty", []string{"open", "-na", "Ghostty", "--args", "--working-directory=" + cwd, "-e", "codex", "resume", "abc-123"}},
 		{"wezterm", []string{"open", "-na", "WezTerm", "--args", "start", "--cwd", cwd, "--", "codex", "resume", "abc-123"}},
 		{"alacritty", []string{"open", "-na", "Alacritty", "--args", "--working-directory", cwd, "-e", "codex", "resume", "abc-123"}},

@@ -405,7 +405,12 @@ func launchCommandInTerminal(argv []string, cwd string) {
 	c.Stdin = nil
 	c.Stdout = nil
 	c.Stderr = nil
-	_ = c.Start()
+	if err := c.Start(); err != nil {
+		return
+	}
+	if term == "kitty" {
+		go activateSpawnedKitty(c)
+	}
 }
 
 // Refresh forces a session reload. Bound to the toolbar refresh button and
