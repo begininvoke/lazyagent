@@ -2,7 +2,7 @@
   import {
     sessions, selectedId, activeCount, windowMinutes, activityFilter,
     searchQuery, showLimits, limitsRefreshToken, updateVersion,
-    isPinned, cardDensity,
+    isPinned, cardDensity, detailWidth,
   } from "./stores";
   import type { CardDensity, SessionItem } from "./stores";
   import { formatCost } from "./stores";
@@ -43,6 +43,43 @@
 
   function openContext(session: SessionItem, x: number, y: number) {
     contextMenu = { session, x, y };
+  }
+
+  // Detail panel resize: drag the handle on the panel's left edge.
+  // Pointer capture keeps move/up events on the handle even when the
+  // pointer leaves it; the width persists once, on release.
+  let resizing = $state(false);
+  let resizeStartX = 0;
+  let resizeStartWidth = 0;
+
+  function startResize(e: PointerEvent) {
+    resizing = true;
+    resizeStartX = e.clientX;
+    // Baseline from the rendered width, not the store: a persisted value
+    // wider than the current window's 60vw cap renders CSS-clamped, and
+    // seeding from the store would make the first move jump.
+    const panel = (e.target as HTMLElement).parentElement;
+    resizeStartWidth = panel ? panel.getBoundingClientRect().width : $detailWidth;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function moveResize(e: PointerEvent) {
+    if (!resizing) return;
+    // 2000 mirrors the Go-side plausibility ceiling (NormalizeDetailWidth):
+    // without it a wide-display drag past 2000 would persist as 400.
+    const max = Math.min(2000, Math.floor(window.innerWidth * 0.6));
+    $detailWidth = Math.min(max, Math.max(300, resizeStartWidth + (resizeStartX - e.clientX)));
+  }
+
+  function endResize() {
+    if (!resizing) return;
+    resizing = false;
+    SessionService.SetDetailWidth($detailWidth).catch(() => {});
+  }
+
+  function resetWidth() {
+    $detailWidth = 400;
+    SessionService.SetDetailWidth(400).catch(() => {});
   }
 
   // Grid j/k navigation while the detail panel is open or closed.
@@ -195,7 +232,21 @@
         {/if}
       </div>
       {#if $selectedId}
-        <div class="w-[400px] shrink-0 min-h-0">
+        <div
+          class="relative shrink-0 min-h-0 max-w-[60vw]"
+          style="width: {$detailWidth}px; min-width: 300px;"
+        >
+          <div
+            class="absolute left-0 top-0 bottom-0 w-[5px] z-10 cursor-col-resize hover:bg-accent/30 {resizing ? 'bg-accent/30' : ''}"
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize, double-click to reset"
+            onpointerdown={startResize}
+            onpointermove={moveResize}
+            onpointerup={endResize}
+            onpointercancel={endResize}
+            ondblclick={resetWidth}
+          ></div>
           <DetailPanel />
         </div>
       {/if}
