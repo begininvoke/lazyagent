@@ -132,9 +132,13 @@ homebrew_casks:
     # `app` (Pro-only, DMG-based) isn't available in OSS goreleaser; the
     # zip already contains Lazyagent.app, so inject the standard Homebrew
     # Cask `app` stanza directly.
+    # NOTE: cask `conflicts_with` accepts only `cask:` keys — a
+    # `formula:` key makes the whole cask definition invalid for every
+    # user (shipped broken in v0.13.0, hotfixed in the tap). The
+    # cask/formula overlap on the `lazyagent` binary surfaces as a brew
+    # link error on co-install instead, which is acceptable.
     custom_block: |
       app "Lazyagent.app"
-      conflicts_with formula: "lazyagent-cli"
     # goreleaser OSS always emits a `binary` stanza (Default() populates
     # binaries when empty); instead of stripping it in CI we point it at
     # the binary INSIDE the app bundle, so `brew install --cask` links
