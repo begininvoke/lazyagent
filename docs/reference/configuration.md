@@ -141,6 +141,20 @@ All TUI colors (panels, activity labels, help bar, overlays) are driven by the t
 
 Detection is not always possible, and every failure resolves to `dark` — the value the TUI used unconditionally before `auto` existed, so nothing degrades. See [Terminal UI](../interfaces/terminal-ui.md) for the full behavior.
 
+### `card_density`
+
+Default: `"live"`. Card density for the GUI's desktop-mode dashboard (the card grid shown after detaching — see [macOS GUI](../interfaces/macos-gui.md)). One of `"compact"`, `"rich"`, or `"live"`. Invalid or missing values fall back to `"live"`.
+
+### `terminal`
+
+Default: `"terminal"` (macOS Terminal.app). Terminal emulator used by actions that open a terminal window (Resume, terminal `$EDITOR`). One of `"terminal"` or `"kitty"` (more emulators will be enabled as their launch flows are verified); unknown values fall back to Terminal.app. Also editable from the desktop app's Settings panel.
+
+Kitty note: macOS kitty cannot share windows across instances, so lazyagent keeps its terminal windows in a dedicated kitty instance (instance group `lazyagent`) and raises it automatically after each launch. No kitty configuration is required.
+
+### `detail_width`
+
+Default: `400`. Width in pixels of the desktop-mode detail panel (drag its left edge to resize, double-click to reset). Values outside 300–2000 fall back to `400`.
+
 ### `webhooks`
 
 Default: `[]` (empty — no outbound webhooks). A list of HTTP endpoints that receive a POST whenever a session changes activity state. Each entry can filter by event type and agent source, and optionally sign requests with HMAC-SHA256.

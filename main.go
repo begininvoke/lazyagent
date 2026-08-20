@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -31,6 +32,7 @@ import (
 	"github.com/illegalstudio/lazyagent/internal/ui"
 	"github.com/illegalstudio/lazyagent/internal/version"
 	"github.com/illegalstudio/lazyagent/internal/webhook"
+	"golang.org/x/term"
 )
 
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
@@ -82,7 +84,7 @@ Usage:
   lazyagent --api               Start the API server (http://127.0.0.1:7421)
   lazyagent --api --host :7421  Start the API server on custom address
   lazyagent --tui --api         Launch TUI + API server
-  lazyagent --gui               Launch as macOS menu bar app (detaches)
+  lazyagent --gui               Launch the desktop app (menu bar)
   lazyagent --gui --api         Launch GUI + API server (foreground)
   lazyagent --tui --gui --api   Launch everything
   lazyagent --demo              Launch with fake data (for screenshots)
@@ -144,7 +146,24 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	if *trayMode {
 		fmt.Fprintln(os.Stderr, "Warning: --tray is deprecated, use --gui instead")
 	}
-	runGUI := *guiMode || *trayMode
+	// A LaunchServices launch (double-click, login item) executes the
+	// bundle binary with no mode flags: treat it as a GUI launch that
+	// runs in-process — the process already carries the bundle identity,
+	// so forking would throw it away.
+	exePath, _ := os.Executable()
+	if rp, err := filepath.EvalSymlinks(exePath); err == nil {
+		exePath = rp
+	}
+	inBundle := core.InBundlePath(exePath)
+	// A LaunchServices launch (Finder, login item) has no controlling
+	// terminal on stdin; a user typing the self-linked lazyagent in a
+	// shell does. Bundle + no mode flags + no TTY = GUI launch; with a
+	// TTY the default stays the TUI, as documented.
+	runDirectGUI := inBundle && tray.Available() &&
+		!*guiMode && !*trayMode && !*tuiMode && !*apiMode &&
+		!term.IsTerminal(int(os.Stdin.Fd()))
+
+	runGUI := *guiMode || *trayMode || runDirectGUI
 	// Default: TUI if no other mode explicitly requested.
 	runTUI := *tuiMode || (!runGUI && !runAPI)
 
@@ -162,14 +181,42 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 			os.Exit(1)
 		}
 
-		if os.Getenv("LAZYAGENT_DETACHED") == "" {
-			// Always fork the tray as a separate process (macOS Cocoa needs its own main thread).
-			forkTray(*demoMode, *agentMode)
+		if os.Getenv("LAZYAGENT_DETACHED") == "" && !runDirectGUI {
+			if inBundle {
+				// Relaunch through LaunchServices so the GUI process
+				// keeps the bundle identity (Cmd-Tab icon and name).
+				// --demo/--agent are forwarded via `open`'s --args
+				// passthrough; --gui is never forwarded, so the
+				// relaunched bundle process enters with no mode flags
+				// (plus these passthrough flags) and becomes
+				// runDirectGUI on its own — no recursion possible.
+				openArgs := []string{"-b", "com.illegalstudio.lazyagent"}
+				var passthrough []string
+				if *demoMode {
+					passthrough = append(passthrough, "--demo")
+				}
+				if *agentMode != "all" {
+					passthrough = append(passthrough, "--agent", *agentMode)
+				}
+				if len(passthrough) > 0 {
+					openArgs = append(openArgs, "--args")
+					openArgs = append(openArgs, passthrough...)
+				}
+				if err := exec.Command("open", openArgs...).Run(); err != nil {
+					// Dev copies moved outside a registered bundle can
+					// fail `open`; the bare fork still works, minus the
+					// LaunchServices identity.
+					forkTray(*demoMode, *agentMode)
+				}
+			} else {
+				// Bare binary (make dev): fork with its own main thread.
+				forkTray(*demoMode, *agentMode)
+			}
 			if !runTUI && !runAPI {
 				return
 			}
 		} else {
-			// Detached tray process.
+			// Detached tray process, or a direct LaunchServices launch.
 			_ = os.WriteFile(trayPidFile, []byte(strconv.Itoa(os.Getpid())), 0644)
 			defer os.Remove(trayPidFile)
 
@@ -296,8 +343,27 @@ func setupAPIAuth(cfg *core.Config) (string, error) {
 		cfg.APIPassphrase = passphrase
 	}
 	if fromPrompt || saltChanged {
-		if err := core.SaveConfig(*cfg); err != nil {
+		// PersistAPIAuth recomputes passphrase/salt on the freshest config
+		// under the lock — writing this function's earlier snapshot would
+		// silently revert a concurrent rotation.
+		newPass := ""
+		if fromPrompt {
+			newPass = passphrase
+		}
+		persistedPass, salt, err := core.PersistAPIAuth(newPass)
+		if err != nil {
 			return "", fmt.Errorf("save config: %w", err)
+		}
+		cfg.APISalt = salt
+		// Derive the token from credentials someone can actually derive
+		// too: prompt → the value we just persisted; env → the env value
+		// wins at runtime (documented); config snapshot → the freshest
+		// persisted passphrase, which a concurrent rotation may have
+		// changed between our load and this save.
+		envSet := strings.TrimSpace(os.Getenv(apiauth.EnvVar)) != ""
+		if !fromPrompt && !envSet && persistedPass != "" {
+			passphrase = persistedPass
+			cfg.APIPassphrase = persistedPass
 		}
 	}
 	if fromPrompt {

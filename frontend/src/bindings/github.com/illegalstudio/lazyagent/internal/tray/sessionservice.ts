@@ -36,10 +36,26 @@ export function Detach(): $CancellablePromise<void> {
 }
 
 /**
+ * GetAPIToken derives and returns the API bearer token. It exists for the
+ * explicit "copy token" action in Settings; empty when unconfigured.
+ */
+export function GetAPIToken(): $CancellablePromise<string> {
+    return $Call.ByID(1795248511);
+}
+
+/**
  * GetActiveCount returns the number of sessions with active work.
  */
 export function GetActiveCount(): $CancellablePromise<number> {
     return $Call.ByID(1984306295);
+}
+
+/**
+ * GetCardDensity returns the persisted desktop card density. Missing or
+ * invalid values fall back to "live".
+ */
+export function GetCardDensity(): $CancellablePromise<string> {
+    return $Call.ByID(2985488372);
 }
 
 /**
@@ -51,6 +67,14 @@ export function GetConfig(): $CancellablePromise<core$0.Config> {
     return $Call.ByID(1670992424).then(($result: any) => {
         return $$createType0($result);
     });
+}
+
+/**
+ * GetDetailWidth returns the persisted desktop detail-panel width in
+ * pixels. Missing or out-of-range values fall back to 400.
+ */
+export function GetDetailWidth(): $CancellablePromise<number> {
+    return $Call.ByID(2792703953);
 }
 
 /**
@@ -90,6 +114,15 @@ export function GetSessions(): $CancellablePromise<$models.SessionItem[]> {
 }
 
 /**
+ * GetSettings returns the GUI-editable settings.
+ */
+export function GetSettings(): $CancellablePromise<$models.Settings> {
+    return $Call.ByID(1562138763).then(($result: any) => {
+        return $$createType6($result);
+    });
+}
+
+/**
  * GetUpdateVersion returns the newer version available, or empty if up-to-date.
  */
 export function GetUpdateVersion(): $CancellablePromise<string> {
@@ -101,6 +134,14 @@ export function GetUpdateVersion(): $CancellablePromise<string> {
  */
 export function GetWindowMinutes(): $CancellablePromise<number> {
     return $Call.ByID(4178116159);
+}
+
+/**
+ * IsAPIConfigured reports whether an API passphrase is set. The passphrase
+ * itself never crosses the IPC boundary (GetConfig scrubs it).
+ */
+export function IsAPIConfigured(): $CancellablePromise<boolean> {
+    return $Call.ByID(3199271690);
 }
 
 /**
@@ -136,10 +177,64 @@ export function OpenReleases(): $CancellablePromise<void> {
 }
 
 /**
+ * Refresh forces a session reload. Bound to the toolbar refresh button and
+ * the View menu.
+ */
+export function Refresh(): $CancellablePromise<void> {
+    return $Call.ByID(310175433);
+}
+
+/**
+ * ResumeInTerminal opens a new Terminal window in the session's working
+ * directory running the agent's resume command. No-op for agents without
+ * an executable resume command (core.ResumeArgv returns nil for those).
+ */
+export function ResumeInTerminal(sessionID: string): $CancellablePromise<void> {
+    return $Call.ByID(1408127766, sessionID);
+}
+
+/**
+ * SaveSettings persists the GUI-editable settings. Exclude filters apply
+ * immediately; agent toggles take effect at the next launch (the session
+ * provider is built at startup).
+ */
+export function SaveSettings(st: $models.Settings): $CancellablePromise<void> {
+    return $Call.ByID(848560626, st);
+}
+
+/**
+ * SetAPIPassphrase sets — or, with an empty string, clears — the API
+ * passphrase, ensuring a salt exists. A running --api server picks the
+ * change up at its next restart.
+ */
+export function SetAPIPassphrase(p: string): $CancellablePromise<void> {
+    return $Call.ByID(1598448106, p);
+}
+
+/**
  * SetActivityFilter sets the activity filter.
  */
 export function SetActivityFilter(f: string): $CancellablePromise<void> {
     return $Call.ByID(3837448025, f);
+}
+
+/**
+ * SetCardDensity persists the desktop card density choice.
+ * core.UpdateConfig holds a file lock for the whole read-modify-write, so
+ * concurrent writers (this process or another lazyagent process) cannot
+ * clobber each other's config fields.
+ */
+export function SetCardDensity(d: string): $CancellablePromise<void> {
+    return $Call.ByID(2444020248, d);
+}
+
+/**
+ * SetDetailWidth persists the desktop detail-panel width. Unlike the
+ * density setter it clamps instead of rejecting: the value comes from a
+ * drag gesture, not typed input.
+ */
+export function SetDetailWidth(w: number): $CancellablePromise<void> {
+    return $Call.ByID(3280861733, w);
 }
 
 /**
@@ -177,3 +272,4 @@ const $$createType2 = $models.SessionFull.createFrom;
 const $$createType3 = $Create.Nullable($$createType2);
 const $$createType4 = $models.SessionItem.createFrom;
 const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $models.Settings.createFrom;

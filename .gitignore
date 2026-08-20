@@ -3,6 +3,9 @@
 /lazyagent-app
 /tui
 /app
+dist-app/
+# goreleaser output (snapshot runs)
+dist/
 
 # Frontend build
 frontend/node_modules/
@@ -25,3 +28,6 @@ internal/assets/dist/*
 
 # Go
 vendor/
+
+# Superpowers scratch (brainstorm mockups, SDD ledgers)
+.superpowers/

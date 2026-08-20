@@ -65,16 +65,37 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
 
-          for archive in dist/lazyagent_*_darwin_*.zip; do
+          # App bundle: notarize, then staple the ticket into the .app
+          # and re-zip so offline Gatekeeper checks pass.
+          for archive in dist/Lazyagent_*_darwin_universal.zip; do
             echo "Notarizing $archive ..."
             xcrun notarytool submit "$archive" \
               --apple-id "$APPLE_ID" \
               --team-id "$APPLE_TEAM_ID" \
               --password "$APPLE_APP_PASSWORD" \
               --wait --timeout 360m
-            echo "Notarized: $archive"
 
-            # Replace the asset in the GitHub release with the notarized one
+            STAPLE_DIR="$(mktemp -d)"
+            ditto -x -k "$archive" "$STAPLE_DIR"
+            xcrun stapler staple "$STAPLE_DIR/Lazyagent.app"
+            rm -f "$archive"
+            ditto -c -k --keepParent "$STAPLE_DIR/Lazyagent.app" "$archive"
+
+            FILENAME="$(basename "$archive")"
+            echo "Replacing $FILENAME in release $TAG ..."
+            gh release delete-asset "$TAG" "$FILENAME" --repo "$GITHUB_REPOSITORY" --yes
+            gh release upload "$TAG" "$archive" --repo "$GITHUB_REPOSITORY"
+          done
+
+          # CLI binaries: notarize the zips as before (no bundle to staple).
+          for archive in dist/lazyagent-cli_*_darwin_*.zip; do
+            echo "Notarizing $archive ..."
+            xcrun notarytool submit "$archive" \
+              --apple-id "$APPLE_ID" \
+              --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_PASSWORD" \
+              --wait --timeout 360m
+
             FILENAME="$(basename "$archive")"
             echo "Replacing $FILENAME in release $TAG ..."
             gh release delete-asset "$TAG" "$FILENAME" --repo "$GITHUB_REPOSITORY" --yes
@@ -85,14 +106,39 @@ jobs:
           echo "Updating checksums ..."
           CHECKSUMS="dist/lazyagent_${TAG#v}_checksums.txt"
           if [ -f "$CHECKSUMS" ]; then
-            # Regenerate checksums for all release archives
             cd dist
-            shasum -a 256 lazyagent_*.zip lazyagent_*.tar.gz > "$(basename "$CHECKSUMS")"
+            shasum -a 256 Lazyagent_*.zip lazyagent-cli_*.zip lazyagent-cli_*.tar.gz > "$(basename "$CHECKSUMS")"
             cd ..
             CHECKSUMS_NAME="$(basename "$CHECKSUMS")"
             gh release delete-asset "$TAG" "$CHECKSUMS_NAME" --repo "$GITHUB_REPOSITORY" --yes
             gh release upload "$TAG" "$CHECKSUMS" --repo "$GITHUB_REPOSITORY"
           fi
+
+      - name: Update cask sha256 after stapling
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          NEW_SHA="$(shasum -a 256 dist/Lazyagent_*_darwin_universal.zip | awk '{print $1}')"
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/illegalstudio/homebrew-tap.git" tap
+          cd tap
+          # goreleaser writes the cask with the pre-staple sha256; fix it.
+          sed -i '' -E "s/sha256 \"[0-9a-f]{64}\"/sha256 \"${NEW_SHA}\"/" Casks/lazyagent.rb
+          # The cask must link the app-internal binary as the `lazyagent`
+          # command (configured via homebrew_casks[].binaries) — fail loudly
+          # if a goreleaser bump regresses the stanza.
+          if ! grep -q 'binary "#{appdir}/Lazyagent.app/Contents/MacOS/lazyagent"' Casks/lazyagent.rb; then
+            echo "ERROR: appdir binary stanza missing from the cask — goreleaser template changed?" >&2
+            exit 1
+          fi
+          if ! grep -q "sha256 \"${NEW_SHA}\"" Casks/lazyagent.rb; then
+            echo "ERROR: sha256 patch did not land in the cask" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "lazyagent: update cask sha256 after notarization staple (${TAG})"
+          git push
 
       # Clean up keychain
       - name: Clean up keychain

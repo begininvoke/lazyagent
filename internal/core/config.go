@@ -54,6 +54,48 @@ var knownAgentNames = map[string]struct{}{
 	"grok": {}, "kimi": {}, "kilo": {},
 }
 
+// validCardDensities lists the accepted desktop card density values.
+var validCardDensities = map[string]struct{}{
+	"compact": {}, "rich": {}, "live": {},
+}
+
+// NormalizeCardDensity returns d if it is a valid card density, "live" otherwise.
+func NormalizeCardDensity(d string) string {
+	if _, ok := validCardDensities[d]; ok {
+		return d
+	}
+	return "live"
+}
+
+// validTerminals lists the terminal emulators lazyagent knows how to
+// launch commands in (Resume, terminal $EDITOR, …). Only presets whose
+// launch incantation has been verified on a real setup are enabled;
+// re-add the parked ones here (and in tray/terminal.go and the Settings
+// panel) once tested.
+var validTerminals = map[string]struct{}{
+	"terminal": {}, "kitty": {},
+	// "iterm2": {}, "ghostty": {}, "wezterm": {}, "alacritty": {},
+}
+
+// NormalizeTerminal returns t if it is a supported terminal preset,
+// "terminal" (macOS Terminal.app) otherwise.
+func NormalizeTerminal(t string) string {
+	if _, ok := validTerminals[t]; ok {
+		return t
+	}
+	return "terminal"
+}
+
+// NormalizeDetailWidth returns w if it is a plausible desktop detail-panel
+// width in pixels (300–2000), 400 otherwise. The frontend applies the
+// tighter window-relative clamp (60% of window width) at drag time.
+func NormalizeDetailWidth(w int) int {
+	if w < 300 || w > 2000 {
+		return 400
+	}
+	return w
+}
+
 // Validate returns nil if the webhook is well-formed.
 func (w WebhookConfig) Validate() error {
 	if strings.TrimSpace(w.Name) == "" {
@@ -108,7 +150,15 @@ type Config struct {
 	ClaudeDirs           []string        `json:"claude_dirs,omitempty"`
 	ExcludeCWDSubstrings []string        `json:"exclude_cwd_substrings"`
 	TUI                  TUIConfig       `json:"tui"`
-	Webhooks             []WebhookConfig `json:"webhooks,omitempty"`
+	CardDensity          string          `json:"card_density,omitempty"`
+	// DetailWidth is the GUI desktop-mode detail panel width in pixels.
+	// 0 or out-of-range values mean the 400px default.
+	DetailWidth int `json:"detail_width,omitempty"`
+	// Terminal picks the terminal emulator for actions that open one
+	// (Resume, terminal $EDITOR): terminal, iterm2, kitty, ghostty,
+	// wezterm or alacritty. Empty/unknown means Terminal.app.
+	Terminal string          `json:"terminal,omitempty"`
+	Webhooks []WebhookConfig `json:"webhooks,omitempty"`
 	// APIPassphrase is the secret used to derive the bearer token that
 	// protects the HTTP API. Empty means the API has not been configured yet
 	// — `lazyagent --api` will prompt for one on first run.
@@ -178,25 +228,28 @@ func ConfigPath() string {
 	return filepath.Join(dir, "config.json")
 }
 
-// LoadConfig reads the config file, creating it with defaults if missing.
-func LoadConfig() Config {
-	cfg := DefaultConfig()
+// readConfig reads and normalizes the config purely in memory: defaults,
+// file contents when present, and backfill of missing generated keys. It
+// NEVER writes to disk — persistence of a needed backfill is LoadConfig's
+// job (under the config lock), so a stale snapshot can't clobber a
+// concurrent writer's fields. needsSave reports whether the on-disk file
+// is missing or incomplete.
+func readConfig() (cfg Config, needsSave bool) {
+	cfg = DefaultConfig()
 	path := ConfigPath()
 	if path == "" {
-		return cfg
+		return cfg, false
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// File doesn't exist — create it with defaults.
+		// File doesn't exist — defaults plus a fresh salt.
 		ensureAPISalt(&cfg)
-		_ = SaveConfig(cfg)
-		return cfg
+		return cfg, true
 	}
 
 	_ = json.Unmarshal(data, &cfg)
 
-	// Backfill any missing generated/config keys so the file stays complete.
 	changed := ensureAPISalt(&cfg)
 	defaults := DefaultConfig()
 	if cfg.Agents == nil {
@@ -214,8 +267,22 @@ func LoadConfig() Config {
 		cfg.ExcludeCWDSubstrings = defaults.ExcludeCWDSubstrings
 		changed = true
 	}
-	if changed {
-		_ = SaveConfig(cfg)
+	return cfg, changed
+}
+
+// LoadConfig reads the config file, creating or completing it (under the
+// config lock) if keys are missing.
+func LoadConfig() Config {
+	cfg, needsSave := readConfig()
+	if needsSave {
+		// Persist through UpdateConfig so the backfill save can't race
+		// another writer. The no-op mutate is enough: UpdateConfig
+		// re-runs readConfig under the lock, which recomputes the
+		// backfill. Re-read afterwards so what we return (salt
+		// included) is exactly what was persisted.
+		if err := UpdateConfig(func(*Config) {}); err == nil {
+			cfg, _ = readConfig()
+		}
 	}
 
 	for _, w := range cfg.Webhooks {

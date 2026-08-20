@@ -1,4 +1,4 @@
-.PHONY: all build tui frontend bindings clean dev install deploy
+.PHONY: all build tui frontend bindings clean dev install deploy app
 
 all: build
 
@@ -35,7 +35,12 @@ dev: bindings
 deploy:
 	@scripts/deploy.sh
 
+# Assemble an unsigned Lazyagent.app locally (for testing the bundle)
+app: build
+	scripts/make-app.sh ./lazyagent dev dist-app
+
 # Clean build artifacts
 clean:
 	rm -f lazyagent
 	rm -rf frontend/dist internal/assets/dist/*
+	rm -rf dist-app

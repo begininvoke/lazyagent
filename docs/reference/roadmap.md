@@ -35,7 +35,8 @@ sidebar:
 - ✅ Core library extraction
 - ✅ Shared config system
 - ✅ Wails v3 + Svelte 5 + Tailwind 4 frontend
-- ✅ System tray with attached panel
+- ✅ System tray with attached panel (menu bar accessory app, no Dock icon)
+- ✅ Detachable desktop mode: card-grid dashboard with compact/rich/live density switch (persisted via `card_density`), resizable push-in detail panel, per-card Resume/Editor actions with context menu, app toolbar + status bar, Settings panel (terminal via `terminal`, editor, agents, excludes, API passphrase), Dock icon + Cmd-Tab + native App/Edit/View/Window menus while detached; reattaching returns to accessory mode
 - ✅ Real-time session updates
 - ✅ SVG sparkline, activity badges
 - ✅ Keyboard shortcuts
@@ -43,9 +44,9 @@ sidebar:
 - ⬜ Dynamic tray icon (active count)
 - ⬜ macOS notifications
 - ⬜ Launch at Login
-- ⬜ Code signing & notarization
+- ✅ Code signing & notarization: CI signs, notarizes, and staples the universal `Lazyagent.app` bundle
 - ⬜ DMG distribution
-- ⬜ Homebrew cask
+- ✅ Homebrew distribution split: `brew install --cask illegalstudio/tap/lazyagent` installs the signed, notarized `Lazyagent.app`; `brew install illegalstudio/tap/lazyagent` installs the CLI-only (notray) build as `lazyagent` for darwin and linux
 
 ## v0.4 — HTTP API
 

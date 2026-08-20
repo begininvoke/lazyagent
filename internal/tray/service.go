@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/illegalstudio/lazyagent/internal/apiauth"
 	"github.com/illegalstudio/lazyagent/internal/core"
 	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/limits"
@@ -37,6 +38,7 @@ type SessionService struct {
 	detachMu       sync.RWMutex
 	detached       bool
 	pinned         bool
+	desktopOnce    sync.Once // one-time desktop setup: app icon + native menu
 }
 
 // ServiceStartup is called by Wails when the app starts.
@@ -161,6 +163,8 @@ type SessionItem struct {
 	LastActivity  time.Time `json:"lastActivity"`
 	TotalMessages int       `json:"totalMessages"`
 	SparklineData []int     `json:"sparklineData"`
+	CurrentTool   string    `json:"currentTool"`
+	LastMessage   string    `json:"lastMessage"`
 }
 
 // SessionFull is the detailed session representation.
@@ -175,7 +179,6 @@ type SessionFull struct {
 	CacheReadTokens     int                `json:"cacheReadTokens"`
 	UserMessages        int                `json:"userMessages"`
 	AssistantMessages   int                `json:"assistantMessages"`
-	CurrentTool         string             `json:"currentTool"`
 	LastFileWrite       string             `json:"lastFileWrite"`
 	LastFileWriteAt     time.Time          `json:"lastFileWriteAt"`
 	RecentTools         []ToolItem         `json:"recentTools"`
@@ -222,6 +225,8 @@ func (s *SessionService) buildSessionItem(sess *model.Session, activity core.Act
 		LastActivity:  sess.LastActivity,
 		TotalMessages: sess.TotalMessages,
 		SparklineData: core.BucketTimestamps(sess.EntryTimestamps, time.Duration(wm)*time.Minute, 20),
+		CurrentTool:   sess.CurrentTool,
+		LastMessage:   lastMessageSnippet(sess),
 	}
 }
 
@@ -281,7 +286,6 @@ func (s *SessionService) GetSessionDetail(id string) *SessionFull {
 		CacheReadTokens:     sess.CacheReadTokens,
 		UserMessages:        sess.UserMessages,
 		AssistantMessages:   sess.AssistantMessages,
-		CurrentTool:         sess.CurrentTool,
 		LastFileWrite:       sess.LastFileWrite,
 		LastFileWriteAt:     sess.LastFileWriteAt,
 		RecentTools:         tools,
@@ -388,15 +392,47 @@ func launchGUI(editor, cwd string) {
 
 // launchInTerminal opens a terminal editor inside a new macOS Terminal.app window.
 func launchInTerminal(editor, cwd string) {
-	script := fmt.Sprintf(`tell application "Terminal"
-	activate
-	do script "cd %s && %s"
-end tell`, shellQuote(cwd), shellQuote(editor))
-	c := exec.Command("osascript", "-e", script)
+	launchCommandInTerminal([]string{editor}, cwd)
+}
+
+// launchCommandInTerminal opens a new window of the configured terminal
+// emulator (config key "terminal") in cwd and runs argv, shell-quoting
+// every element.
+func launchCommandInTerminal(argv []string, cwd string) {
+	term := core.NormalizeTerminal(core.LoadConfig().Terminal)
+	full := terminalCommand(term, cwd, argv)
+	c := exec.Command(full[0], full[1:]...)
 	c.Stdin = nil
 	c.Stdout = nil
 	c.Stderr = nil
-	_ = c.Start()
+	if err := c.Start(); err != nil {
+		return
+	}
+	if term == "kitty" {
+		go activateSpawnedKitty(c)
+	}
+}
+
+// Refresh forces a session reload. Bound to the toolbar refresh button and
+// the View menu.
+func (s *SessionService) Refresh() {
+	_ = s.manager.Reload()
+	s.emitUpdate()
+}
+
+// ResumeInTerminal opens a new Terminal window in the session's working
+// directory running the agent's resume command. No-op for agents without
+// an executable resume command (core.ResumeArgv returns nil for those).
+func (s *SessionService) ResumeInTerminal(sessionID string) {
+	detail := s.manager.SessionDetail(sessionID)
+	if detail == nil {
+		return
+	}
+	argv := core.ResumeArgv(detail.Session.Agent, sessionID)
+	if argv == nil || detail.Session.CWD == "" {
+		return
+	}
+	launchCommandInTerminal(argv, detail.Session.CWD)
 }
 
 // shellQuote returns a single-quoted string safe for embedding in AppleScript shell commands.
@@ -441,6 +477,105 @@ func (s *SessionService) GetConfig() core.Config {
 	return cfg
 }
 
+// GetCardDensity returns the persisted desktop card density. Missing or
+// invalid values fall back to "live".
+func (s *SessionService) GetCardDensity() string {
+	return core.NormalizeCardDensity(core.LoadConfig().CardDensity)
+}
+
+// SetCardDensity persists the desktop card density choice.
+// core.UpdateConfig holds a file lock for the whole read-modify-write, so
+// concurrent writers (this process or another lazyagent process) cannot
+// clobber each other's config fields.
+func (s *SessionService) SetCardDensity(d string) error {
+	if core.NormalizeCardDensity(d) != d {
+		return fmt.Errorf("invalid card density %q", d)
+	}
+	return core.UpdateConfig(func(c *core.Config) { c.CardDensity = d })
+}
+
+// GetDetailWidth returns the persisted desktop detail-panel width in
+// pixels. Missing or out-of-range values fall back to 400.
+func (s *SessionService) GetDetailWidth() int {
+	return core.NormalizeDetailWidth(core.LoadConfig().DetailWidth)
+}
+
+// SetDetailWidth persists the desktop detail-panel width. Unlike the
+// density setter it clamps instead of rejecting: the value comes from a
+// drag gesture, not typed input.
+func (s *SessionService) SetDetailWidth(w int) error {
+	return core.UpdateConfig(func(c *core.Config) {
+		c.DetailWidth = core.NormalizeDetailWidth(w)
+	})
+}
+
+// Settings is the GUI-editable subset of the config.
+type Settings struct {
+	Terminal             string          `json:"terminal"`
+	Editor               string          `json:"editor"`
+	Agents               map[string]bool `json:"agents"`
+	ExcludeCWDSubstrings []string        `json:"excludeCwdSubstrings"`
+}
+
+// GetSettings returns the GUI-editable settings.
+func (s *SessionService) GetSettings() Settings {
+	cfg := core.LoadConfig()
+	return Settings{
+		Terminal:             core.NormalizeTerminal(cfg.Terminal),
+		Editor:               cfg.Editor,
+		Agents:               cfg.Agents,
+		ExcludeCWDSubstrings: cfg.ExcludeCWDSubstrings,
+	}
+}
+
+// SaveSettings persists the GUI-editable settings. Exclude filters apply
+// immediately; agent toggles take effect at the next launch (the session
+// provider is built at startup).
+func (s *SessionService) SaveSettings(st Settings) error {
+	if err := core.UpdateConfig(func(c *core.Config) {
+		c.Terminal = core.NormalizeTerminal(st.Terminal)
+		c.Editor = strings.TrimSpace(st.Editor)
+		if st.Agents != nil {
+			c.Agents = st.Agents
+		}
+		c.ExcludeCWDSubstrings = st.ExcludeCWDSubstrings
+	}); err != nil {
+		return err
+	}
+	s.manager.SetExcludeCWDSubstrings(st.ExcludeCWDSubstrings)
+	_ = s.manager.Reload()
+	s.emitUpdate()
+	return nil
+}
+
+// IsAPIConfigured reports whether an API passphrase is set. The passphrase
+// itself never crosses the IPC boundary (GetConfig scrubs it).
+func (s *SessionService) IsAPIConfigured() bool {
+	return core.LoadConfig().APIPassphrase != ""
+}
+
+// SetAPIPassphrase sets — or, with an empty string, clears — the API
+// passphrase, ensuring a salt exists. A running --api server picks the
+// change up at its next restart.
+func (s *SessionService) SetAPIPassphrase(p string) error {
+	return core.UpdateConfig(func(c *core.Config) {
+		c.APIPassphrase = strings.TrimSpace(p)
+		if c.APIPassphrase != "" {
+			core.EnsureAPISalt(c)
+		}
+	})
+}
+
+// GetAPIToken derives and returns the API bearer token. It exists for the
+// explicit "copy token" action in Settings; empty when unconfigured.
+func (s *SessionService) GetAPIToken() string {
+	cfg := core.LoadConfig()
+	if cfg.APIPassphrase == "" {
+		return ""
+	}
+	return apiauth.DeriveToken(cfg.APIPassphrase, cfg.APISalt)
+}
+
 // Detach switches from tray panel to a normal detached window.
 func (s *SessionService) Detach() {
 	s.detachMu.Lock()
@@ -451,6 +586,14 @@ func (s *SessionService) Detach() {
 	s.detached = true
 	s.detachMu.Unlock()
 	s.panelWindow.Hide()
+	s.desktopOnce.Do(func() {
+		s.app.SetIcon(appIcon)
+		installAppMenu(s.app, s)
+	})
+	// Load-bearing order: the activation policy switch is dispatched to the
+	// main queue before Show(), so the window appears as a normal desktop-app
+	// window (Dock icon, Cmd-Tab) rather than briefly showing as an accessory.
+	setDesktopActivation(true)
 	s.detachedWindow.Show().Focus()
 	s.detachedWindow.Center()
 	s.emitDetachChanged()
@@ -471,6 +614,7 @@ func (s *SessionService) Attach() {
 		s.detachedWindow.SetAlwaysOnTop(false)
 	}
 	s.detachedWindow.Hide()
+	setDesktopActivation(false)
 	s.emitDetachChanged()
 }
 
@@ -506,4 +650,16 @@ func (s *SessionService) emitDetachChanged() {
 	if s.app != nil {
 		s.app.Event.Emit("detach:changed")
 	}
+}
+
+// lastMessageSnippet returns a short single-line snippet of the newest
+// recent message, shown on the desktop "live" card. RecentMessages is
+// chronological, so the newest entry is the last one.
+func lastMessageSnippet(sess *model.Session) string {
+	if len(sess.RecentMessages) == 0 {
+		return ""
+	}
+	text := sess.RecentMessages[len(sess.RecentMessages)-1].Text
+	text = strings.Join(strings.Fields(text), " ")
+	return core.TruncateRunes(text, 140)
 }

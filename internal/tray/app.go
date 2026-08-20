@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/assets"
 	"github.com/illegalstudio/lazyagent/internal/core"
@@ -150,11 +149,7 @@ func Run(demoMode bool, agentMode string) error {
 		// placed after it would never run. A clean quit exits the process well
 		// under this deadline; otherwise we force termination so the icon
 		// always goes away.
-		go func() {
-			time.Sleep(1500 * time.Millisecond)
-			os.Exit(0)
-		}()
-		app.Quit()
+		quitWithWatchdog(app)
 	})
 	tray.SetMenu(menu)
 

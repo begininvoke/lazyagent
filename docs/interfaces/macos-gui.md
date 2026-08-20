@@ -9,19 +9,53 @@ sidebar:
 lazyagent --gui
 ```
 
-The GUI process detaches from your terminal — the shell returns immediately and the app lives in your menu bar. There's no Dock icon (it's registered as a macOS *accessory* app). Click the tray icon to toggle the panel.
+The GUI process detaches from your terminal — the shell returns immediately and the app lives in your menu bar. In its default attached mode there's no Dock icon (it's registered as a macOS *accessory* app). Click the tray icon to toggle the panel.
 
 ![lazyagent macOS menu bar app](../../assets/tray.png)
 
-## The detachable panel
+## Installing and launching the app
 
-The panel defaults to an attached popover below the menu bar icon. Press <kbd>d</kbd> (or click the detach button in the header) to pop it out into a standalone resizable window. Once detached you can:
+The GUI ships as `Lazyagent.app`, a real macOS bundle (`brew install --cask illegalstudio/tap/lazyagent`) wrapping the same universal binary as the TUI and HTTP API. Launching it from Finder, Spotlight, or a login item starts it in the menu bar accessory mode described above — no Dock icon, no window, just the tray.
 
-- **Move it** anywhere on your screen.
-- **Resize it** to whatever dimensions you want.
-- **Pin it always-on-top** so it stays visible while you work.
+Because it's a proper bundle, the app carries a real LaunchServices identity: Cmd-Tab and the Dock show the Lazyagent icon and name, not a generic Unix-executable icon. This fixes a previous limitation where the app's Cmd-Tab presentation fell back to the generic icon since a bare Mach-O binary has no bundle identifier.
 
-Press <kbd>d</kbd> again or close the window to snap it back to the menu bar.
+From a terminal, `lazyagent --gui` inside the bundle relaunches the app via LaunchServices (`open -b com.illegalstudio.lazyagent`) rather than forking a child process, forwarding along `--demo` and `--agent`. This keeps the GUI process under the bundle's identity even when launched indirectly. The forwarded flags only take effect on a **fresh launch** — if the app is already running, LaunchServices just activates the existing instance and the new `--demo`/`--agent` values are ignored, since no new process starts to read them. On the CLI-only build (`lazyagent` installed via the `lazyagent-cli` formula, no tray support), `--gui` still errors as before — that build never had a GUI to launch.
+
+## The `lazyagent` command
+
+The Homebrew cask links the app's inner binary into Homebrew's bin as `lazyagent` at install time — the CLI works without ever launching the app, and `brew uninstall --cask lazyagent` removes it cleanly. If you installed the app zip manually, create the link yourself:
+
+```bash
+ln -s /Applications/Lazyagent.app/Contents/MacOS/lazyagent /usr/local/bin/lazyagent
+```
+
+The separate `lazyagent-cli` formula installs the same command from the CLI-only build; the cask and the formula conflict on purpose, since the app already includes the CLI.
+
+## Attached panel vs. detached desktop mode
+
+The panel defaults to an attached popover below the menu bar icon. Press <kbd>d</kbd> (or click the detach button in the header) to pop it out.
+
+Detaching turns lazyagent into a full desktop app: a Dock icon appears, it shows up in Cmd-Tab, and native macOS menus (App, Edit, View, Window) are installed. The compact popover is replaced by a card-grid dashboard with a proper app toolbar:
+
+- **Search** is always visible (<kbd>/</kbd> focuses it, <kbd>esc</kbd> clears it).
+- A **density switch** — **compact**, **rich**, or **live** (also <kbd>⌘1</kbd>/<kbd>⌘2</kbd>/<kbd>⌘3</kbd> from the View menu) — controls how much detail each session card shows; your choice is persisted.
+- Toolbar buttons for the time window, **Limits**, **refresh** (<kbd>⌘R</kbd>), **pin always-on-top**, **Settings** (gear), and reattach.
+
+Each card carries an action bar: **Resume** opens the session's resume command in a new window of your configured terminal, **Editor** opens the project in your editor, and **✎** renames inline. Right-clicking a card (or the **⋯** button) opens a context menu with the same actions plus *Copy resume command* and *Copy project path*. Selecting a card pushes in a detail panel alongside the grid — drag its left edge to resize it (double-click resets), navigate with <kbd>j</kbd>/<kbd>k</kbd> while it's open.
+
+The bottom status bar shows session counts and the window's total cost; **? shortcuts** (or the <kbd>?</kbd> key) opens the keyboard-shortcut reference. Press <kbd>d</kbd> again or close the window to reattach — the Dock icon goes away and lazyagent returns to menu bar accessory mode.
+
+## Settings
+
+The gear icon opens the Settings panel:
+
+- **Terminal** — which emulator Resume and other terminal actions use: Terminal.app (default) or Kitty for now (more will be enabled as their launch flows are verified). Kitty windows open in a dedicated lazyagent instance group and are raised automatically; no kitty configuration is needed.
+- **Editor** — the GUI editor command for "Open in editor"; empty falls back to `$VISUAL`, then `$EDITOR` in a terminal.
+- **Agents** — which agents to monitor (applies at the next launch).
+- **Hide projects containing** — path fragments to exclude, one per line (applies immediately).
+- **API authentication** — set, rotate, or clear the HTTP API passphrase and copy the derived bearer token. The current passphrase is never displayed; a running `--api` server picks changes up at its next restart.
+
+Everything saves to the same `config.json` the CLI uses — see [Configuration](../reference/configuration.md).
 
 ## Keybindings
 
@@ -36,6 +70,10 @@ Press <kbd>d</kbd> again or close the window to snap it back to the menu bar.
 | <kbd>r</kbd> | Rename session; refresh while the limits view is open |
 | <kbd>d</kbd> | Detach / reattach panel |
 | <kbd>esc</kbd> | Close detail / dismiss search |
+| <kbd>?</kbd> | Keyboard-shortcut reference (desktop mode) |
+| <kbd>⌘1</kbd>–<kbd>⌘3</kbd> | Card density (desktop mode) |
+| <kbd>⌘L</kbd> | Toggle limits (desktop mode) |
+| <kbd>⌘R</kbd> | Refresh sessions (desktop mode) |
 
 ## Right-click menu
 

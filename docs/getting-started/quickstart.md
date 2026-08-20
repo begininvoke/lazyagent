@@ -19,7 +19,7 @@ You'll see a list of sessions on the left and a detail panel on the right. Use <
 
 ## The three interfaces
 
-lazyagent is a single binary with three interfaces, selectable by flag:
+lazyagent has three interfaces, selectable by flag (the desktop app bundles all three; the `lazyagent-cli` formula ships the TUI and API only):
 
 ```bash
 lazyagent              # Terminal UI (default)

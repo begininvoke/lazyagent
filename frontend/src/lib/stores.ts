@@ -14,6 +14,10 @@ export interface SessionItem {
   lastActivity: string;
   totalMessages: number;
   sparklineData: number[];
+  agent: string;
+  source: string;
+  currentTool: string;
+  lastMessage: string;
 }
 
 export interface SessionFull extends SessionItem {
@@ -26,7 +30,6 @@ export interface SessionFull extends SessionItem {
   cacheReadTokens: number;
   userMessages: number;
   assistantMessages: number;
-  currentTool: string;
   lastFileWrite: string;
   lastFileWriteAt: string;
   recentTools: { name: string; timestamp: string; ago: string }[];
@@ -39,6 +42,16 @@ export const selectedDetail = writable<SessionFull | null>(null);
 export const windowMinutes = writable(30);
 export const activityFilter = writable("");
 export const searchQuery = writable("");
+
+export type CardDensity = "compact" | "rich" | "live";
+export const cardDensity = writable<CardDensity>("live");
+export const detailWidth = writable(400);
+export const searching = writable(false);
+export const showLimits = writable(false);
+export const limitsRefreshToken = writable(0);
+export const updateVersion = writable("");
+export const isDetached = writable(false);
+export const isPinned = writable(false);
 
 export const activeCount = derived(sessions, ($sessions) =>
   $sessions.filter((s) => s.isActive).length
