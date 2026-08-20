@@ -44,7 +44,7 @@ func installAppMenu(app *application.App, svc *SessionService) {
 
 	// View menu: density is persisted Go-side, then broadcast so the
 	// frontend store follows; limits is pure frontend state, so the menu
-	// only emits and the webview flips it.
+	// only emits and the webview opens it.
 	viewMenu := menu.AddSubmenu("View")
 	for i, d := range []string{"compact", "rich", "live"} {
 		density := d
@@ -56,10 +56,10 @@ func installAppMenu(app *application.App, svc *SessionService) {
 			})
 	}
 	viewMenu.AddSeparator()
-	viewMenu.Add("Toggle Limits").
+	viewMenu.Add("Show Limits").
 		SetAccelerator("CmdOrCtrl+l").
 		OnClick(func(ctx *application.Context) {
-			app.Event.Emit("menu:toggleLimits")
+			app.Event.Emit("menu:showLimits")
 		})
 	viewMenu.Add("Refresh Sessions").
 		SetAccelerator("CmdOrCtrl+r").

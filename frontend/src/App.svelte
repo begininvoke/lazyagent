@@ -36,6 +36,14 @@
     }
   });
 
+  function handleLimitsRefresh(e: KeyboardEvent) {
+    if ($showLimits && (e.key === "r" || e.key === "R")) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      $limitsRefreshToken += 1;
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if ($searching) {
       if (e.key === "Escape") {
@@ -47,14 +55,11 @@
     }
 
     if ($showLimits) {
-      if (e.key === "Escape" || e.key === "l" || e.key === "L") {
+      if (!$isDetached && (e.key === "Escape" || e.key === "l" || e.key === "L")) {
         e.preventDefault();
         $showLimits = false;
-      } else if (e.key === "r" || e.key === "R") {
-        e.preventDefault();
-        $limitsRefreshToken += 1;
+        return;
       }
-      return;
     }
 
     if (e.key === "Escape") {
@@ -114,8 +119,8 @@
       const d = Array.isArray(ev?.data) ? ev.data[0] : ev?.data;
       if (d === "compact" || d === "rich" || d === "live") $cardDensity = d;
     });
-    Events.On("menu:toggleLimits", () => {
-      $showLimits = !$showLimits;
+    Events.On("menu:showLimits", () => {
+      $showLimits = true;
     });
 
     // Check for updates after a short delay (gives the backend time to fetch)
@@ -128,7 +133,7 @@
   });
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydowncapture={handleLimitsRefresh} onkeydown={handleKeydown} />
 
 {#if $isDetached}
   <DesktopView />
