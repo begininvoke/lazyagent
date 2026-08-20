@@ -39,7 +39,7 @@ Detaching turns lazyagent into a full desktop app: a Dock icon appears, it shows
 
 - **Search** is always visible (<kbd>/</kbd> focuses it, <kbd>esc</kbd> clears it).
 - A **density switch** — **compact**, **rich**, or **live** (also <kbd>⌘1</kbd>/<kbd>⌘2</kbd>/<kbd>⌘3</kbd> from the View menu) — controls how much detail each session card shows; your choice is persisted.
-- Toolbar buttons for the time window, **Limits**, **refresh** (<kbd>⌘R</kbd>), **pin always-on-top**, **Settings** (gear), and reattach.
+- Toolbar buttons for the time window, **Limits**, **refresh** (<kbd>⌘R</kbd>), **pin always-on-top**, **Settings** (gear), and reattach. Limits open in a centered floating dialog instead of replacing the dashboard. The dialog does not dim or block the dashboard, can be dragged and resized from its lower-right corner, has a position pin that disables dragging, and has its own refresh button. On open and whenever the app window changes size, its dimensions and position are clamped inside the window. Only its close button dismisses it.
 
 Each card carries an action bar: **Resume** opens the session's resume command in a new window of your configured terminal, **Editor** opens the project in your editor, and **✎** renames inline. Right-clicking a card (or the **⋯** button) opens a context menu with the same actions plus *Copy resume command* and *Copy project path*. Selecting a card pushes in a detail panel alongside the grid — drag its left edge to resize it (double-click resets), navigate with <kbd>j</kbd>/<kbd>k</kbd> while it's open.
 
@@ -66,13 +66,13 @@ Everything saves to the same `config.json` the CLI uses — see [Configuration](
 | <kbd>+</kbd> / <kbd>-</kbd> | Adjust time window |
 | <kbd>f</kbd> | Cycle activity filter |
 | <kbd>/</kbd> | Search sessions |
-| <kbd>l</kbd> | Open or close the limits view |
+| <kbd>l</kbd> | Open limits; close them in the attached panel |
 | <kbd>r</kbd> | Rename session; refresh while the limits view is open |
 | <kbd>d</kbd> | Detach / reattach panel |
 | <kbd>esc</kbd> | Close detail / dismiss search |
 | <kbd>?</kbd> | Keyboard-shortcut reference (desktop mode) |
 | <kbd>⌘1</kbd>–<kbd>⌘3</kbd> | Card density (desktop mode) |
-| <kbd>⌘L</kbd> | Toggle limits (desktop mode) |
+| <kbd>⌘L</kbd> | Open limits (desktop mode) |
 | <kbd>⌘R</kbd> | Refresh sessions (desktop mode) |
 
 ## Right-click menu
