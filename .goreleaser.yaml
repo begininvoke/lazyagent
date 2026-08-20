@@ -160,5 +160,5 @@ brews:
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/illegalstudio/lazyagent
-    description: A lazy TUI for monitoring coding agent sessions
+    description: Lazy TUI for monitoring coding agent sessions
     caveats: "Installs the `lazyagent` command (CLI-only build, no GUI)."
