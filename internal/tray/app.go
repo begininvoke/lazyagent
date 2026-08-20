@@ -9,14 +9,22 @@ import (
 
 	"github.com/illegalstudio/lazyagent/internal/assets"
 	"github.com/illegalstudio/lazyagent/internal/core"
+	"github.com/illegalstudio/lazyagent/internal/demo"
 	"github.com/illegalstudio/lazyagent/internal/version"
 	"github.com/pkg/browser"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-// buildProvider returns the session provider for the given agent mode.
-func buildProvider(agentMode string) core.SessionProvider {
+// runProvider returns the session provider for the GUI: fake data when
+// demoMode is set, otherwise the live provider for agentMode. Demo must be
+// decided HERE — SessionService.ServiceStartup only falls back to the demo
+// provider when provider is nil, and 628cd84 made it unconditionally
+// non-nil, silently killing `--gui --demo` for months.
+func runProvider(demoMode bool, agentMode string) core.SessionProvider {
+	if demoMode {
+		return demo.Provider{}
+	}
 	cfg := core.LoadConfig()
 	return core.BuildProvider(agentMode, cfg)
 }
@@ -30,7 +38,7 @@ func Run(demoMode bool, agentMode string) error {
 		return fmt.Errorf("frontend assets not found — run 'make build' to include the menu bar app")
 	}
 
-	svc := &SessionService{demoMode: demoMode, provider: buildProvider(agentMode)}
+	svc := &SessionService{demoMode: demoMode, provider: runProvider(demoMode, agentMode)}
 
 	app := application.New(application.Options{
 		Name:        "lazyagent",
