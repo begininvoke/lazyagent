@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     sessions, selectedId, activeCount, windowMinutes, activityFilter,
-    searchQuery, showLimits, limitsRefreshToken, updateVersion,
+    searchQuery, showLimits, updateVersion,
     isPinned, cardDensity, detailWidth,
   } from "./stores";
   import type { CardDensity, SessionItem } from "./stores";
@@ -11,7 +11,7 @@
   } from "./actions";
   import SessionCard from "./SessionCard.svelte";
   import DetailPanel from "./DetailPanel.svelte";
-  import LimitsPage from "./LimitsPage.svelte";
+  import LimitsModal from "./LimitsModal.svelte";
   import ContextMenu from "./ContextMenu.svelte";
   import ShortcutsOverlay from "./ShortcutsOverlay.svelte";
   import SettingsModal from "./SettingsModal.svelte";
@@ -96,7 +96,6 @@
       shortcutsOpen = true;
       return;
     }
-    if ($showLimits) return;
     const list = $sessions;
     if (!list.length) return;
     const idx = list.findIndex((s) => s.sessionId === $selectedId);
@@ -161,8 +160,8 @@
 
     <button
       class="no-drag rounded-lg border px-2.5 py-1 text-[11px] {$showLimits ? 'border-accent bg-accent/10 text-accent font-semibold' : 'border-border bg-[#11111b] text-subtext hover:text-text'}"
-      onclick={() => ($showLimits = !$showLimits)}
-      title="Toggle limits (⌘L)"
+      onclick={() => ($showLimits = true)}
+      title="Show limits (⌘L)"
     >Limits</button>
 
     <button
@@ -198,58 +197,52 @@
 
   <!-- Content -->
   <div class="flex-1 flex min-h-0">
-    {#if $showLimits}
-      <div class="flex-1 overflow-hidden bg-surface">
-        <LimitsPage refreshToken={$limitsRefreshToken} />
-      </div>
-    {:else}
-      <div class="flex-1 min-w-0 overflow-y-auto p-3">
-        {#if $sessions.length}
-          <div
-            class="grid gap-3"
-            style="grid-template-columns: repeat(auto-fill, minmax({minCardWidth[$cardDensity]}px, 1fr));"
-          >
-            {#each $sessions as session (session.sessionId)}
-              <SessionCard
-                {session}
-                density={$cardDensity}
-                selected={session.sessionId === $selectedId}
-                onselect={select}
-                oncontext={openContext}
-                {renameRequest}
-                onrenamehandled={() => (renameRequest = null)}
-              />
-            {/each}
-          </div>
-        {:else}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-subtext">
-            <svg viewBox="0 0 24 24" class="w-12 h-12 opacity-40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/>
-            </svg>
-            <div class="text-[13px] font-medium text-text">No sessions in the last {$windowMinutes} minutes</div>
-            <div class="text-[11.5px]">Agents appear here as soon as they run — press <kbd class="bg-surface-hover border border-border rounded px-1">+</kbd> to widen the window.</div>
-          </div>
-        {/if}
-      </div>
-      {#if $selectedId}
+    <div class="flex-1 min-w-0 overflow-y-auto p-3">
+      {#if $sessions.length}
         <div
-          class="relative shrink-0 min-h-0 max-w-[60vw]"
-          style="width: {$detailWidth}px; min-width: 300px;"
+          class="grid gap-3"
+          style="grid-template-columns: repeat(auto-fill, minmax({minCardWidth[$cardDensity]}px, 1fr));"
         >
-          <div
-            class="absolute left-0 top-0 bottom-0 w-[5px] z-10 cursor-col-resize hover:bg-accent/30 {resizing ? 'bg-accent/30' : ''}"
-            role="separator"
-            aria-orientation="vertical"
-            title="Drag to resize, double-click to reset"
-            onpointerdown={startResize}
-            onpointermove={moveResize}
-            onpointerup={endResize}
-            onpointercancel={endResize}
-            ondblclick={resetWidth}
-          ></div>
-          <DetailPanel />
+          {#each $sessions as session (session.sessionId)}
+            <SessionCard
+              {session}
+              density={$cardDensity}
+              selected={session.sessionId === $selectedId}
+              onselect={select}
+              oncontext={openContext}
+              {renameRequest}
+              onrenamehandled={() => (renameRequest = null)}
+            />
+          {/each}
+        </div>
+      {:else}
+        <div class="flex flex-col items-center justify-center h-full gap-3 text-subtext">
+          <svg viewBox="0 0 24 24" class="w-12 h-12 opacity-40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/>
+          </svg>
+          <div class="text-[13px] font-medium text-text">No sessions in the last {$windowMinutes} minutes</div>
+          <div class="text-[11.5px]">Agents appear here as soon as they run — press <kbd class="bg-surface-hover border border-border rounded px-1">+</kbd> to widen the window.</div>
         </div>
       {/if}
+    </div>
+    {#if $selectedId}
+      <div
+        class="relative shrink-0 min-h-0 max-w-[60vw]"
+        style="width: {$detailWidth}px; min-width: 300px;"
+      >
+        <div
+          class="absolute left-0 top-0 bottom-0 w-[5px] z-10 cursor-col-resize hover:bg-accent/30 {resizing ? 'bg-accent/30' : ''}"
+          role="separator"
+          aria-orientation="vertical"
+          title="Drag to resize, double-click to reset"
+          onpointerdown={startResize}
+          onpointermove={moveResize}
+          onpointerup={endResize}
+          onpointercancel={endResize}
+          ondblclick={resetWidth}
+        ></div>
+        <DetailPanel />
+      </div>
     {/if}
   </div>
 
@@ -290,4 +283,8 @@
 
 {#if settingsOpen}
   <SettingsModal onclose={() => (settingsOpen = false)} />
+{/if}
+
+{#if $showLimits}
+  <LimitsModal onclose={() => ($showLimits = false)} />
 {/if}

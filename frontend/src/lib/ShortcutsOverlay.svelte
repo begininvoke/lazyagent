@@ -11,11 +11,11 @@
     },
     {
       title: "View",
-      keys: [["⌘1 ⌘2 ⌘3", "Card density"], ["f", "Cycle activity filter"], ["l", "Toggle limits"], ["+ / −", "Time window"]],
+      keys: [["⌘1 ⌘2 ⌘3", "Card density"], ["f", "Cycle activity filter"], ["l", "Open limits"], ["+ / −", "Time window"]],
     },
     {
       title: "Session",
-      keys: [["r", "Rename selected"], ["double-click", "Rename card"], ["right-click", "Card actions"]],
+      keys: [["r", "Rename selected / refresh limits"], ["double-click", "Rename card"], ["right-click", "Card actions"]],
     },
     {
       title: "App",
