@@ -98,12 +98,15 @@ func TestPersistAPIAuth_KeepsFreshSaltAndPassphrase(t *testing.T) {
 
 	// Empty passphrase = keep whatever is on disk; the salt returned must
 	// be the fresh one, not a newly generated value from a stale snapshot.
-	salt, err := PersistAPIAuth("")
+	pass, salt, err := PersistAPIAuth("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if salt != "fresh-salt" {
 		t.Errorf("salt = %q, want the fresh on-disk salt", salt)
+	}
+	if pass != "fresh-pass" {
+		t.Errorf("pass = %q, want the fresh on-disk passphrase", pass)
 	}
 	cfg := LoadConfig()
 	if cfg.APIPassphrase != "fresh-pass" || cfg.APISalt != "fresh-salt" {
@@ -111,12 +114,15 @@ func TestPersistAPIAuth_KeepsFreshSaltAndPassphrase(t *testing.T) {
 	}
 
 	// A new passphrase replaces the old one but still keeps the fresh salt.
-	salt, err = PersistAPIAuth("rotated")
+	pass, salt, err = PersistAPIAuth("rotated")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if salt != "fresh-salt" {
 		t.Errorf("salt = %q, want unchanged fresh salt", salt)
+	}
+	if pass != "rotated" {
+		t.Errorf("pass = %q, want \"rotated\"", pass)
 	}
 	if got := LoadConfig().APIPassphrase; got != "rotated" {
 		t.Errorf("passphrase = %q, want \"rotated\"", got)
@@ -126,7 +132,7 @@ func TestPersistAPIAuth_KeepsFreshSaltAndPassphrase(t *testing.T) {
 func TestPersistAPIAuth_GeneratesSaltWhenMissing(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	salt, err := PersistAPIAuth("first-pass")
+	_, salt, err := PersistAPIAuth("first-pass")
 	if err != nil {
 		t.Fatal(err)
 	}

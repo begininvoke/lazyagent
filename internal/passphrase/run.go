@@ -118,7 +118,7 @@ func runRotate(cfg *core.Config) int {
 	// Persist on the freshest config under the lock — using this
 	// function's earlier snapshot would clobber a concurrent writer's
 	// salt or passphrase.
-	if _, err := core.PersistAPIAuth(pp); err != nil {
+	if _, _, err := core.PersistAPIAuth(pp); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 		return 1
 	}

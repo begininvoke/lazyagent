@@ -350,11 +350,21 @@ func setupAPIAuth(cfg *core.Config) (string, error) {
 		if fromPrompt {
 			newPass = passphrase
 		}
-		salt, err := core.PersistAPIAuth(newPass)
+		persistedPass, salt, err := core.PersistAPIAuth(newPass)
 		if err != nil {
 			return "", fmt.Errorf("save config: %w", err)
 		}
 		cfg.APISalt = salt
+		// Derive the token from credentials someone can actually derive
+		// too: prompt → the value we just persisted; env → the env value
+		// wins at runtime (documented); config snapshot → the freshest
+		// persisted passphrase, which a concurrent rotation may have
+		// changed between our load and this save.
+		envSet := strings.TrimSpace(os.Getenv(apiauth.EnvVar)) != ""
+		if !fromPrompt && !envSet && persistedPass != "" {
+			passphrase = persistedPass
+			cfg.APIPassphrase = persistedPass
+		}
 	}
 	if fromPrompt {
 		fmt.Fprintf(os.Stderr, "Passphrase saved to %s\n\n", core.ConfigPath())
