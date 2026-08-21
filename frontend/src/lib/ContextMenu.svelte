@@ -13,6 +13,17 @@
 
   let menuEl = $state<HTMLDivElement | null>(null);
 
+  // Prefetch on open: WebKit's clipboard API requires transient user
+  // activation, which expires across async boundaries. Copying must happen
+  // synchronously in the click handler, so the command has to be ready.
+  let resumeCommand = $state("");
+  $effect(() => {
+    resumeCommand = "";
+    SessionService.GetSessionDetail(session.sessionId)
+      .then((d) => { resumeCommand = d?.resumeCommand ?? ""; })
+      .catch(() => {});
+  });
+
   // Keep the menu inside the viewport.
   let pos = $derived.by(() => {
     const w = 190, h = 170;
@@ -45,9 +56,7 @@
     onclose();
   }
   function copyResume() {
-    SessionService.GetSessionDetail(session.sessionId)
-      .then((d) => { if (d?.resumeCommand) navigator.clipboard.writeText(d.resumeCommand); })
-      .catch(() => {});
+    if (resumeCommand) navigator.clipboard.writeText(resumeCommand).catch(() => {});
     onclose();
   }
   function copyPath() {
