@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Clipboard } from "@wailsio/runtime";
   import type { SessionItem } from "./stores";
   import * as SessionService from "../bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
 
@@ -12,17 +13,6 @@
   let { session, x, y, onclose, onrename }: Props = $props();
 
   let menuEl = $state<HTMLDivElement | null>(null);
-
-  // Prefetch on open: WebKit's clipboard API requires transient user
-  // activation, which expires across async boundaries. Copying must happen
-  // synchronously in the click handler, so the command has to be ready.
-  let resumeCommand = $state("");
-  $effect(() => {
-    resumeCommand = "";
-    SessionService.GetSessionDetail(session.sessionId)
-      .then((d) => { resumeCommand = d?.resumeCommand ?? ""; })
-      .catch(() => {});
-  });
 
   // Keep the menu inside the viewport.
   let pos = $derived.by(() => {
@@ -55,12 +45,16 @@
     onrename(session.sessionId);
     onclose();
   }
+  // Clipboard writes go through the Wails runtime (Go-side pasteboard):
+  // WKWebView does not reliably grant navigator.clipboard write access.
   function copyResume() {
-    if (resumeCommand) navigator.clipboard.writeText(resumeCommand).catch(() => {});
+    SessionService.GetSessionDetail(session.sessionId)
+      .then((d) => { if (d?.resumeCommand) return Clipboard.SetText(d.resumeCommand); })
+      .catch(() => {});
     onclose();
   }
   function copyPath() {
-    navigator.clipboard.writeText(session.cwd).catch(() => {});
+    Clipboard.SetText(session.cwd).catch(() => {});
     onclose();
   }
 </script>

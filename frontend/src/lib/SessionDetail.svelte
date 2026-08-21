@@ -8,6 +8,7 @@
   } from "./stores";
   import ActivityBadge from "./ActivityBadge.svelte";
   import Sparkline from "./Sparkline.svelte";
+  import { Clipboard } from "@wailsio/runtime";
   import * as SessionService from "../bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
 
   let detail = $derived($selectedDetail);
@@ -187,7 +188,7 @@
             <code class="text-accent text-[11px]">{detail.resumeCommand}</code>
             <button
               class="rounded px-1.5 py-0.5 text-[10px] font-medium text-subtext bg-surface-hover hover:text-text transition-colors no-drag"
-              onclick={() => navigator.clipboard.writeText(detail.resumeCommand)}
+              onclick={() => Clipboard.SetText(detail.resumeCommand)}
               title="Copy resume command"
             >
               Copy

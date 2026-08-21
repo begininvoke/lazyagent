@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { Clipboard } from "@wailsio/runtime";
   import * as SessionService from "../bindings/github.com/illegalstudio/lazyagent/internal/tray/sessionservice";
 
   interface Props {
@@ -75,7 +76,7 @@
   function copyToken() {
     SessionService.GetAPIToken().then((t) => {
       if (t) {
-        navigator.clipboard.writeText(t);
+        Clipboard.SetText(t);
         apiFeedback = "Bearer token copied";
       } else {
         apiFeedback = "No passphrase configured yet";
