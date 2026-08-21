@@ -1,13 +1,13 @@
 ---
 title: "lazyagent Documentation"
-description: "A terminal UI, macOS menu bar app, and HTTP API for monitoring every coding agent on your machine — plus maintenance commands to keep their transcripts under control."
+description: "A terminal UI, macOS desktop app, and HTTP API for monitoring every coding agent on your machine — plus maintenance commands to keep their transcripts under control."
 sidebar:
   order: 0
 ---
 
 lazyagent watches session data from coding agents — [Claude Code](https://claude.ai/code) (CLI and Desktop), [Cursor](https://cursor.com/), [Codex](https://developers.openai.com/codex/), [Grok CLI](https://x.ai/cli), [Kilo](https://kilo.ai/), Kimi Code CLI, [Amp](https://ampcode.com/), [pi](https://github.com/badlogic/pi-mono), and [OpenCode](https://opencode.ai/) — and shows what each one is doing in real time. No modifications to any agent are needed; it's purely observational.
 
-Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, and an HTTP API. They share the same engine and can all run at once. Additional commands cover directory-scoped session reopening, pruning, compaction, transcript search, and rate-limit snapshots.
+Three interfaces ship in a single binary: a terminal UI, a macOS desktop app, and an HTTP API. They share the same engine and can all run at once. Additional commands cover directory-scoped session reopening, pruning, compaction, transcript search, and rate-limit snapshots.
 
 ## Getting Started
 
@@ -24,7 +24,7 @@ Three interfaces ship in a single binary: a terminal UI, a macOS menu bar app, a
 ## Interfaces
 
 - [Terminal UI](interfaces/terminal-ui.md) — the default, bubbletea-powered TUI
-- [macOS GUI](interfaces/macos-gui.md) — the detachable menu bar panel
+- [macOS GUI](interfaces/macos-gui.md) — attached menu bar panel and detached desktop mode
 - [HTTP API](interfaces/http-api.md) — REST + Server-Sent Events, with the interactive playground
 
 ## Usage

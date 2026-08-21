@@ -37,7 +37,7 @@ If you only need the terminal interface and already have a Go toolchain:
 go install github.com/illegalstudio/lazyagent@latest
 ```
 
-`go install` names the binary after the module path, so this produces the same `lazyagent` command as the Homebrew installs — keep only one of them on your `PATH`, or alias the go-installed copy. It doesn't include the Wails-powered macOS menu bar app — the GUI requires a Node.js build step, which `go install` doesn't perform. Use Homebrew or a source build if you want the tray.
+`go install` names the binary after the module path, so this produces the same `lazyagent` command as the Homebrew installs — keep only one of them on your `PATH`, or alias the go-installed copy. It doesn't include the Wails-powered macOS desktop app — the GUI requires a Node.js build step, which `go install` doesn't perform. Use Homebrew or a source build if you want the GUI.
 
 ## Build from source
 
@@ -48,7 +48,7 @@ cd lazyagent
 # TUI only — no Wails, no Node.js required
 make tui
 
-# Full build with menu bar app (requires Node.js 18+)
+# Full build with macOS app (requires Node.js 18+)
 make install   # npm install, only the first time
 make build
 ```

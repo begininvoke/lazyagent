@@ -28,7 +28,7 @@ No flag at all is the most common invocation — it opens the TUI with every sup
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
 | `--tui` | bool | auto | Launch the terminal UI. Implicit when no other mode is set |
-| `--gui` | bool | `false` | Launch the macOS menu bar app (detaches) |
+| `--gui` | bool | `false` | Launch the macOS desktop app (detaches) |
 | `--api` | bool | `false` | Start the HTTP API server |
 | `--host ADDR` | string | `127.0.0.1:7421` | API listen address (only relevant with `--api`) |
 | `--agent NAME` | string | `all` | Restrict monitoring to one agent |
@@ -52,11 +52,11 @@ See [Terminal UI](../interfaces/terminal-ui.md) for keybindings.
 
 ### `--gui`
 
-Launch the macOS menu bar app. The process detaches from your terminal immediately — the shell prompt returns, and the app appears in the menu bar.
+Launch the macOS desktop app. The process detaches from your terminal immediately — the shell prompt returns, and the app appears in the menu bar.
 
 ```bash
-lazyagent --gui              # menu bar only (detached)
-lazyagent --gui --api        # menu bar + API in foreground
+lazyagent --gui              # macOS app only (detached)
+lazyagent --gui --api        # macOS app + API in foreground
 lazyagent --tui --gui --api  # everything (TUI foreground, tray and API in background)
 ```
 
@@ -215,10 +215,10 @@ lazyagent
 # Terminal UI but only Claude
 lazyagent --agent claude
 
-# Menu bar app only
+# macOS app only
 lazyagent --gui
 
-# Menu bar app + HTTP API (ideal daily-driver combo on macOS)
+# macOS app + HTTP API (ideal daily-driver combo on macOS)
 lazyagent --gui --api
 
 # HTTP API exposed on the LAN for a mobile client

@@ -9,7 +9,7 @@ Concrete, copy-pasteable recipes for the workflows people actually run.
 
 ## Daily driver setup (macOS)
 
-You want the menu bar app always running, the API available for a mobile companion, and the TUI available in the terminal when you need a denser view.
+You want the macOS app always running, the API available for a mobile companion, and the TUI available in the terminal when you need a denser view.
 
 ```bash
 # In a LaunchAgent or at terminal startup — detaches immediately

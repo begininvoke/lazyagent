@@ -91,7 +91,7 @@ The TUI can run side by side with the HTTP API:
 lazyagent --tui --api
 ```
 
-On macOS you can also combine it with the menu bar app:
+On macOS you can also combine it with the desktop app:
 
 ```bash
 lazyagent --tui --gui --api

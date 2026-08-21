@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-lazyagent is a single Go binary with an optional Svelte 5 frontend embedded for the macOS menu bar app. Everything shares one core package; the three interfaces and the command packages are thin consumers of it.
+lazyagent is a single Go binary with an optional Svelte 5 frontend embedded for the macOS desktop app. Everything shares one core package; the three interfaces and the command packages are thin consumers of it.
 
 ## Module map
 
@@ -31,7 +31,7 @@ lazyagent/
 │   ├── apiauth/                # Bearer-token derivation (PBKDF2) + auth middleware
 │   ├── webhook/                # Outbound webhook dispatcher (EventBus → filtered HTTP POST)
 │   ├── ui/                     # TUI rendering (bubbletea + lipgloss, dark/light themes)
-│   ├── tray/                   # macOS menu bar (Wails v3, build-tagged)
+│   ├── tray/                   # macOS desktop app (Wails v3, build-tagged)
 │   ├── chatops/                # Shared CLI helpers: agent picker, tables, notices, safety
 │   ├── prune/                  # `lazyagent prune` — delete old or orphaned chat files
 │   ├── compact/                # `lazyagent compact` — truncate oversized session payloads
@@ -40,7 +40,7 @@ lazyagent/
 │   ├── limits/                 # `lazyagent limits` — rate-limit / billing snapshots
 │   ├── demo/                   # Fake session data for screenshots
 │   └── assets/                 # Embedded frontend dist (go:embed)
-├── frontend/                   # Svelte 5 + Tailwind 4 (menu bar UI)
+├── frontend/                   # Svelte 5 + Tailwind 4 (macOS GUI)
 │   ├── src/
 │   │   ├── App.svelte
 │   │   ├── lib/                # SessionList, SessionDetail, Sparkline
@@ -112,7 +112,7 @@ Events are **debounced** at 200 ms so a burst of writes during a tool call doesn
 ## Build layout
 
 - `make tui` — builds the TUI binary only (no Node.js required, no Wails, no embedded frontend).
-- `make build` — builds the full binary including the macOS menu bar app. Requires Node.js 18+ for the Svelte build.
+- `make build` — builds the full binary including the macOS desktop app. Requires Node.js 18+ for the Svelte build.
 - `make dev` — dev cycle: rebuild the binary and relaunch the tray app.
 
 ## Cost estimation

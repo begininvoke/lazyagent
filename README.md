@@ -70,8 +70,8 @@ Unlike other tools, lazyagent doesn't replace your workflow — it watches it. L
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
 
-### macOS Menu Bar App
-![lazyagent macOS tray](assets/tray.png)
+### macOS Desktop App
+![lazyagent macOS desktop app](assets/gui-dashboard-2026-08.png)
 
 Detach the panel and lazyagent becomes a full desktop app — Dock icon, Cmd-Tab, native menus — with a card-grid dashboard (`compact | rich | live` density switch), per-card Resume/Editor actions with a right-click menu, and a Settings panel (terminal choice, editor, agents, API passphrase). Attach again to return it to the menu bar.
 
@@ -113,7 +113,7 @@ cd lazyagent
 # TUI only (no Wails/Node.js needed)
 make tui
 
-# Full build with menu bar app (requires Node.js for frontend)
+# Full build with macOS app (requires Node.js for frontend)
 make install   # npm install (first time only)
 make build
 ```

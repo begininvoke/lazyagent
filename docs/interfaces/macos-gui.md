@@ -1,6 +1,6 @@
 ---
 title: "macOS GUI"
-description: "A detachable menu bar panel built with Wails v3 and Svelte 5."
+description: "A macOS desktop app with attached and detached modes, built with Wails v3 and Svelte 5."
 sidebar:
   order: 2
 ---
@@ -11,7 +11,7 @@ lazyagent --gui
 
 The GUI process detaches from your terminal — the shell returns immediately and the app lives in your menu bar. In its default attached mode there's no Dock icon (it's registered as a macOS *accessory* app). Click the tray icon to toggle the panel.
 
-![lazyagent macOS menu bar app](../../assets/tray.png)
+![lazyagent macOS desktop app](../../assets/gui-dashboard-2026-08.png)
 
 ## Installing and launching the app
 
@@ -103,7 +103,7 @@ for location, permissions, and cleanup behavior.
 ## Combining with other interfaces
 
 ```bash
-lazyagent --gui --api            # menu bar + HTTP API
+lazyagent --gui --api            # macOS app + HTTP API
 lazyagent --tui --gui --api      # everything
 ```
 

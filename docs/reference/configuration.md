@@ -53,7 +53,7 @@ Default: `""`. Overrides `$VISUAL` / `$EDITOR` when opening session CWDs. See [E
 
 ### `launch_at_login`
 
-Default: `false`. Auto-start the macOS menu bar app at login. Only honored on macOS.
+Default: `false`. Auto-start the macOS desktop app at login. Only honored on macOS.
 
 ### `notifications`
 
