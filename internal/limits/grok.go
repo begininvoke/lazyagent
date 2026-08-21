@@ -69,6 +69,26 @@ type grokBillingConfig struct {
 	OnDemandCap        grokCents `json:"onDemandCap"`
 	BillingPeriodStart time.Time `json:"billingPeriodStart"`
 	BillingPeriodEnd   time.Time `json:"billingPeriodEnd"`
+
+	// Unified-billing ("credits") fields, returned when the endpoint is
+	// queried with ?format=credits. Accounts migrated to xAI's unified
+	// billing report a zeroed monthlyLimit and expose usage as a percentage
+	// of the current (typically weekly) credit period instead.
+	CurrentPeriod        *grokUsagePeriod   `json:"currentPeriod"`
+	CreditUsagePercent   float64            `json:"creditUsagePercent"`
+	ProductUsage         []grokProductUsage `json:"productUsage"`
+	IsUnifiedBillingUser bool               `json:"isUnifiedBillingUser"`
+}
+
+type grokUsagePeriod struct {
+	Type  string    `json:"type"` // e.g. "USAGE_PERIOD_TYPE_WEEKLY"
+	Start time.Time `json:"start"`
+	End   time.Time `json:"end"`
+}
+
+type grokProductUsage struct {
+	Product      string  `json:"product"`
+	UsagePercent float64 `json:"usagePercent"`
 }
 
 // grokCents wraps a monetary amount. The Grok billing API expresses every dollar
@@ -83,6 +103,33 @@ func parseGrokBilling(data []byte) (*grokBillingResponse, error) {
 		return nil, fmt.Errorf("parse Grok billing response: %w", err)
 	}
 	return &resp, nil
+}
+
+// grokPeriodLabel maps a usage-period enum ("USAGE_PERIOD_TYPE_WEEKLY") to a
+// short window label ("weekly"). Unknown values fall back to "period".
+func grokPeriodLabel(t string) string {
+	switch t {
+	case "USAGE_PERIOD_TYPE_WEEKLY":
+		return "weekly"
+	case "USAGE_PERIOD_TYPE_MONTHLY":
+		return "monthly"
+	case "USAGE_PERIOD_TYPE_DAILY":
+		return "daily"
+	default:
+		return "period"
+	}
+}
+
+// grokCreditsToWindow builds the window for a unified-billing (credits)
+// response. Caller guarantees cfg.CurrentPeriod != nil.
+func grokCreditsToWindow(cfg *grokBillingConfig) Window {
+	p := cfg.CurrentPeriod
+	return Window{
+		Label:         grokPeriodLabel(p.Type),
+		WindowMinutes: int(p.End.Sub(p.Start).Minutes()),
+		UsedPercent:   cfg.CreditUsagePercent,
+		ResetsAt:      p.End,
+	}
 }
 
 func grokConfigToWindow(cfg *grokBillingConfig) Window {
@@ -107,9 +154,10 @@ func formatCentsUSD(cents int64) string {
 }
 
 // grokBillingURL is the (undocumented) endpoint the Grok CLI itself calls when
-// the user runs the /usage show slash command. See package doc in run.go for
-// the stability caveat.
-const grokBillingURL = "https://cli-chat-proxy.grok.com/v1/billing"
+// the user runs the /usage show slash command. The ?format=credits parameter
+// matches what Grok CLI ≥1.0.5 sends: unified-billing accounts return zeroed
+// legacy fields without it. See package doc in run.go for the stability caveat.
+const grokBillingURL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
 
 func fetchGrokReport(ctx context.Context) (Report, error) {
 	token, err := readGrokToken()
@@ -152,17 +200,29 @@ func fetchGrokReport(ctx context.Context) (Report, error) {
 	if billing.Config == nil {
 		return Report{}, fmt.Errorf("Grok billing response missing config block (response: %s)", snippet(body, 200))
 	}
-	if billing.Config.MonthlyLimit.Val <= 0 {
-		return Report{}, fmt.Errorf("Grok billing response has no monthly limit (no active subscription?)")
-	}
 
-	w := grokConfigToWindow(billing.Config)
-	source := fmt.Sprintf("Source: %s of %s used",
-		formatCentsUSD(billing.Config.Used.Val),
-		formatCentsUSD(billing.Config.MonthlyLimit.Val),
-	)
-	if billing.Config.OnDemandCap.Val > 0 {
-		source += fmt.Sprintf(" (on-demand cap: %s)", formatCentsUSD(billing.Config.OnDemandCap.Val))
+	var w Window
+	var source string
+	switch {
+	case billing.Config.CurrentPeriod != nil:
+		// Unified billing: usage is a percentage of the current credit period.
+		w = grokCreditsToWindow(billing.Config)
+		source = fmt.Sprintf("Source: %.1f%% of %s credits used", billing.Config.CreditUsagePercent, w.Label)
+		if billing.Config.OnDemandCap.Val > 0 {
+			source += fmt.Sprintf(" (on-demand cap: %s)", formatCentsUSD(billing.Config.OnDemandCap.Val))
+		}
+	case billing.Config.MonthlyLimit.Val > 0:
+		// Legacy billing: a dollar-denominated monthly limit.
+		w = grokConfigToWindow(billing.Config)
+		source = fmt.Sprintf("Source: %s of %s used",
+			formatCentsUSD(billing.Config.Used.Val),
+			formatCentsUSD(billing.Config.MonthlyLimit.Val),
+		)
+		if billing.Config.OnDemandCap.Val > 0 {
+			source += fmt.Sprintf(" (on-demand cap: %s)", formatCentsUSD(billing.Config.OnDemandCap.Val))
+		}
+	default:
+		return Report{}, fmt.Errorf("Grok billing response has no usage period or monthly limit (no active subscription?)")
 	}
 
 	return Report{

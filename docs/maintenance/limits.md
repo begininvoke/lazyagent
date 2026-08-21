@@ -7,9 +7,9 @@ sidebar:
 
 `lazyagent limits` prints a one-shot summary table of the rate-limit / billing windows exposed by Claude Code, Codex, Grok, Kimi, and Cursor. The default output is optimized for a quick scan: one row per agent — two for Cursor, whose Auto/Composer and API pools are metered independently — with a **5-hour** column and a **weekly/global** column. Each populated cell labels both **used** and **expected**, where expected is the linear usage pace for elapsed window time. `--detailed` prints the full per-window report with reset times, source notes, and the *pace indicator* that compares actual consumption to a perfectly linear pace through the window. It's read-only, on demand, and does not poll.
 
-Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single **monthly** credit window; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes two **monthly** rows sharing one billing-cycle window — its Auto/Composer pool and its usage-based API pool, each against its own allowance.
+Claude and Codex each expose a **5-hour** and a **7-day** window; Grok exposes a single credit window — **weekly** on xAI's unified billing, **monthly** on legacy plans; Kimi exposes the windows returned by Kimi Code CLI's `/status` endpoint; Cursor exposes two **monthly** rows sharing one billing-cycle window — its Auto/Composer pool and its usage-based API pool, each against its own allowance.
 
-Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall, or *"how much of my Grok monthly credit have I burned this month?"* before kicking off a long Grok run.
+Use it to answer questions like *"am I burning the weekly limit faster than I should?"* before you commit to a long agent run, *"how much of my 5-hour budget is left until the next reset?"* when you suspect you're close to the wall, or *"how much of my Grok credit period have I burned?"* before kicking off a long Grok run.
 
 The same limits are viewable interactively without leaving lazyagent: in the **TUI** press `l` to open a centered modal with **Summary** and **Detailed** tabs (the Detailed tab scrolls inside the modal); in the **GUI** click **limits** in the header or press `l`. The attached menu-bar view uses the limits page and closes with `l` or `Esc`. Detached desktop mode instead opens a non-blocking floating dialog over the usable dashboard: it has explicit refresh and close controls, can be dragged and resized, and its local pin freezes the dialog position without pinning the app window. Its size and position are kept inside the app window when it opens or the containing window changes size. It does not dim the dashboard and closes only from its close button. Both interfaces read limits on entry and refresh on demand when you press `r`; neither view polls in the background.
 
@@ -59,7 +59,7 @@ By default the command prints a compact terminal table:
 ╰───────────────┴────────────────────────┴────────────────────────╯
 ```
 
-Cells label `used` and `exp` explicitly. `exp` is how much of the quota you would have consumed at a perfectly linear pace through the current window. In an interactive terminal cells are colored by severity, blending absolute usage with pace: red when used ≥ 90% or consumption is over pace, orange when used ≥ 75%, green when comfortably under pace, and the default text color when on track. `--` means that agent does not expose that window. For the `Week (or Global)` column, Claude, Codex, and Kimi use their weekly window when present; Grok and both Cursor rows use their monthly billing window. Neither Cursor row populates the `5h` column — they only have a monthly window.
+Cells label `used` and `exp` explicitly. `exp` is how much of the quota you would have consumed at a perfectly linear pace through the current window. In an interactive terminal cells are colored by severity, blending absolute usage with pace: red when used ≥ 90% or consumption is over pace, orange when used ≥ 75%, green when comfortably under pace, and the default text color when on track. `--` means that agent does not expose that window. For the `Week (or Global)` column, Claude, Codex, and Kimi use their weekly window when present; Grok uses its credit-period window (weekly on unified billing, monthly on legacy plans) and both Cursor rows use their monthly billing window. Neither Cursor row populates the `5h` column — they only have a monthly window.
 
 With `--detailed`, each window prints four lines:
 
@@ -152,7 +152,7 @@ If neither is present, the command tells you to run `codex` to log in. If the to
 
 ### Grok
 
-A single HTTPS GET to `https://cli-chat-proxy.grok.com/v1/billing` with the user's OAuth bearer token. This is the **same** endpoint Grok CLI's interactive `/usage show` slash command queries.
+A single HTTPS GET to `https://cli-chat-proxy.grok.com/v1/billing?format=credits` with the user's OAuth bearer token. This is the **same** endpoint (and the same `format=credits` parameter) Grok CLI ≥ 1.0.5's interactive `/usage show` slash command queries.
 
 The OAuth token is read in this priority order:
 
@@ -161,9 +161,11 @@ The OAuth token is read in this priority order:
 
 If neither is present, the command tells you to run `grok login`.
 
-The response carries one monthly window's worth of state — the included credit limit, the amount used in the current billing period (both in cents), the on-demand spending cap, and the period start / end timestamps. lazyagent maps this onto a single `monthly` `Window`, computes `Used %` as `used / monthlyLimit × 100`, and uses the period end as the reset time. Absolute dollar amounts appear on the `Source:` line (e.g. `Source: $83.25 of $600.00 used`) so you can see both the dollar figures and the percentage in the same report.
+Accounts on xAI's **unified billing** (`isUnifiedBillingUser: true`) report usage as a percentage of the current credit period — typically **weekly** — via `creditUsagePercent` and a `currentPeriod` with start / end timestamps. lazyagent maps this onto a single `Window` labeled after the period type (`weekly`, `monthly`, or `daily`), uses `creditUsagePercent` directly as `Used %`, and uses the period end as the reset time (e.g. `Source: 8.0% of weekly credits used`).
 
-When the response advertises an `onDemandCap` greater than zero, the cap appears in parentheses on the same `Source:` line (e.g. `Source: $83.25 of $600.00 used (on-demand cap: $200.00)`). The `Used %` is intentionally not re-scaled against the cap — what matters for the pace indicator is how fast you're consuming the *included* monthly budget.
+**Legacy** accounts instead carry one monthly window's worth of state — the included credit limit, the amount used in the current billing period (both in cents), the on-demand spending cap, and the period start / end timestamps. lazyagent maps this onto a single `monthly` `Window`, computes `Used %` as `used / monthlyLimit × 100`, and uses the period end as the reset time. Absolute dollar amounts appear on the `Source:` line (e.g. `Source: $83.25 of $600.00 used`) so you can see both the dollar figures and the percentage in the same report.
+
+In either shape, when the response advertises an `onDemandCap` greater than zero, the cap appears in parentheses on the same `Source:` line (e.g. `(on-demand cap: $200.00)`). The `Used %` is intentionally not re-scaled against the cap — what matters for the pace indicator is how fast you're consuming the *included* budget.
 
 ### Kimi Code
 

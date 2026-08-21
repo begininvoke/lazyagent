@@ -104,6 +104,75 @@ func TestGrokConfigToWindow(t *testing.T) {
 	}
 }
 
+func TestParseGrokBillingCredits(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "grok_billing_credits.json"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	resp, err := parseGrokBilling(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	cfg := resp.Config
+	if cfg == nil {
+		t.Fatal("config is nil")
+	}
+	if cfg.CurrentPeriod == nil {
+		t.Fatal("currentPeriod is nil")
+	}
+	if cfg.CurrentPeriod.Type != "USAGE_PERIOD_TYPE_WEEKLY" {
+		t.Errorf("period type: got %q", cfg.CurrentPeriod.Type)
+	}
+	if cfg.CreditUsagePercent != 5.0 {
+		t.Errorf("creditUsagePercent: got %v, want 5.0", cfg.CreditUsagePercent)
+	}
+	if len(cfg.ProductUsage) != 1 || cfg.ProductUsage[0].Product != "GrokBuild" {
+		t.Errorf("productUsage: got %+v", cfg.ProductUsage)
+	}
+	// The unified-billing response zeroes the legacy monthlyLimit — it must
+	// not be treated as "no subscription".
+	if cfg.MonthlyLimit.Val != 0 {
+		t.Errorf("monthlyLimit: got %d, want 0", cfg.MonthlyLimit.Val)
+	}
+}
+
+func TestGrokCreditsToWindow(t *testing.T) {
+	start := time.Date(2026, 8, 20, 20, 12, 42, 0, time.UTC)
+	end := time.Date(2026, 8, 27, 20, 12, 42, 0, time.UTC)
+	cfg := &grokBillingConfig{
+		CurrentPeriod:      &grokUsagePeriod{Type: "USAGE_PERIOD_TYPE_WEEKLY", Start: start, End: end},
+		CreditUsagePercent: 5.0,
+	}
+	w := grokCreditsToWindow(cfg)
+	if w.Label != "weekly" {
+		t.Errorf("label: got %q, want %q", w.Label, "weekly")
+	}
+	if want := int(end.Sub(start).Minutes()); w.WindowMinutes != want {
+		t.Errorf("windowMinutes: got %d, want %d", w.WindowMinutes, want)
+	}
+	if w.UsedPercent != 5.0 {
+		t.Errorf("usedPercent: got %v, want 5.0", w.UsedPercent)
+	}
+	if !w.ResetsAt.Equal(end) {
+		t.Errorf("resetsAt: got %v, want %v", w.ResetsAt, end)
+	}
+}
+
+func TestGrokPeriodLabel(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"USAGE_PERIOD_TYPE_WEEKLY", "weekly"},
+		{"USAGE_PERIOD_TYPE_MONTHLY", "monthly"},
+		{"USAGE_PERIOD_TYPE_DAILY", "daily"},
+		{"SOMETHING_ELSE", "period"},
+		{"", "period"},
+	}
+	for _, c := range cases {
+		if got := grokPeriodLabel(c.in); got != c.want {
+			t.Errorf("grokPeriodLabel(%q): got %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestGrokConfigToWindow_ZeroLimitYieldsZeroPercent(t *testing.T) {
 	cfg := &grokBillingConfig{
 		MonthlyLimit:       grokCents{Val: 0},
