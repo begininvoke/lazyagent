@@ -8,8 +8,8 @@ sidebar:
 ## Requirements
 
 - **Go 1.25+** — the module targets a recent Go toolchain.
-- **Node.js 18+** — required only for the macOS desktop app frontend (Svelte 5 + Tailwind 4). The TUI and API build without it.
-- **macOS** — required for the desktop app. The TUI and HTTP API are cross-platform.
+- **Node.js 18+** — required only for the desktop app frontend (Svelte 5 + Tailwind 4). The TUI and API build without it.
+- **macOS**, or **Linux with GTK3 + WebKitGTK 4.1 development libraries** — required for the desktop app. The TUI and HTTP API are otherwise cross-platform.
 
 ## Build targets
 
@@ -17,7 +17,7 @@ sidebar:
 # Install frontend deps (first time only)
 make install
 
-# Full build: TUI + macOS app + API
+# Full build: TUI + desktop app + API
 make build
 
 # TUI only — no Wails, no Node.js required
@@ -25,6 +25,9 @@ make tui
 
 # Quick dev cycle (rebuild + relaunch tray)
 make dev
+
+# Linux desktop release artifacts: DEB, RPM, Arch package, AppImage
+make linux-packages VERSION=0.13.6
 
 # Clean all artifacts
 make clean

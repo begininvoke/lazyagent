@@ -1,0 +1,52 @@
+name: lazyagent
+arch: ${GOARCH}
+platform: linux
+version: ${VERSION}
+release: "1"
+section: utils
+priority: optional
+maintainer: Illegal Studio <hello@illegalstudio.it>
+description: Monitor all your coding agent sessions from the desktop or terminal
+vendor: Illegal Studio
+homepage: https://lazyagent.dev
+license: MIT
+
+contents:
+  - src: ./dist/linux-desktop/lazyagent
+    dst: /usr/bin/lazyagent
+    file_info:
+      mode: 0755
+  - src: ./assets/appicon.png
+    dst: /usr/share/icons/hicolor/1024x1024/apps/lazyagent.png
+  - src: ./build/linux/lazyagent.desktop
+    dst: /usr/share/applications/lazyagent.desktop
+  - src: ./build/linux/com.illegalstudio.lazyagent.metainfo.xml
+    dst: /usr/share/metainfo/com.illegalstudio.lazyagent.metainfo.xml
+  - src: ./LICENSE
+    dst: /usr/share/doc/lazyagent/LICENSE
+
+# The pinned Wails alpha uses the GTK3 / WebKitGTK 4.1 ABI. Package names
+# differ by distribution even though the binary ABI is the same.
+depends:
+  - libgtk-3-0
+  - libwebkit2gtk-4.1-0
+recommends:
+  - desktop-file-utils
+conflicts:
+  - lazyagent-cli
+provides:
+  - lazyagent
+
+overrides:
+  rpm:
+    depends:
+      - gtk3
+      - webkit2gtk4.1
+    recommends:
+      - desktop-file-utils
+  archlinux:
+    depends:
+      - gtk3
+      - webkit2gtk-4.1
+    recommends:
+      - desktop-file-utils

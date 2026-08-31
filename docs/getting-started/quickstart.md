@@ -23,17 +23,17 @@ lazyagent has three interfaces, selectable by flag (the desktop app bundles all 
 
 ```bash
 lazyagent              # Terminal UI (default)
-lazyagent --gui        # macOS desktop app (detaches from the terminal)
+lazyagent --gui        # macOS/Linux desktop app
 lazyagent --api        # HTTP API on http://127.0.0.1:7421 (Bearer-token protected)
 ```
 
-They're combinable — on a typical macOS setup:
+They're combinable — on a typical desktop setup:
 
 ```bash
 lazyagent --gui --api
 ```
 
-runs the macOS app and the API side by side from a single process. See [Recipes](../usage/recipes.md) for more combinations.
+runs the desktop app and the API side by side from a single invocation. See [macOS GUI](../interfaces/macos-gui.md), [Linux GUI](../interfaces/linux-gui.md), and [Recipes](../usage/recipes.md) for more combinations.
 
 The first time you launch `--api`, lazyagent prompts for a passphrase, derives a Bearer token from it (PBKDF2-SHA256), and prints the token to stderr once. Clients can fetch the public salt from `/api/auth` and derive the same token locally — see [HTTP API → Authentication](../interfaces/http-api.md#authentication).
 

@@ -9,7 +9,7 @@
   let { onclose }: Props = $props();
 
   const terminals: [string, string][] = [
-    ["terminal", "Terminal.app"],
+    ["terminal", "System default"],
     ["kitty", "Kitty"],
     // Parked until their launch incantations are verified on real setups
     // (also re-enable in core.validTerminals and tray/terminal.go):

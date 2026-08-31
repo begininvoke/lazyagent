@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Lazyagent
+GenericName=Coding agent monitor
+Comment=Monitor running coding agent sessions
+TryExec=lazyagent
+Exec=lazyagent --gui
+Icon=lazyagent
+Terminal=false
+Categories=Development;
+Keywords=AI;coding;agents;monitor;sessions;
+StartupNotify=false

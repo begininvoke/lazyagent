@@ -185,6 +185,15 @@ sidebar:
 - ✅ Async fan-out with bounded queue, retry on transient failures, dedup window for duplicate transitions across in-process managers
 - ✅ Documentation with payload schema and verification example
 
+## v0.14 — Linux desktop distribution
+
+- ✅ Wails desktop app with StatusNotifierItem system tray integration
+- ✅ Portal-aware light/dark tray icon and Lazyagent tooltip
+- ✅ System-default terminal launching with cross-desktop fallbacks
+- ✅ Native DEB, RPM, and Arch packages with desktop/AppStream metadata
+- ✅ Portable AppImage artifact
+- ✅ GitHub release CI built against the Ubuntu 22.04 compatibility baseline
+
 ## Future ideas
 
 - ⬜ Multi-machine support via shared config / remote API

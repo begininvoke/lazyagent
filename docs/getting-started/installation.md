@@ -1,15 +1,15 @@
 ---
 title: "Installation"
-description: "How to install lazyagent via Homebrew, go install, or a source build."
+description: "How to install the lazyagent desktop app or standalone CLI."
 sidebar:
   order: 1
 ---
 
-lazyagent ships as two artifacts: the macOS desktop app (`Lazyagent.app`, which bundles the CLI) and a standalone CLI build (TUI + HTTP API, no GUI). Both provide the same `lazyagent` command, so install one or the other — Homebrew refuses to install both at once.
+lazyagent ships as a desktop app for macOS and Linux plus a standalone CLI build (TUI + HTTP API, no GUI). Every package provides the same `lazyagent` command, so install either the desktop app or the CLI-only build, not both.
 
 ## Homebrew
 
-The recommended way on macOS and Linux.
+The recommended CLI installer on macOS and Linux, and the desktop installer on macOS.
 
 **Desktop app** (macOS, universal binary — TUI + GUI + HTTP API):
 
@@ -29,6 +29,37 @@ ln -s /Applications/Lazyagent.app/Contents/MacOS/lazyagent /usr/local/bin/lazyag
 brew install illegalstudio/tap/lazyagent-cli
 ```
 
+## Linux desktop app
+
+Linux desktop packages are attached to each [GitHub release](https://github.com/illegalstudio/lazyagent/releases). The package includes the graphical tray app, TUI, and HTTP API in the same `lazyagent` executable.
+
+**Debian / Ubuntu:**
+
+```bash
+sudo apt install ./Lazyagent_VERSION_linux_amd64.deb
+```
+
+**Fedora:**
+
+```bash
+sudo dnf install ./Lazyagent_VERSION_linux_amd64.rpm
+```
+
+**Arch Linux:**
+
+```bash
+sudo pacman -U ./Lazyagent_VERSION_linux_amd64.pkg.tar.zst
+```
+
+The native packages install the application-menu launcher, icon, AppStream metadata, and `lazyagent` on `PATH`. For other distributions, download the AppImage:
+
+```bash
+chmod +x Lazyagent_VERSION_linux_amd64.AppImage
+./Lazyagent_VERSION_linux_amd64.AppImage
+```
+
+See [Linux GUI](../interfaces/linux-gui.md) for runtime dependencies and tray compatibility notes.
+
 ## Go (TUI only)
 
 If you only need the terminal interface and already have a Go toolchain:
@@ -37,7 +68,7 @@ If you only need the terminal interface and already have a Go toolchain:
 go install github.com/illegalstudio/lazyagent@latest
 ```
 
-`go install` names the binary after the module path, so this produces the same `lazyagent` command as the Homebrew installs — keep only one of them on your `PATH`, or alias the go-installed copy. It doesn't include the Wails-powered macOS desktop app — the GUI requires a Node.js build step, which `go install` doesn't perform. Use Homebrew or a source build if you want the GUI.
+`go install` names the binary after the module path, so this produces the same `lazyagent` command as the packaged installs — keep only one of them on your `PATH`. It doesn't include the Wails-powered desktop app because the GUI requires a Node.js build step. Use a desktop package or a source build if you want the GUI.
 
 ## Build from source
 
@@ -48,9 +79,12 @@ cd lazyagent
 # TUI only — no Wails, no Node.js required
 make tui
 
-# Full build with macOS app (requires Node.js 18+)
+# Full build with desktop support (requires Node.js 18+ and platform libraries)
 make install   # npm install, only the first time
 make build
+
+# Linux release packages (requires Wails 3, GTK3, and WebKitGTK 4.1)
+make linux-packages VERSION=0.13.6
 ```
 
 The resulting binary is written to the repository root as `lazyagent` — same naming convention as `go install`, unrelated to the retired `lazyagent` command name.

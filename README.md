@@ -22,7 +22,7 @@
 </p>
 
 <p align="center">
-  A terminal UI, a macOS desktop app, and an HTTP API for monitoring all your coding agents from a single place.
+  A terminal UI, a macOS/Linux desktop app, and an HTTP API for monitoring all your coding agents from a single place.
   Watch sessions from <a href="https://claude.ai/code">Claude Code</a>, <a href="https://cursor.com/">Cursor</a>, <a href="https://developers.openai.com/codex/">Codex</a>, <a href="https://x.ai/cli">Grok CLI</a>, <a href="https://kilo.ai/">Kilo</a>, Kimi Code CLI, <a href="https://ampcode.com/">Amp</a>, <a href="https://github.com/badlogic/pi-mono">pi</a>, and <a href="https://opencode.ai/">OpenCode</a> — lazyagent doesn't replace your workflow, it watches it.
 </p>
 
@@ -32,7 +32,7 @@
 
 ---
 
-> **lazyagent is transitioning to a full desktop application.** The macOS build now ships as `Lazyagent.app` (`brew install --cask illegalstudio/tap/lazyagent`), which bundles the familiar `lazyagent` command alongside the GUI. Only interested in the CLI? Install the standalone build with `brew install illegalstudio/tap/lazyagent-cli` — same `lazyagent` command, TUI and HTTP API included, no GUI.
+> **lazyagent is a full desktop application.** macOS ships as `Lazyagent.app`; Linux ships as native DEB/RPM/Arch packages plus an AppImage. Every desktop package includes the familiar `lazyagent` command alongside the GUI. Only interested in the CLI? Install the standalone build with `brew install illegalstudio/tap/lazyagent-cli` — same command, TUI and HTTP API included, no GUI.
 
 Inspired by [lazygit](https://github.com/jesseduffield/lazygit), [lazyworktree](https://github.com/chmouel/lazyworktree), and [pixel-agents](https://github.com/pablodelucca/pixel-agents).
 
@@ -70,7 +70,7 @@ Unlike other tools, lazyagent doesn't replace your workflow — it watches it. L
 ### Terminal UI
 ![lazyagent TUI](assets/tui.png)
 
-### macOS Desktop App
+### Desktop App
 ![lazyagent macOS desktop app](assets/gui-dashboard-2026-08.png)
 
 Detach the panel and lazyagent becomes a full desktop app — Dock icon, Cmd-Tab, native menus — with a card-grid dashboard (`compact | rich | live` density switch), per-card Resume/Editor actions with a right-click menu, and a Settings panel (terminal choice, editor, agents, API passphrase). Attach again to return it to the menu bar.
@@ -98,6 +98,27 @@ Installs `Lazyagent.app` and links the `lazyagent` command into Homebrew's bin �
 brew install illegalstudio/tap/lazyagent-cli
 ```
 
+### Linux desktop
+
+Download the desktop package for your distribution from [GitHub Releases](https://github.com/illegalstudio/lazyagent/releases):
+
+```bash
+# Debian / Ubuntu
+sudo apt install ./Lazyagent_VERSION_linux_amd64.deb
+
+# Fedora
+sudo dnf install ./Lazyagent_VERSION_linux_amd64.rpm
+
+# Arch Linux
+sudo pacman -U ./Lazyagent_VERSION_linux_amd64.pkg.tar.zst
+
+# Portable fallback
+chmod +x Lazyagent_VERSION_linux_amd64.AppImage
+./Lazyagent_VERSION_linux_amd64.AppImage
+```
+
+The native packages install the desktop launcher and the `lazyagent` command. See the [Linux GUI guide](docs/interfaces/linux-gui.md) for dependencies and tray compatibility.
+
 ### Go (TUI only)
 
 ```bash
@@ -113,9 +134,12 @@ cd lazyagent
 # TUI only (no Wails/Node.js needed)
 make tui
 
-# Full build with macOS app (requires Node.js for frontend)
+# Full build with desktop support (requires Node.js and platform libraries)
 make install   # npm install (first time only)
 make build
+
+# Linux desktop packages
+make linux-packages VERSION=0.13.6
 ```
 
 ## Launch
@@ -145,7 +169,7 @@ Full documentation — supported agents, activity states, keybindings, configura
 - [`docs/`](docs/) — Markdown sources in this repository, organized by topic:
   - [Getting started](docs/getting-started/) — install, quickstart
   - [Concepts](docs/concepts/) — how it works, supported agents, activity states, session info
-  - [Interfaces](docs/interfaces/) — terminal UI, macOS GUI, HTTP API
+  - [Interfaces](docs/interfaces/) — terminal UI, macOS/Linux GUI, HTTP API
   - [Usage](docs/usage/) — CLI reference, directory-scoped sessions, recipes
   - [Maintenance](docs/maintenance/) — `prune`, `compact`, `search`, and `limits` commands
   - [Reference](docs/reference/) — configuration, architecture, development, roadmap
