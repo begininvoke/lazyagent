@@ -19,7 +19,7 @@
     },
     {
       title: "App",
-      keys: [["⌘R", "Refresh sessions"], ["d", "Attach to menu bar"], ["⌘Q", "Quit"]],
+      keys: [["⌘R", "Refresh sessions"], ["d", "Attach to system tray"], ["⌘Q", "Quit"]],
     },
   ];
 

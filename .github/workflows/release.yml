@@ -146,3 +146,79 @@ jobs:
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
           security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+
+  linux-desktop:
+    name: Linux desktop packages
+    needs: goreleaser
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            appstream \
+            build-essential \
+            desktop-file-utils \
+            file \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            pkg-config
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build Linux packages
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm ci --prefix frontend
+          make linux-packages \
+            VERSION="$VERSION" \
+            COMMIT="$(git rev-parse --short HEAD)" \
+            GOARCH=amd64
+
+      - name: Validate desktop artifacts
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          desktop-file-validate build/linux/lazyagent.desktop
+          appstreamcli validate --no-net build/linux/com.illegalstudio.lazyagent.metainfo.xml
+          if ldd dist/linux-desktop/lazyagent | grep -q 'not found'; then
+            ldd dist/linux-desktop/lazyagent
+            exit 1
+          fi
+          dist/linux-desktop/lazyagent --version
+          chmod +x "dist/Lazyagent_${VERSION}_linux_amd64.AppImage"
+          "dist/Lazyagent_${VERSION}_linux_amd64.AppImage" \
+            --appimage-extract-and-run --version
+
+      - name: Upload Linux packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd dist
+          ASSETS=(
+            "Lazyagent_${VERSION}_linux_amd64.AppImage"
+            "Lazyagent_${VERSION}_linux_amd64.deb"
+            "Lazyagent_${VERSION}_linux_amd64.rpm"
+            "Lazyagent_${VERSION}_linux_amd64.pkg.tar.zst"
+          )
+          sha256sum "${ASSETS[@]}" > "lazyagent_${VERSION}_linux_checksums.txt"
+          gh release upload "$GITHUB_REF_NAME" \
+            "${ASSETS[@]}" \
+            "lazyagent_${VERSION}_linux_checksums.txt" \
+            --repo "$GITHUB_REPOSITORY" --clobber

@@ -29,8 +29,8 @@ export class Config {
 
     /**
      * Terminal picks the terminal emulator for actions that open one
-     * (Resume, terminal $EDITOR): terminal, iterm2, kitty, ghostty,
-     * wezterm or alacritty. Empty/unknown means Terminal.app.
+     * (Resume, terminal $EDITOR): terminal or kitty. Empty/unknown means
+     * the platform default.
      */
     "terminal"?: string;
     "webhooks"?: WebhookConfig[];

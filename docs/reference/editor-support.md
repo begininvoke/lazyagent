@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-Pressing <kbd>o</kbd> in the [Terminal UI](../interfaces/terminal-ui.md) or clicking **Open** in the [macOS GUI](../interfaces/macos-gui.md) opens the selected session's CWD in your editor. The resolution order is:
+Pressing <kbd>o</kbd> in the [Terminal UI](../interfaces/terminal-ui.md) or clicking **Open** in the desktop GUI ([macOS](../interfaces/macos-gui.md), [Linux](../interfaces/linux-gui.md)) opens the selected session's CWD in your editor. The resolution order is:
 
 1. **Cursor-specific shortcut** — if the selected session is a Cursor session *and* the `cursor` CLI is installed, it opens in Cursor IDE directly. If `cursor` is missing, the standard flow below is used.
 2. **`$VISUAL` / `$EDITOR`** — picked based on what's set, with a TUI popup when both are defined.

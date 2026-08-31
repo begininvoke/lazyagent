@@ -32,17 +32,17 @@ func runProvider(demoMode bool, agentMode string) core.SessionProvider {
 // Available reports whether tray support was compiled in.
 func Available() bool { return true }
 
-// Run starts the macOS menu bar app with system tray.
+// Run starts the desktop app with its system tray integration.
 func Run(demoMode bool, agentMode string) error {
 	if !assets.HasFrontend() {
-		return fmt.Errorf("frontend assets not found — run 'make build' to include the menu bar app")
+		return fmt.Errorf("frontend assets not found — run 'make build' to include the desktop app")
 	}
 
 	svc := &SessionService{demoMode: demoMode, provider: runProvider(demoMode, agentMode)}
 
 	app := application.New(application.Options{
 		Name:        "Lazyagent",
-		Description: "Claude Code session monitor",
+		Description: "Coding agent session monitor",
 		Linux: application.LinuxOptions{
 			ProgramName: "lazyagent",
 		},

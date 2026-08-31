@@ -3,6 +3,7 @@
 /lazyagent-app
 /tui
 /app
+/bin/
 dist-app/
 # goreleaser output (snapshot runs)
 dist/

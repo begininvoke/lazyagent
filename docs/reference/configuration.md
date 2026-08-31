@@ -143,11 +143,11 @@ Detection is not always possible, and every failure resolves to `dark` — the v
 
 ### `card_density`
 
-Default: `"live"`. Card density for the GUI's desktop-mode dashboard (the card grid shown after detaching — see [macOS GUI](../interfaces/macos-gui.md)). One of `"compact"`, `"rich"`, or `"live"`. Invalid or missing values fall back to `"live"`.
+Default: `"live"`. Card density for the GUI's desktop-mode dashboard (the card grid shown after detaching — see the [macOS](../interfaces/macos-gui.md) or [Linux](../interfaces/linux-gui.md) GUI guide). One of `"compact"`, `"rich"`, or `"live"`. Invalid or missing values fall back to `"live"`.
 
 ### `terminal`
 
-Default: `"terminal"` (macOS Terminal.app). Terminal emulator used by actions that open a terminal window (Resume, terminal `$EDITOR`). One of `"terminal"` or `"kitty"` (more emulators will be enabled as their launch flows are verified); unknown values fall back to Terminal.app. Also editable from the desktop app's Settings panel.
+Default: `"terminal"` (the platform default). Terminal emulator used by actions that open a terminal window (Resume, terminal `$EDITOR`). One of `"terminal"` or `"kitty"`; unknown values use the platform default. On Linux, lazyagent first uses `xdg-terminal-exec`, then the desktop's alternatives entry and common installed emulators. Also editable from the desktop app's Settings panel.
 
 Kitty note: macOS kitty cannot share windows across instances, so lazyagent keeps its terminal windows in a dedicated kitty instance (instance group `lazyagent`) and raises it automatically after each launch. No kitty configuration is required.
 

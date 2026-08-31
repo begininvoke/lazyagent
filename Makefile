@@ -1,4 +1,14 @@
-.PHONY: all build tui frontend bindings clean dev install deploy app
+.PHONY: all build tui frontend bindings clean dev install deploy app \
+	linux-desktop linux-deb linux-rpm linux-arch linux-appimage linux-packages
+
+VERSION ?= 0.0.0
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+GOARCH ?= $(shell go env GOARCH)
+LINUX_BINARY := dist/linux-desktop/lazyagent
+LINUX_LDFLAGS := -s -w \
+	-X github.com/illegalstudio/lazyagent/internal/version.Version=$(VERSION) \
+	-X github.com/illegalstudio/lazyagent/internal/version.Commit=$(COMMIT)
+APPIMAGE_ARCH := $(if $(filter amd64,$(GOARCH)),x86_64,aarch64)
 
 all: build
 
@@ -6,7 +16,7 @@ all: build
 build: frontend
 	rm -rf internal/assets/dist/*
 	cp -r frontend/dist/. internal/assets/dist/
-	go build -o lazyagent .
+	go build -tags production -o lazyagent .
 
 # Build TUI only (no frontend or Wails needed)
 tui:
@@ -39,8 +49,55 @@ deploy:
 app: build
 	scripts/make-app.sh ./lazyagent dev dist-app
 
+# Full Linux desktop build (GUI + TUI + API). GTK3 is explicit so a future
+# Wails upgrade cannot silently change the runtime ABI used by release assets.
+linux-desktop: frontend
+	rm -rf internal/assets/dist/*
+	cp -r frontend/dist/. internal/assets/dist/
+	mkdir -p dist/linux-desktop
+	CGO_ENABLED=1 GOOS=linux GOARCH=$(GOARCH) go build \
+		-tags production,gtk3 -trimpath -ldflags "$(LINUX_LDFLAGS)" \
+		-o $(LINUX_BINARY) .
+
+linux-deb: linux-desktop
+	VERSION=$(VERSION) GOARCH=$(GOARCH) wails3 tool package \
+		-name "Lazyagent_$(VERSION)_linux_$(GOARCH)" -format deb \
+		-config build/linux/nfpm.yaml -out dist
+
+linux-rpm: linux-desktop
+	VERSION=$(VERSION) GOARCH=$(GOARCH) wails3 tool package \
+		-name "Lazyagent_$(VERSION)_linux_$(GOARCH)" -format rpm \
+		-config build/linux/nfpm.yaml -out dist
+
+linux-arch: linux-desktop
+	VERSION=$(VERSION) GOARCH=$(GOARCH) wails3 tool package \
+		-name "Lazyagent_$(VERSION)_linux_$(GOARCH)" -format archlinux \
+		-config build/linux/nfpm.yaml -out dist
+
+linux-appimage: linux-desktop
+	rm -rf dist/appimage-build
+	cp assets/appicon.png dist/linux-desktop/lazyagent.png
+	# Wails alpha.74 expects a lowercase output name while linuxdeploy derives
+	# the capitalized name from the desktop entry. Accept either until fixed.
+	cd dist/linux-desktop && (wails3 generate appimage \
+		-binary lazyagent \
+		-icon "$(abspath dist/linux-desktop/lazyagent.png)" \
+		-desktopfile "$(abspath build/linux/lazyagent.desktop)" \
+		-outputdir "$(abspath dist)" \
+		-builddir "$(abspath dist/appimage-build)" || \
+		test -f "$(abspath dist/appimage-build)/Lazyagent-$(APPIMAGE_ARCH).AppImage")
+	if test -f "dist/lazyagent-$(APPIMAGE_ARCH).AppImage"; then \
+		mv "dist/lazyagent-$(APPIMAGE_ARCH).AppImage" \
+			"dist/Lazyagent_$(VERSION)_linux_$(GOARCH).AppImage"; \
+	else \
+		mv "dist/appimage-build/Lazyagent-$(APPIMAGE_ARCH).AppImage" \
+			"dist/Lazyagent_$(VERSION)_linux_$(GOARCH).AppImage"; \
+	fi
+
+linux-packages: linux-deb linux-rpm linux-arch linux-appimage
+
 # Clean build artifacts
 clean:
 	rm -f lazyagent
 	rm -rf frontend/dist internal/assets/dist/*
-	rm -rf dist-app
+	rm -rf dist-app dist

@@ -29,7 +29,7 @@ Sessions are cached by transcript path + mtime + size, so subsequent scans only 
 
 ### Persistent discovery cache
 
-The TUI, macOS GUI, HTTP API, and `lazyagent sessions` persist supported
+The TUI, desktop GUI, HTTP API, and `lazyagent sessions` persist supported
 providers' discovery caches between process runs. The files live under the
 system cache directory (`~/Library/Caches/lazyagent/` on macOS and normally
 `~/.cache/lazyagent/` on Linux), are advisory, and can be deleted safely; the
@@ -42,7 +42,7 @@ for filenames, platform paths, and cleanup details.
 
 ### Initial loading
 
-The TUI and macOS GUI discover providers progressively on first launch, so
+The TUI and desktop GUI discover providers progressively on first launch, so
 sessions appear as each provider finishes instead of waiting for the slowest
 one. The TUI shows a loading indicator until the initial stream completes.
 The HTTP API deliberately completes its initial discovery before it starts

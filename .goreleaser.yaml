@@ -26,6 +26,8 @@ builds:
     goarch:
       - amd64
       - arm64
+    tags:
+      - production
 
   # macOS: CLI/TUI only (no Wails, no CGo) — ships as lazyagent-cli
   - id: darwin-cli

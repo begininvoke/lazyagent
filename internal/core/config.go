@@ -78,7 +78,7 @@ var validTerminals = map[string]struct{}{
 }
 
 // NormalizeTerminal returns t if it is a supported terminal preset,
-// "terminal" (macOS Terminal.app) otherwise.
+// "terminal" (the platform default) otherwise.
 func NormalizeTerminal(t string) string {
 	if _, ok := validTerminals[t]; ok {
 		return t
@@ -155,8 +155,8 @@ type Config struct {
 	// 0 or out-of-range values mean the 400px default.
 	DetailWidth int `json:"detail_width,omitempty"`
 	// Terminal picks the terminal emulator for actions that open one
-	// (Resume, terminal $EDITOR): terminal, iterm2, kitty, ghostty,
-	// wezterm or alacritty. Empty/unknown means Terminal.app.
+	// (Resume, terminal $EDITOR): terminal or kitty. Empty/unknown means
+	// the platform default.
 	Terminal string          `json:"terminal,omitempty"`
 	Webhooks []WebhookConfig `json:"webhooks,omitempty"`
 	// APIPassphrase is the secret used to derive the bearer token that

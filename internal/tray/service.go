@@ -347,7 +347,7 @@ func (s *SessionService) SetSearchQuery(q string) {
 // OpenInEditor opens a directory in the user's editor.
 // For Cursor sessions, it opens Cursor IDE directly.
 // Otherwise it follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
-// $EDITOR is a terminal editor (opened inside a Terminal.app window).
+// $EDITOR is a terminal editor (opened inside the configured terminal).
 // The config "editor" field is treated as VISUAL (GUI) for backward compatibility.
 func (s *SessionService) OpenInEditor(cwd, agent string) {
 	if cwd == "" {
@@ -390,7 +390,7 @@ func launchGUI(editor, cwd string) {
 	_ = c.Start()
 }
 
-// launchInTerminal opens a terminal editor inside a new macOS Terminal.app window.
+// launchInTerminal opens a terminal editor inside a new terminal window.
 func launchInTerminal(editor, cwd string) {
 	launchCommandInTerminal([]string{editor}, cwd)
 }
@@ -401,6 +401,9 @@ func launchInTerminal(editor, cwd string) {
 func launchCommandInTerminal(argv []string, cwd string) {
 	term := core.NormalizeTerminal(core.LoadConfig().Terminal)
 	full := terminalCommand(term, cwd, argv)
+	if len(full) == 0 {
+		return
+	}
 	c := exec.Command(full[0], full[1:]...)
 	c.Stdin = nil
 	c.Stdout = nil
@@ -408,9 +411,7 @@ func launchCommandInTerminal(argv []string, cwd string) {
 	if err := c.Start(); err != nil {
 		return
 	}
-	if term == "kitty" {
-		go activateSpawnedKitty(c)
-	}
+	terminalStarted(c, term)
 }
 
 // Refresh forces a session reload. Bound to the toolbar refresh button and
@@ -420,7 +421,7 @@ func (s *SessionService) Refresh() {
 	s.emitUpdate()
 }
 
-// ResumeInTerminal opens a new Terminal window in the session's working
+// ResumeInTerminal opens a new terminal window in the session's working
 // directory running the agent's resume command. No-op for agents without
 // an executable resume command (core.ResumeArgv returns nil for those).
 func (s *SessionService) ResumeInTerminal(sessionID string) {
@@ -435,7 +436,7 @@ func (s *SessionService) ResumeInTerminal(sessionID string) {
 	launchCommandInTerminal(argv, detail.Session.CWD)
 }
 
-// shellQuote returns a single-quoted string safe for embedding in AppleScript shell commands.
+// shellQuote returns a single-quoted string safe for embedding in shell commands.
 func shellQuote(s string) string {
 	// Replace single quotes with '\'' (end quote, escaped quote, start quote).
 	quoted := "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"

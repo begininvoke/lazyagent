@@ -162,7 +162,7 @@ export function IsPinned(): $CancellablePromise<boolean> {
  * OpenInEditor opens a directory in the user's editor.
  * For Cursor sessions, it opens Cursor IDE directly.
  * Otherwise it follows POSIX semantics: $VISUAL is a GUI editor (launched directly),
- * $EDITOR is a terminal editor (opened inside a Terminal.app window).
+ * $EDITOR is a terminal editor (opened inside the configured terminal).
  * The config "editor" field is treated as VISUAL (GUI) for backward compatibility.
  */
 export function OpenInEditor(cwd: string, agent: string): $CancellablePromise<void> {
@@ -185,7 +185,7 @@ export function Refresh(): $CancellablePromise<void> {
 }
 
 /**
- * ResumeInTerminal opens a new Terminal window in the session's working
+ * ResumeInTerminal opens a new terminal window in the session's working
  * directory running the agent's resume command. No-op for agents without
  * an executable resume command (core.ResumeArgv returns nil for those).
  */

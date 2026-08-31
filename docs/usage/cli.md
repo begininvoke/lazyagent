@@ -28,7 +28,7 @@ No flag at all is the most common invocation — it opens the TUI with every sup
 | Flag | Type | Default | Summary |
 |------|------|---------|---------|
 | `--tui` | bool | auto | Launch the terminal UI. Implicit when no other mode is set |
-| `--gui` | bool | `false` | Launch the macOS desktop app (detaches) |
+| `--gui` | bool | `false` | Launch the macOS/Linux desktop app (detaches) |
 | `--api` | bool | `false` | Start the HTTP API server |
 | `--host ADDR` | string | `127.0.0.1:7421` | API listen address (only relevant with `--api`) |
 | `--agent NAME` | string | `all` | Restrict monitoring to one agent |
@@ -52,15 +52,15 @@ See [Terminal UI](../interfaces/terminal-ui.md) for keybindings.
 
 ### `--gui`
 
-Launch the macOS desktop app. The process detaches from your terminal immediately — the shell prompt returns, and the app appears in the menu bar.
+Launch the desktop app. Native installs detach from the terminal immediately, so the shell prompt returns while the app appears in the macOS menu bar or Linux system tray. An AppImage stays attached when launched from a shell; append `&` if you want to background it.
 
 ```bash
-lazyagent --gui              # macOS app only (detached)
-lazyagent --gui --api        # macOS app + API in foreground
+lazyagent --gui              # desktop app only (detached)
+lazyagent --gui --api        # desktop app + API in foreground
 lazyagent --tui --gui --api  # everything (TUI foreground, tray and API in background)
 ```
 
-On non-macOS systems `--gui` prints an error. See [macOS GUI](../interfaces/macos-gui.md).
+The CLI-only build prints an error for `--gui`; install a desktop package to enable it. See [macOS GUI](../interfaces/macos-gui.md) or [Linux GUI](../interfaces/linux-gui.md).
 
 ### `--api`
 
@@ -215,10 +215,10 @@ lazyagent
 # Terminal UI but only Claude
 lazyagent --agent claude
 
-# macOS app only
+# Desktop app only
 lazyagent --gui
 
-# macOS app + HTTP API (ideal daily-driver combo on macOS)
+# Desktop app + HTTP API
 lazyagent --gui --api
 
 # HTTP API exposed on the LAN for a mobile client

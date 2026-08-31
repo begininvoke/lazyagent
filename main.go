@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -37,6 +38,20 @@ import (
 
 var trayPidFile = os.TempDir() + "/lazyagent-tray.pid"
 
+type launchModes struct {
+	gui  bool
+	tray bool
+	tui  bool
+	api  bool
+}
+
+func shouldRunDirectGUI(inBundle, trayAvailable, stdinTTY, appImage bool, modes launchModes) bool {
+	bundleLaunch := inBundle && trayAvailable &&
+		!modes.gui && !modes.tray && !modes.tui && !modes.api && !stdinTTY
+	appImageLaunch := appImage && (modes.gui || modes.tray) && !modes.tui && !modes.api
+	return bundleLaunch || appImageLaunch
+}
+
 func main() {
 	// Subcommands are parsed before the global flag set so they get their own
 	// FlagSet and don't collide with lazyagent's mode flags.
@@ -58,8 +73,8 @@ func main() {
 	}
 
 	showVersion := flag.Bool("version", false, "Print version and exit")
-	guiMode := flag.Bool("gui", false, "Launch as macOS menu bar app")
-	trayMode := flag.Bool("tray", false, "Launch as macOS menu bar app (deprecated: use --gui)")
+	guiMode := flag.Bool("gui", false, "Launch the desktop tray app")
+	trayMode := flag.Bool("tray", false, "Launch the desktop tray app (deprecated: use --gui)")
 	tuiMode := flag.Bool("tui", false, "Launch the terminal UI (default when no flags given)")
 	apiMode := flag.Bool("api", false, "Start the API server")
 	apiHost := flag.String("host", "", "API listen address (e.g. :7421 or 0.0.0.0:7421). Default: 127.0.0.1:7421")
@@ -84,7 +99,7 @@ Usage:
   lazyagent --api               Start the API server (http://127.0.0.1:7421)
   lazyagent --api --host :7421  Start the API server on custom address
   lazyagent --tui --api         Launch TUI + API server
-  lazyagent --gui               Launch the desktop app (menu bar)
+  lazyagent --gui               Launch the desktop tray app
   lazyagent --gui --api         Launch GUI + API server (foreground)
   lazyagent --tui --gui --api   Launch everything
   lazyagent --demo              Launch with fake data (for screenshots)
@@ -159,9 +174,16 @@ If you find lazyagent useful, leave a ⭐ → https://github.com/illegalstudio/l
 	// terminal on stdin; a user typing the self-linked lazyagent in a
 	// shell does. Bundle + no mode flags + no TTY = GUI launch; with a
 	// TTY the default stays the TUI, as documented.
-	runDirectGUI := inBundle && tray.Available() &&
-		!*guiMode && !*trayMode && !*tuiMode && !*apiMode &&
-		!term.IsTerminal(int(os.Stdin.Fd()))
+	// Keep AppImage-only GUI launches in-process. Its runtime owns the
+	// temporary mount; exiting a forking parent can unmount WebKit resources
+	// while the detached GUI child still needs them.
+	runDirectGUI := shouldRunDirectGUI(
+		inBundle,
+		tray.Available(),
+		term.IsTerminal(int(os.Stdin.Fd())),
+		runtime.GOOS == "linux" && os.Getenv("APPIMAGE") != "",
+		launchModes{gui: *guiMode, tray: *trayMode, tui: *tuiMode, api: *apiMode},
+	)
 
 	runGUI := *guiMode || *trayMode || runDirectGUI
 	// Default: TUI if no other mode explicitly requested.

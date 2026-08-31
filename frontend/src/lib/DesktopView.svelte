@@ -191,7 +191,7 @@
     <button
       class="no-drag rounded-lg border border-border bg-[#11111b] px-2 py-1 text-subtext hover:text-text text-[13px] leading-none"
       onclick={toggleDetach}
-      title="Attach to menu bar (d)"
+      title="Attach to system tray (d)"
     >⤡</button>
   </header>
 

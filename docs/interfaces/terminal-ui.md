@@ -97,4 +97,4 @@ On macOS you can also combine it with the desktop app:
 lazyagent --tui --gui --api
 ```
 
-The GUI detaches into its own process so the terminal stays interactive. See [macOS GUI](macos-gui.md) and [HTTP API](http-api.md) for the companion interfaces.
+The GUI detaches into its own process so the terminal stays interactive. See [macOS GUI](macos-gui.md), [Linux GUI](linux-gui.md), and [HTTP API](http-api.md) for the companion interfaces.
