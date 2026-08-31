@@ -41,8 +41,11 @@ func Run(demoMode bool, agentMode string) error {
 	svc := &SessionService{demoMode: demoMode, provider: runProvider(demoMode, agentMode)}
 
 	app := application.New(application.Options{
-		Name:        "lazyagent",
+		Name:        "Lazyagent",
 		Description: "Claude Code session monitor",
+		Linux: application.LinuxOptions{
+			ProgramName: "lazyagent",
+		},
 		Mac: application.MacOptions{
 			ActivationPolicy: application.ActivationPolicyAccessory,
 		},
@@ -59,8 +62,8 @@ func Run(demoMode bool, agentMode string) error {
 
 	// System tray
 	tray := app.SystemTray.New()
-	tray.SetTemplateIcon(trayIcon)
-	tooltip := "lazyagent"
+	configurePlatformTray(tray)
+	tooltip := "Lazyagent"
 	if version.Version != "dev" {
 		tooltip += " v" + version.Version
 	}
