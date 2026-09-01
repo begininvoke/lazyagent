@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/model"
 )
@@ -59,11 +60,13 @@ func TestCWDIndex_HeadHitAvoidsReread(t *testing.T) {
 	}
 }
 
-// TestCWDIndex_InvalidatedOnChange confirms a changed file (different mtime
-// and size) is never trusted from a stale entry -- the brief's "use the
+// TestCWDIndex_InvalidatedOnSizeChange confirms a changed file with a new
+// size is never trusted from a stale entry -- the brief's "use the
 // same invalidate-on-change rule for uniformity and safety" requirement for
 // claude, even though first-cwd-wins is technically stable across appends.
-func TestCWDIndex_InvalidatedOnChange(t *testing.T) {
+func TestCWDIndex_InvalidatedOnSizeChange(t *testing.T) {
+	const replacementCWD = "/tmp/project-b-longer"
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.jsonl")
 	if err := os.WriteFile(path, []byte(cwdLine("/tmp/project-a")+"\n"), 0o644); err != nil {
@@ -82,7 +85,7 @@ func TestCWDIndex_InvalidatedOnChange(t *testing.T) {
 	}
 
 	// Replace the file with new (different-length) content under a new cwd.
-	if err := os.WriteFile(path, []byte(cwdLine("/tmp/project-b")+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(cwdLine(replacementCWD)+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	info2, err := os.Stat(path)
@@ -90,6 +93,55 @@ func TestCWDIndex_InvalidatedOnChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	mtime2, size2 := info2.ModTime(), info2.Size()
+	if size2 == size1 {
+		t.Fatalf("replacement size = %d, want a different size from original %d", size2, size1)
+	}
+
+	cwd, ok = idx.headCWDIndexed(path, mtime2, size2)
+	if !ok || cwd != replacementCWD {
+		t.Fatalf("after replace, headCWDIndexed = (%q, %v), want (%s, true) -- the stale project-a entry must not be trusted", cwd, ok, replacementCWD)
+	}
+}
+
+// TestCWDIndex_InvalidatedOnMtimeChange covers the other half of the cache
+// key: a same-size rewrite must be detected when only mtime changes. Set the
+// timestamp explicitly so the test is reliable on coarse-mtime filesystems.
+func TestCWDIndex_InvalidatedOnMtimeChange(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.jsonl")
+	if err := os.WriteFile(path, []byte(cwdLine("/tmp/project-a")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mtime1, size1 := info.ModTime(), info.Size()
+
+	idx := NewCWDIndex()
+	cwd, ok := idx.headCWDIndexed(path, mtime1, size1)
+	if !ok || cwd != "/tmp/project-a" {
+		t.Fatalf("first scan = (%q, %v), want (/tmp/project-a, true)", cwd, ok)
+	}
+
+	if err := os.WriteFile(path, []byte(cwdLine("/tmp/project-b")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	replacementMtime := mtime1.Add(2 * time.Second)
+	if err := os.Chtimes(path, replacementMtime, replacementMtime); err != nil {
+		t.Fatal(err)
+	}
+	info2, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mtime2, size2 := info2.ModTime(), info2.Size()
+	if size2 != size1 {
+		t.Fatalf("replacement size = %d, want original size %d", size2, size1)
+	}
+	if mtime2.Equal(mtime1) {
+		t.Fatalf("replacement mtime = %s, want a different mtime from original %s", mtime2, mtime1)
+	}
 
 	cwd, ok = idx.headCWDIndexed(path, mtime2, size2)
 	if !ok || cwd != "/tmp/project-b" {
