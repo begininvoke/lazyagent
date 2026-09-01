@@ -77,22 +77,17 @@ linux-arch: linux-desktop
 linux-appimage: linux-desktop
 	rm -rf dist/appimage-build
 	cp assets/appicon.png dist/linux-desktop/lazyagent.png
-	# Wails alpha.74 expects a lowercase output name while linuxdeploy derives
-	# the capitalized name from the desktop entry. Accept either until fixed.
-	cd dist/linux-desktop && (wails3 generate appimage \
+	# Keep linuxdeploy's output name aligned with the filename Wails expects
+	# to move out of the build directory after packaging.
+	cd dist/linux-desktop && LDAI_OUTPUT="lazyagent-$(APPIMAGE_ARCH).AppImage" \
+		wails3 generate appimage \
 		-binary lazyagent \
 		-icon "$(abspath dist/linux-desktop/lazyagent.png)" \
 		-desktopfile "$(abspath build/linux/lazyagent.desktop)" \
 		-outputdir "$(abspath dist)" \
-		-builddir "$(abspath dist/appimage-build)" || \
-		test -f "$(abspath dist/appimage-build)/Lazyagent-$(APPIMAGE_ARCH).AppImage")
-	if test -f "dist/lazyagent-$(APPIMAGE_ARCH).AppImage"; then \
-		mv "dist/lazyagent-$(APPIMAGE_ARCH).AppImage" \
-			"dist/Lazyagent_$(VERSION)_linux_$(GOARCH).AppImage"; \
-	else \
-		mv "dist/appimage-build/Lazyagent-$(APPIMAGE_ARCH).AppImage" \
-			"dist/Lazyagent_$(VERSION)_linux_$(GOARCH).AppImage"; \
-	fi
+		-builddir "$(abspath dist/appimage-build)"
+	mv "dist/lazyagent-$(APPIMAGE_ARCH).AppImage" \
+		"dist/Lazyagent_$(VERSION)_linux_$(GOARCH).AppImage"
 
 linux-packages: linux-deb linux-rpm linux-arch linux-appimage
 
