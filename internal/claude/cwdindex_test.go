@@ -64,6 +64,8 @@ func TestCWDIndex_HeadHitAvoidsReread(t *testing.T) {
 // same invalidate-on-change rule for uniformity and safety" requirement for
 // claude, even though first-cwd-wins is technically stable across appends.
 func TestCWDIndex_InvalidatedOnChange(t *testing.T) {
+	const replacementCWD = "/tmp/project-b-longer"
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.jsonl")
 	if err := os.WriteFile(path, []byte(cwdLine("/tmp/project-a")+"\n"), 0o644); err != nil {
@@ -82,7 +84,7 @@ func TestCWDIndex_InvalidatedOnChange(t *testing.T) {
 	}
 
 	// Replace the file with new (different-length) content under a new cwd.
-	if err := os.WriteFile(path, []byte(cwdLine("/tmp/project-b")+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(cwdLine(replacementCWD)+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	info2, err := os.Stat(path)
@@ -90,10 +92,13 @@ func TestCWDIndex_InvalidatedOnChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	mtime2, size2 := info2.ModTime(), info2.Size()
+	if size2 == size1 {
+		t.Fatalf("replacement size = %d, want a different size from original %d", size2, size1)
+	}
 
 	cwd, ok = idx.headCWDIndexed(path, mtime2, size2)
-	if !ok || cwd != "/tmp/project-b" {
-		t.Fatalf("after replace, headCWDIndexed = (%q, %v), want (/tmp/project-b, true) -- the stale project-a entry must not be trusted", cwd, ok)
+	if !ok || cwd != replacementCWD {
+		t.Fatalf("after replace, headCWDIndexed = (%q, %v), want (%s, true) -- the stale project-a entry must not be trusted", cwd, ok, replacementCWD)
 	}
 }
 
