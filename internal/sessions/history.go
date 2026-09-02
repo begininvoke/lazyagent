@@ -78,7 +78,7 @@ Flags:
 	}
 
 	if len(filtered) == 0 {
-		fmt.Fprintf(os.Stderr, "No sessions found in %s.\n", abbreviateHome(dir))
+		fmt.Fprintf(os.Stderr, "No sessions found in %s.\n", stripControl(abbreviateHome(dir)))
 		return 0
 	}
 
@@ -136,6 +136,10 @@ func renderHistory(w io.Writer, sessions []*model.Session, nameFor func(*model.S
 	if limit > 0 && total > limit {
 		shown = sessions[:limit]
 	}
+	// The directory label is the user's own path, but a hostile repo can
+	// still plant control bytes in a directory name — same neutralization
+	// as the title and branch cells.
+	dirLabel = stripControl(dirLabel)
 
 	t := chatops.NewTable().Headers("#", "AGENT", "SESSION", "BRANCH", "MSGS", "LAST ACTIVITY")
 	for i := len(shown) - 1; i >= 0; i-- {

@@ -137,7 +137,7 @@ func TestRenderHistoryStripsControlSequences(t *testing.T) {
 		LastActivity: time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC),
 	}}
 	var buf bytes.Buffer
-	renderHistory(&buf, sessions, nameByField, "~/proj", 0)
+	renderHistory(&buf, sessions, nameByField, "~/pro\x1b[2Jj", 0)
 	got := buf.String()
 
 	for _, r := range []rune{0x1b, 0x07, 0x9b} {
@@ -152,6 +152,9 @@ func TestRenderHistoryStripsControlSequences(t *testing.T) {
 	}
 	if !strings.Contains(got, "feat[2Jbranch") {
 		t.Errorf("branch not neutralized in place; got:\n%q", got)
+	}
+	if !strings.Contains(got, "~/pro[2Jj") {
+		t.Errorf("directory label not neutralized in footer; got:\n%q", got)
 	}
 }
 

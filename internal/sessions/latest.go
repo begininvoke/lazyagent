@@ -60,7 +60,7 @@ Flags:
 	// Unlike the listing commands, an empty result here is a failure: the
 	// whole point was to open a session, and there is none to open.
 	if len(filtered) == 0 {
-		fmt.Fprintf(os.Stderr, "No sessions found in %s.\n", abbreviateHome(dir))
+		fmt.Fprintf(os.Stderr, "No sessions found in %s.\n", stripControl(abbreviateHome(dir)))
 		return 1
 	}
 
