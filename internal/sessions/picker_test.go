@@ -17,7 +17,7 @@ func TestPickerNavigationAndOpen(t *testing.T) {
 	m := pickerModel{
 		sessions: []*model.Session{
 			{Agent: "claude", SessionID: "a"},
-			{Agent: "grok", SessionID: "b"},
+			{Agent: "unknown", SessionID: "b"},
 		},
 		titles: []string{"one", "two"},
 	}
@@ -34,14 +34,14 @@ func TestPickerNavigationAndOpen(t *testing.T) {
 		t.Fatalf("cursor moved past end: %d", m.cursor)
 	}
 
-	// enter on grok (no resume at all): stays open, shows a status message.
+	// Enter on an agent without resume support: stay open and show a status message.
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(pickerModel)
 	if cmd != nil {
-		t.Fatal("picker must stay open on a grok row")
+		t.Fatal("picker must stay open on a row without resume support")
 	}
 	if m.status == "" {
-		t.Fatal("expected a status message for grok")
+		t.Fatal("expected a status message for an unsupported agent")
 	}
 
 	// back up to claude and open.
@@ -125,18 +125,27 @@ func TestTitleFor(t *testing.T) {
 	}
 }
 
-func TestPickerCKeyOnGrokShowsStatusAndStaysOpen(t *testing.T) {
+func TestPickerCKeyOnGrokCopiesAndQuits(t *testing.T) {
 	m := pickerModel{sessions: []*model.Session{{Agent: "grok", SessionID: "g"}}, titles: []string{"t"}}
 	next, cmd := m.Update(keyRune('c'))
 	m = next.(pickerModel)
-	if cmd != nil {
-		t.Fatal("picker must stay open when the row has no resume command")
+	if m.action != actionCopy {
+		t.Fatalf("action = %v, want actionCopy", m.action)
 	}
-	if m.status == "" {
-		t.Fatal("expected a status message for grok")
+	if cmd == nil {
+		t.Fatal("expected tea.Quit after copy")
 	}
-	if m.action == actionCopy {
-		t.Fatal("action must not be actionCopy when there is nothing to copy")
+}
+
+func TestPickerEnterOnGrokOpensAndQuits(t *testing.T) {
+	m := pickerModel{sessions: []*model.Session{{Agent: "grok", SessionID: "g"}}, titles: []string{"t"}}
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(pickerModel)
+	if m.action != actionOpen {
+		t.Fatalf("action = %v, want actionOpen", m.action)
+	}
+	if cmd == nil {
+		t.Fatal("expected tea.Quit after open")
 	}
 }
 

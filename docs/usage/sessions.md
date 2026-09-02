@@ -22,7 +22,7 @@ lazyagent sessions [--agent NAME] [--json] [--dir PATH]
 ┌─ Sessions in ~/projects/foo (12) ───────────────────────────┐
 │ ▸ claude  2h ago      84  fix build embed placeholder       │
 │   codex   yesterday   31  webhook config models             │
-│   grok    3d ago      12  docs limits   (no resume)         │
+│   grok    3d ago      12  docs limits                       │
 └─────────────────────────────────────────────────────────────┘
   ↑/↓ move · enter open · c copy resume cmd · q quit
 ```
@@ -41,8 +41,8 @@ user message).
 **Opening** runs the agent's resume command (e.g. `claude --resume <id>`)
 with this terminal attached, from the session's own working directory when
 it still exists. Agents lazyagent can exec directly: Claude Code, Codex,
-Amp, pi, and Kimi. For OpenCode, Kilo, and Cursor the resume command is
-copied to the clipboard instead; Grok has no resume command.
+Amp, pi, Grok, and Kimi. For OpenCode, Kilo, and Cursor the resume command
+is copied to the clipboard instead.
 
 ## Flags
 

@@ -74,11 +74,10 @@ Type a 1-based result number to open that session in the originating agent when 
 | codex | `codex resume <session-id>` |
 | amp | `amp threads continue <session-id>` |
 | pi | `pi --session <session-id>` |
+| grok | `grok --resume '<session-id>'` |
 | kimi | `kimi --resume <session-id>` |
 
 The command runs from the session's original CWD when that directory still exists, otherwise from the current shell directory. Pressing <kbd>Enter</kbd> on an empty line exits without opening anything.
-
-> **Grok sessions** are indexed and searchable, but `search` cannot resume them directly — Grok exposes no resume command, so selecting a Grok result reports that and exits.
 
 ## Index management
 

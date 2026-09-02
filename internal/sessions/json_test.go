@@ -77,13 +77,13 @@ func TestWriteJSONAllFieldsPresentEvenWhenEmpty(t *testing.T) {
 			_ = v
 		}
 	}
-	// grok has no resume command and neither session has a name: both must
-	// be present as empty strings, not omitted.
+	// Neither session has a name, so both names must be present as empty
+	// strings rather than omitted.
 	if out[0]["name"] != "" {
 		t.Errorf("grok row name = %v, want empty string", out[0]["name"])
 	}
-	if out[0]["resume_command"] != "" {
-		t.Errorf("grok row resume_command = %v, want empty string", out[0]["resume_command"])
+	if out[0]["resume_command"] != "grok --resume 'g1'" {
+		t.Errorf("grok row resume_command = %v, want grok --resume 'g1'", out[0]["resume_command"])
 	}
 	if out[1]["name"] != "" {
 		t.Errorf("claude row name = %v, want empty string", out[1]["name"])
