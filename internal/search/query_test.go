@@ -78,19 +78,28 @@ func TestNormalizeArgsAllowsFlagsAfterQuery(t *testing.T) {
 }
 
 func TestResumeCommand(t *testing.T) {
-	cmd, display := resumeCommand("codex", "abc123")
-	if cmd == nil {
-		t.Fatal("resumeCommand returned nil")
+	tests := []struct {
+		agent, executable, want string
+	}{
+		{"codex", "codex", "codex resume abc123"},
+		{"grok", "grok", "grok --resume abc123"},
 	}
-	if filepath.Base(cmd.Path) != "codex" {
-		t.Fatalf("cmd.Path = %q, want codex executable", cmd.Path)
-	}
-	got := strings.Join(cmd.Args, " ")
-	want := "codex resume abc123"
-	if got != want {
-		t.Fatalf("args = %q, want %q", got, want)
-	}
-	if display != want {
-		t.Fatalf("display = %q, want %q", display, want)
+	for _, tt := range tests {
+		t.Run(tt.agent, func(t *testing.T) {
+			cmd, display := resumeCommand(tt.agent, "abc123")
+			if cmd == nil {
+				t.Fatal("resumeCommand returned nil")
+			}
+			if filepath.Base(cmd.Path) != tt.executable {
+				t.Fatalf("cmd.Path = %q, want %s executable", cmd.Path, tt.executable)
+			}
+			got := strings.Join(cmd.Args, " ")
+			if got != tt.want {
+				t.Fatalf("args = %q, want %q", got, tt.want)
+			}
+			if display != tt.want {
+				t.Fatalf("display = %q, want %q", display, tt.want)
+			}
+		})
 	}
 }

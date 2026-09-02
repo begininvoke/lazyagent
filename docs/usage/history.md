@@ -53,7 +53,7 @@ when it still exists. Pressing Enter on an empty line — or `ctrl+c` —
 quits without resuming. Piped or redirected output skips the prompt
 entirely, so `lazyagent history | cat` stays non-interactive.
 
-Agents lazyagent can exec directly: Claude Code, Codex, Amp, pi, and Kimi.
+Agents lazyagent can exec directly: Claude Code, Codex, Amp, pi, Grok, and Kimi.
 Other agents print a "no resume command" notice instead. For scripted
 output, `lazyagent sessions --json` emits the same list as JSON.
 

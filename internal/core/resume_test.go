@@ -16,6 +16,8 @@ func TestResumeCommand(t *testing.T) {
 		{"opencode", "abc-123", "opencode -s abc-123"},
 		{"kilo", "abc-123", "kilo --session=abc-123"},
 		{"cursor", "abc-123", `cursor-agent --resume="abc-123"`},
+		{"grok", "abc-123", "grok --resume abc-123"},
+		{"kimi", "abc-123", "kimi --resume abc-123"},
 		{"unknown", "abc-123", ""},
 		{"claude", "", ""},
 		{"", "abc-123", ""},
@@ -37,12 +39,12 @@ func TestResumeArgv(t *testing.T) {
 		{"codex", []string{"codex", "resume", "abc"}},
 		{"amp", []string{"amp", "threads", "continue", "abc"}},
 		{"pi", []string{"pi", "--session", "abc"}},
+		{"grok", []string{"grok", "--resume", "abc"}},
 		{"kimi", []string{"kimi", "--resume", "abc"}},
 		// Display-only agents: copyable via ResumeCommand but not executable.
 		{"opencode", nil},
 		{"kilo", nil},
 		{"cursor", nil},
-		{"grok", nil},
 		{"unknown", nil},
 	}
 	for _, c := range cases {

@@ -24,7 +24,7 @@ Opening: claude --resume 3f2a…
 
 The resume command runs with this terminal attached, from the session's own
 working directory when it still exists. Agents lazyagent can exec directly:
-Claude Code, Codex, Amp, pi, and Kimi; for other agents a "no resume
+Claude Code, Codex, Amp, pi, Grok, and Kimi; for other agents a "no resume
 command" notice is printed instead. "Most recent" means latest activity in
 the transcript (lazyagent does not record a separate creation time).
 

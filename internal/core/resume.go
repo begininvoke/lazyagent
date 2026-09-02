@@ -23,6 +23,8 @@ func ResumeCommand(agent, sessionID string) string {
 		return fmt.Sprintf("kilo --session=%s", sessionID)
 	case "cursor":
 		return fmt.Sprintf("cursor-agent --resume=%q", sessionID)
+	case "grok":
+		return fmt.Sprintf("grok --resume %s", sessionID)
 	case "kimi":
 		return fmt.Sprintf("kimi --resume %s", sessionID)
 	default:
@@ -31,8 +33,8 @@ func ResumeCommand(agent, sessionID string) string {
 }
 
 // ResumeArgv returns the executable argv to resume a session, or nil when
-// the agent has no resume command lazyagent is willing to exec (grok has
-// none; opencode/kilo/cursor have a display string only — see ResumeCommand).
+// the agent has no resume command lazyagent is willing to exec.
+// OpenCode, Kilo, and Cursor have a display string only; see ResumeCommand.
 // "Openable" everywhere in the codebase means ResumeArgv != nil.
 func ResumeArgv(agent, sessionID string) []string {
 	if sessionID == "" {
@@ -47,6 +49,8 @@ func ResumeArgv(agent, sessionID string) []string {
 		return []string{"amp", "threads", "continue", sessionID}
 	case "pi":
 		return []string{"pi", "--session", sessionID}
+	case "grok":
+		return []string{"grok", "--resume", sessionID}
 	case "kimi":
 		return []string{"kimi", "--resume", sessionID}
 	default:
