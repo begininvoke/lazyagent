@@ -57,17 +57,9 @@ Flags:
 		return 2
 	}
 
-	dir := *dirFlag
-	if dir == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: cannot determine working directory: %v\n", err)
-			return 2
-		}
-		dir = wd
-	}
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		fmt.Fprintf(os.Stderr, "Error: %q is not a directory\n", dir)
+	dir, err := resolveTargetDir(*dirFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 2
 	}
 
@@ -234,6 +226,62 @@ func openSession(s *model.Session) int {
 		return 1
 	}
 	return 0
+}
+
+// discoverDirSessions runs a full blocking discovery for agentMode and
+// returns dir's sessions, recency-sorted (FilterByDir), with the advisory
+// provider caches loaded before and saved after — the same wiring as Run's
+// non-interactive path. Shared by RunHistory and RunLatest, which have no
+// picker and therefore no reason to stream. On failure it prints the error
+// to stderr and returns a non-zero exit code for the caller to return.
+func discoverDirSessions(agentMode, dir string) ([]*model.Session, int) {
+	cfg := core.LoadConfig()
+	provider := core.BuildProvider(agentMode, cfg)
+
+	cacheDir, hasCacheDir := ResolveCacheDir()
+	if hasCacheDir {
+		core.LoadProviderCaches(provider, cacheDir)
+	}
+
+	variants, err := targetVariants(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return nil, 1
+	}
+	match := func(cwd string) bool { return matchesDir(cwd, variants) }
+
+	all, err := core.DiscoverMatching(provider, match)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return nil, 1
+	}
+	if hasCacheDir {
+		core.SaveProviderCaches(provider, cacheDir)
+	}
+	filtered, err := FilterByDir(all, dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return nil, 1
+	}
+	return filtered, 0
+}
+
+// resolveTargetDir returns the directory a subcommand should operate on:
+// dirFlag when given, otherwise the current working directory. The returned
+// error is user-facing (callers prefix it with "Error: " and exit 2).
+func resolveTargetDir(dirFlag string) (string, error) {
+	dir := dirFlag
+	if dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("cannot determine working directory: %v", err)
+		}
+		dir = wd
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("%q is not a directory", dir)
+	}
+	return dir, nil
 }
 
 // abbreviateHome shortens a path with the user's home directory to ~/...
