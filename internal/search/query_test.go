@@ -79,10 +79,10 @@ func TestNormalizeArgsAllowsFlagsAfterQuery(t *testing.T) {
 
 func TestResumeCommand(t *testing.T) {
 	tests := []struct {
-		agent, executable, want string
+		agent, executable, wantArgs, wantDisplay string
 	}{
-		{"codex", "codex", "codex resume abc123"},
-		{"grok", "grok", "grok --resume abc123"},
+		{"codex", "codex", "codex resume abc123", "codex resume abc123"},
+		{"grok", "grok", "grok --resume abc123", "grok --resume 'abc123'"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.agent, func(t *testing.T) {
@@ -94,11 +94,11 @@ func TestResumeCommand(t *testing.T) {
 				t.Fatalf("cmd.Path = %q, want %s executable", cmd.Path, tt.executable)
 			}
 			got := strings.Join(cmd.Args, " ")
-			if got != tt.want {
-				t.Fatalf("args = %q, want %q", got, tt.want)
+			if got != tt.wantArgs {
+				t.Fatalf("args = %q, want %q", got, tt.wantArgs)
 			}
-			if display != tt.want {
-				t.Fatalf("display = %q, want %q", display, tt.want)
+			if display != tt.wantDisplay {
+				t.Fatalf("display = %q, want %q", display, tt.wantDisplay)
 			}
 		})
 	}

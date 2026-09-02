@@ -82,8 +82,8 @@ func TestWriteJSONAllFieldsPresentEvenWhenEmpty(t *testing.T) {
 	if out[0]["name"] != "" {
 		t.Errorf("grok row name = %v, want empty string", out[0]["name"])
 	}
-	if out[0]["resume_command"] != "grok --resume g1" {
-		t.Errorf("grok row resume_command = %v, want grok --resume g1", out[0]["resume_command"])
+	if out[0]["resume_command"] != "grok --resume 'g1'" {
+		t.Errorf("grok row resume_command = %v, want grok --resume 'g1'", out[0]["resume_command"])
 	}
 	if out[1]["name"] != "" {
 		t.Errorf("claude row name = %v, want empty string", out[1]["name"])

@@ -171,7 +171,7 @@ lazyagent search --agent codex "parser"
 lazyagent search --reindex "config"
 ```
 
-After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command when lazyagent knows one. Grok sessions resume with `grok --resume <session-id>`. Piped output stays non-interactive.
+After printing results in an interactive terminal, `search` prompts for a result number; entering one opens that chat via the originating agent's resume command when lazyagent knows one. Grok sessions resume with `grok --resume '<session-id>'`. Piped output stays non-interactive.
 
 Full reference, including the index location, ranking, and resume commands: [`search`](../maintenance/search.md).
 

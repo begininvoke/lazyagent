@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ResumeCommand returns the CLI command to resume a session for the given agent.
 // Returns empty string for unknown agents or empty session IDs.
@@ -24,12 +27,17 @@ func ResumeCommand(agent, sessionID string) string {
 	case "cursor":
 		return fmt.Sprintf("cursor-agent --resume=%q", sessionID)
 	case "grok":
-		return fmt.Sprintf("grok --resume %s", sessionID)
+		return fmt.Sprintf("grok --resume %s", shellQuoteArg(sessionID))
 	case "kimi":
 		return fmt.Sprintf("kimi --resume %s", sessionID)
 	default:
 		return ""
 	}
+}
+
+// shellQuoteArg returns one POSIX shell word using single-quote escaping.
+func shellQuoteArg(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 // ResumeArgv returns the executable argv to resume a session, or nil when
