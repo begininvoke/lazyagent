@@ -59,6 +59,8 @@ That said, lazyagent and its API are **fully open source**. If you'd rather not 
 - **[`lazyagent search`](docs/maintenance/search.md)** — search transcript-file agents (Claude, Codex, pi, Amp, Grok, Kimi) with highlighted snippets and an incremental local index.
 - **[`lazyagent limits`](docs/maintenance/limits.md)** — on-demand rate-limit / billing summary for Claude Code (5h + 7d), Codex (5h + 7d), Grok (monthly), Kimi Code, and Cursor (monthly, Models + API pools), with a detailed pace view available via `--detailed`.
 - **[`lazyagent sessions`](docs/usage/sessions.md)** — list every session recorded for the current directory — across all agents — and reopen one with the originating agent's CLI. Interactive picker, `--json` for scripts.
+- **[`lazyagent history`](docs/usage/history.md)** — print a table of the current directory's past sessions (oldest at the top, newest at the bottom as row #1): agent, title, branch, message count, last activity. Shows the 20 most recent (`--all` for everything), then lets you pick a row to resume.
+- **[`lazyagent latest`](docs/usage/latest.md)** — resume the current directory's most recent session immediately, with the originating agent's CLI. No table, no prompt.
 - **Outbound webhooks on session state transitions** — send a signed JSON payload to Slack, a custom dashboard, or a CI endpoint whenever a session goes idle, waits for input, or changes state. See [Webhooks](docs/reference/webhooks.md).
 
 Typical savings on a year of daily use: **80+ MiB reclaimed** across the cleanup commands, with every rewrite validated and backed up by default.
@@ -156,6 +158,8 @@ lazyagent prune --days N     Delete chat sessions older than N days
 lazyagent compact            Shrink chat files by truncating bulky payloads
 lazyagent search "query"     Search chat transcripts with snippets
 lazyagent sessions           List and reopen sessions for the current directory
+lazyagent history            Table of past sessions here; pick one to resume
+lazyagent latest             Resume the most recent session here
 lazyagent limits             Show 5h / weekly / monthly usage summary
 lazyagent passphrase         Set or rotate the HTTP API passphrase
 lazyagent --help             Show full help
