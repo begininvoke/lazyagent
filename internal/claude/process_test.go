@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/illegalstudio/lazyagent/internal/model"
 )
@@ -560,6 +561,17 @@ func TestDiscoverSessionsFiltered_IncrementalAppendAlwaysReparsedPostParseFilter
 		t.Fatal(err)
 	}
 	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// GetIncremental treats same-mtime as a full hit (mtime-only by
+	// design). On 1-second filesystems the append can share the priming
+	// write's mtime, so force a later timestamp.
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	later := info.ModTime().Add(2 * time.Second)
+	if err := os.Chtimes(path, later, later); err != nil {
 		t.Fatal(err)
 	}
 
