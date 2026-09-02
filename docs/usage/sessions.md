@@ -16,8 +16,9 @@ own CLI.
 lazyagent sessions [--agent NAME] [--json] [--dir PATH]
 ```
 
-`lazyagent history` is retained as a backwards-compatible alias. It accepts
-the same flags and behaves exactly like `lazyagent sessions`.
+`lazyagent history` is retained as a legacy alias. It accepts the same flags
+and behaves exactly like `lazyagent sessions`. The old history-specific table
+output and `--all` flag have been removed.
 
 ## The picker
 

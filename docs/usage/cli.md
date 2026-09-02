@@ -145,7 +145,7 @@ Prints the full usage text, including short keybinding reference.
 
 ## Subcommand dispatch
 
-When the first positional argument is `prune`, `compact`, `search`, `sessions`, `latest`, `limits`, or `passphrase`, lazyagent switches into subcommand mode. Root-level flags are ignored and the subcommand parses its own set. `history` is retained as a backwards-compatible alias for `sessions`.
+When the first positional argument is `prune`, `compact`, `search`, `sessions`, `latest`, `limits`, or `passphrase`, lazyagent switches into subcommand mode. Root-level flags are ignored and the subcommand parses its own set. `history` is retained as a legacy alias for `sessions`; it does not preserve the removed history-specific flags or output format.
 
 ```bash
 lazyagent prune --days 30          # prune subcommand
