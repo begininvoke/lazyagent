@@ -143,8 +143,8 @@ func renderHistory(w io.Writer, sessions []*model.Session, nameFor func(*model.S
 		t.Row(
 			chatops.StyleMuted.Render(strconv.Itoa(i+1)),
 			chatops.StyleAgent.Render(s.Agent),
-			truncate(nameFor(s), 60),
-			branchLabel(s.GitBranch),
+			truncate(stripControl(nameFor(s)), 60),
+			branchLabel(stripControl(s.GitBranch)),
 			chatops.StyleCount.Render(strconv.Itoa(s.TotalMessages)),
 			chatops.StyleMuted.Render(historyFormatWhen(s.LastActivity)),
 		)
@@ -162,6 +162,21 @@ func renderHistory(w io.Writer, sessions []*model.Session, nameFor func(*model.S
 		"%d session(s) in %s.", total, dirLabel,
 	)))
 	return shown
+}
+
+// stripControl removes control runes — C0 (including ESC and BEL), DEL, and
+// C1 (including the CSI and OSC introducers) — so session titles and branch
+// names, which come from persisted transcript content an agent's
+// counterparty can influence, cannot inject terminal escape sequences
+// through the table. Printable text passes through untouched; truncate's
+// whitespace collapsing handles tabs and newlines separately.
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 func branchLabel(branch string) string {

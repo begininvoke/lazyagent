@@ -128,6 +128,33 @@ func TestRenderHistoryReturnsShownRows(t *testing.T) {
 	}
 }
 
+func TestRenderHistoryStripsControlSequences(t *testing.T) {
+	sessions := []*model.Session{{
+		SessionID:    "id-01",
+		Agent:        "claude",
+		Name:         "evil\x1b]0;pwned\x07title\x9b31mred",
+		GitBranch:    "feat\x1b[2Jbranch",
+		LastActivity: time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC),
+	}}
+	var buf bytes.Buffer
+	renderHistory(&buf, sessions, nameByField, "~/proj", 0)
+	got := buf.String()
+
+	for _, r := range []rune{0x1b, 0x07, 0x9b} {
+		if strings.ContainsRune(got, r) {
+			t.Errorf("output contains control rune %#x; got:\n%q", r, got)
+		}
+	}
+	// The introducer bytes are gone; what trailed them survives as inert
+	// printable text.
+	if !strings.Contains(got, "evil]0;pwnedtitle") {
+		t.Errorf("title not neutralized in place; got:\n%q", got)
+	}
+	if !strings.Contains(got, "feat[2Jbranch") {
+		t.Errorf("branch not neutralized in place; got:\n%q", got)
+	}
+}
+
 func TestRenderHistoryUnderLimitOmitsHint(t *testing.T) {
 	sessions := historyFixture(3)
 	var buf bytes.Buffer
