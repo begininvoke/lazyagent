@@ -145,21 +145,21 @@ Prints the full usage text, including short keybinding reference.
 
 ## Subcommand dispatch
 
-When the first positional argument is `prune`, `compact`, `search`, `sessions`, `history`, `latest`, `limits`, or `passphrase`, lazyagent switches into subcommand mode — root-level flags are ignored and the subcommand parses its own set.
+When the first positional argument is `prune`, `compact`, `search`, `sessions`, `latest`, `limits`, or `passphrase`, lazyagent switches into subcommand mode. Root-level flags are ignored and the subcommand parses its own set. `history` is retained as a backwards-compatible alias for `sessions`.
 
 ```bash
 lazyagent prune --days 30          # prune subcommand
 lazyagent compact --agent claude   # compact subcommand
 lazyagent search --agent codex api # search subcommand
 lazyagent sessions --agent codex   # sessions subcommand
-lazyagent history --all            # history subcommand
+lazyagent history --agent codex    # alias for sessions
 lazyagent latest                   # resume the newest session here
 lazyagent limits --agent claude    # limits subcommand
 lazyagent passphrase               # rotate the API passphrase
 lazyagent --agent claude prune     # ❌ wrong: prune is not a flag value
 ```
 
-See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), [`search`](../maintenance/search.md), [`sessions`](sessions.md), [`history`](history.md), [`latest`](latest.md), and [`limits`](../maintenance/limits.md) for their flag tables.
+See [`prune`](../maintenance/prune.md), [`compact`](../maintenance/compact.md), [`search`](../maintenance/search.md), [`sessions`](sessions.md), [`latest`](latest.md), and [`limits`](../maintenance/limits.md) for their flag tables.
 
 ### `search`
 
@@ -238,7 +238,7 @@ lazyagent search "api server"
 # List and reopen sessions for the current directory
 lazyagent sessions
 
-# Table of past sessions for the current directory
+# The old name is an alias for sessions
 lazyagent history
 
 # Jump straight back into the newest session here

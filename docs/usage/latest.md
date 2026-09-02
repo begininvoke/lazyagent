@@ -8,8 +8,8 @@ sidebar:
 `lazyagent latest` finds the most recently active session whose working
 directory is the current directory (or a subdirectory of it), across all
 supported agents, and resumes it immediately with the originating agent's
-CLI — no table, no prompt. It opens exactly the session
-[`lazyagent history`](history.md) shows as row `#1`.
+CLI, with no table or prompt. It opens the first session shown by
+[`lazyagent sessions`](sessions.md).
 
 ## Synopsis
 

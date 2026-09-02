@@ -1,6 +1,9 @@
 package sessions
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRunLatestRejectsUnknownAgent(t *testing.T) {
 	if code := RunLatest([]string{"--agent", "nope"}); code != 2 {
@@ -23,5 +26,17 @@ func TestRunLatestHelp(t *testing.T) {
 func TestRunLatestRejectsUnknownFlag(t *testing.T) {
 	if code := RunLatest([]string{"--bogus"}); code != 2 {
 		t.Errorf("unknown flag: exit = %d, want 2", code)
+	}
+}
+
+func TestStripControl(t *testing.T) {
+	got := stripControl("~/pro\x1b[2Jj\x07\u009b")
+	for _, r := range []rune{0x1b, 0x07, 0x9b} {
+		if strings.ContainsRune(got, r) {
+			t.Fatalf("stripControl() retained control rune %#x: %q", r, got)
+		}
+	}
+	if got != "~/pro[2Jj" {
+		t.Errorf("stripControl() = %q, want %q", got, "~/pro[2Jj")
 	}
 }
