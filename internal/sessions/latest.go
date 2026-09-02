@@ -8,8 +8,8 @@ import (
 
 // RunLatest implements `lazyagent latest`. It resumes the most recently
 // active session recorded for the current (or --dir) directory, without any
-// table or prompt: same discovery and directory filter as Run and
-// RunHistory, then straight into openSession on the newest match.
+// table or prompt: same discovery and directory filter as Run, then straight
+// into openSession on the newest match.
 func RunLatest(args []string) int {
 	fs := flag.NewFlagSet("latest", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
@@ -22,7 +22,7 @@ func RunLatest(args []string) int {
 
 Finds the most recently active session whose working directory is the
 current directory (or --dir) or a subdirectory of it, across all agents,
-and resumes it with the originating agent's CLI. Use "lazyagent history"
+and resumes it with the originating agent's CLI. Use "lazyagent sessions"
 to see the sessions it picks from.
 
 Usage:

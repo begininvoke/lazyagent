@@ -67,10 +67,8 @@ func main() {
 			os.Exit(limits.Run(os.Args[2:]))
 		case "passphrase":
 			os.Exit(passphrase.Run(os.Args[2:]))
-		case "sessions":
+		case "sessions", "history":
 			os.Exit(sessions.Run(os.Args[2:]))
-		case "history":
-			os.Exit(sessions.RunHistory(os.Args[2:]))
 		case "latest":
 			os.Exit(sessions.RunLatest(os.Args[2:]))
 		}
@@ -116,8 +114,7 @@ Subcommands:
   lazyagent search "query"      Search chat transcripts with highlighted snippets
   lazyagent sessions            List sessions for the current directory and reopen one
   lazyagent sessions --help     Show sessions options (--agent, --json, --dir)
-  lazyagent history             Table of past sessions for the current directory; pick one to resume
-  lazyagent history --help      Show history options (--all, --agent, --dir)
+  lazyagent history             Alias for lazyagent sessions
   lazyagent latest              Resume the most recent session for the current directory
   lazyagent latest --help       Show latest options (--agent, --dir)
   lazyagent limits              Show rate-limit / billing usage summary

@@ -230,10 +230,9 @@ func openSession(s *model.Session) int {
 
 // discoverDirSessions runs a full blocking discovery for agentMode and
 // returns dir's sessions, recency-sorted (FilterByDir), with the advisory
-// provider caches loaded before and saved after — the same wiring as Run's
-// non-interactive path. Shared by RunHistory and RunLatest, which have no
-// picker and therefore no reason to stream. On failure it prints the error
-// to stderr and returns a non-zero exit code for the caller to return.
+// provider caches loaded before and saved after. RunLatest has no picker,
+// so it has no reason to stream. On failure it prints the error to stderr
+// and returns a non-zero exit code for the caller to return.
 func discoverDirSessions(agentMode, dir string) ([]*model.Session, int) {
 	cfg := core.LoadConfig()
 	provider := core.BuildProvider(agentMode, cfg)
@@ -291,4 +290,15 @@ func abbreviateHome(path string) string {
 		return "~" + strings.TrimPrefix(path, home)
 	}
 	return path
+}
+
+// stripControl removes control runes so user-controlled directory names
+// cannot inject terminal escape sequences into command output.
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, s)
 }

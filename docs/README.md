@@ -33,7 +33,6 @@ Three interfaces ship in a single binary: a terminal UI, a macOS/Linux desktop a
 - [CLI reference](usage/cli.md) — every `lazyagent` flag, with syntax and examples
 - [Recipes](usage/recipes.md) — end-to-end walkthroughs for common workflows
 - [Sessions for a directory](usage/sessions.md) — list every recorded session for a directory and reopen one, across all agents
-- [Session history for a directory](usage/history.md) — print a table of a directory's past sessions, across all agents, and resume one by row number
 - [Resume the latest session](usage/latest.md) — jump straight back into a directory's most recent session
 
 ## Maintenance
